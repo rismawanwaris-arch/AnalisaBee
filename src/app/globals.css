@@ -97,14 +97,22 @@
   --font-mono: var(--font-jetbrains-mono), "Roboto Mono", ui-monospace, SFMono-Regular, monospace;
 }
 
-body {
-  background: var(--background);
-  color: var(--foreground);
-  font-family: var(--font-sans);
-}
+/* These must live in @layer base. Unlayered declarations outrank everything
+   inside a layer, so an unlayered `*` rule here would silently beat Tailwind's
+   own utilities (which sit in @layer utilities) — making border-transparent,
+   border-accent and friends do nothing anywhere in the app. */
+@layer base {
+  body {
+    background: var(--background);
+    color: var(--foreground);
+    font-family: var(--font-sans);
+  }
 
-* {
-  border-color: var(--border);
+  *,
+  ::before,
+  ::after {
+    border-color: var(--border);
+  }
 }
 
 /* Tabular lining figures so financial columns line up when scanned vertically. */

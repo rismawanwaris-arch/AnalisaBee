@@ -209,7 +209,7 @@ export function DashboardClient() {
         </div>
       ) : (
         <>
-          <div className="grid grid-cols-2 lg:grid-cols-5 gap-2">
+          <div className="grid grid-cols-2 md:grid-cols-3 xl:grid-cols-5 gap-2">
             <SparkKpiCard
               label="Total Omzet"
               value={formatRupiah(data.totals.subtotal)}

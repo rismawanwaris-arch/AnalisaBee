@@ -31,7 +31,9 @@ export function SparkKpiCard({ label, value, trendPct, series, hint }: SparkKpiC
           </span>
         )}
       </div>
-      <div className="text-xl font-bold font-mono leading-6 tabular-nums text-foreground truncate">
+      {/* Never truncate a financial figure — scale the type down instead so the
+          full number always reads. */}
+      <div className="text-base xl:text-lg 2xl:text-xl font-bold font-mono leading-6 tracking-tight tabular-nums text-foreground">
         {value}
       </div>
       {hint && <div className="text-[10px] font-mono text-faint -mt-0.5">{hint}</div>}
