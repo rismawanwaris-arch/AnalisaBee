@@ -68,8 +68,12 @@ const LINKS: { href: string; label: string; icon: ReactNode }[] = [
 export function Sidebar({ status }: { status: SystemStatus }) {
   const pathname = usePathname();
 
+  // Sticky inside a flex row rather than `fixed`: the sidebar still stays put
+  // while the page scrolls, but it occupies a real 240px column, so content can
+  // never slide underneath it — not on horizontal overflow, and not during the
+  // unstyled frame of a dev-server stylesheet swap.
   return (
-    <aside className="hidden md:flex md:w-60 md:flex-col md:shrink-0 fixed inset-y-0 left-0 z-40 border-r border-border bg-surface-sidebar">
+    <aside className="hidden md:flex md:w-60 md:flex-col md:shrink-0 sticky top-0 h-screen z-40 border-r border-border bg-surface-sidebar">
       <div className="h-13 flex items-center gap-2.5 px-4 border-b border-border">
         <span className="w-6 h-6 rounded bg-accent text-accent-foreground grid place-items-center text-[11px] font-bold shrink-0">
           BE

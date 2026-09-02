@@ -6,9 +6,11 @@ export default async function AppLayout({ children }: { children: React.ReactNod
   const status = await getSystemStatus();
 
   return (
-    <div className="min-h-screen">
+    <div className="flex min-h-screen items-start">
       <Sidebar status={status} />
-      <div className="md:ml-60 flex flex-col min-h-screen min-w-0">
+      {/* min-w-0 keeps a wide table inside its own scroller instead of widening
+          the flex row and pushing the layout out from under the sidebar. */}
+      <div className="flex-1 flex flex-col min-w-0 self-stretch">
         <Topbar />
         <main className="flex-1 px-4 py-4 md:px-5 md:py-5 max-w-[1680px] w-full space-y-4">
           {children}
