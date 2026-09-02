@@ -1,36 +1,110 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# AnalisaBEe
 
-## Getting Started
+Dashboard analisa data penjualan dari export Excel POS. Upload file `.xls`/`.xlsx` bulanan,
+data disimpan permanen di database sehingga bisa dianalisa lintas bulan — bukan sekadar
+dibaca sekali lalu hilang.
 
-First, run the development server:
+## Fitur saat ini
+
+- **Import Data** — upload file Excel, otomatis dedup baris yang sudah pernah diimpor (aman
+  diunggah ulang), riwayat setiap import tersimpan.
+- **Item Lookup** — cari satu item, lihat terjual di outlet mana, berapa pcs, tanggal berapa
+  (dengan filter rentang tanggal, chart per outlet, export CSV).
+- **Dashboard** — KPI dengan tren & sparkline, chart omzet/laba harian, leaderboard top 10
+  item & outlet, filter global tanggal + outlet.
+- **Outlet & Pegawai** — halaman performa per outlet dan per pegawai.
+
+## Stack
+
+Next.js 16 (App Router) · PostgreSQL · Prisma 7 (driver adapter, tanpa native binary) ·
+Tailwind v4 · Recharts · next-themes (dark/light).
+
+## Development
+
+Butuh Postgres lokal. Docker **tidak wajib** — dipakai hanya untuk deploy produksi ke ZimaOS,
+bukan untuk aplikasinya sendiri saat development.
+
+### Opsi A — Postgres native (Postgres.app), tanpa Docker
+
+Paling ringan untuk RAM (tidak ada VM Docker Desktop di background). Sekali setup:
+
+1. Install [Postgres.app](https://postgresapp.com), buka, klik **Initialize**.
+2. Buat role & database sekali saja (samakan dengan `DATABASE_URL` di `.env`):
+
+   ```bash
+   PATH="/Applications/Postgres.app/Contents/Versions/latest/bin:$PATH" \
+     psql -h localhost -p 5432 -U "$(whoami)" -d postgres -v ON_ERROR_STOP=1 -c \
+     "DO \$\$ BEGIN IF NOT EXISTS (SELECT FROM pg_roles WHERE rolname='analisabee') THEN CREATE ROLE analisabee LOGIN PASSWORD 'analisabee'; END IF; END \$\$;" \
+     -c "SELECT 'CREATE DATABASE analisabee OWNER analisabee' WHERE NOT EXISTS (SELECT FROM pg_database WHERE datname='analisabee')\gexec"
+   ```
+
+3. Jalankan seperti biasa:
+
+   ```bash
+   npx prisma migrate deploy
+   npm run dev
+   ```
+
+Setiap hari cukup buka Postgres.app (atau set auto-start di System Settings), lalu `npm run dev`.
+
+### Opsi B — Postgres via Docker
+
+Kalau lebih suka Docker (mis. mau environment yang identik dengan produksi):
 
 ```bash
+docker compose -f docker-compose.dev.yml up -d
+npx prisma migrate dev
 npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+Buka http://localhost:3000.
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+## Struktur proyek
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+```
+prisma/schema.prisma        Skema database (Outlet, Item, Employee, ImportBatch, Sale)
+src/lib/parseExcel.ts       Parser file Excel → baris ternormalisasi
+src/lib/importSales.ts      Import baris ke database (dedup via rowHash)
+src/lib/queries/*.ts        Query agregasi, dipakai bareng oleh API route & server page
+src/app/api/*               API routes
+src/app/*                   Halaman (dashboard, items, outlets, employees, import)
+src/components/*            Komponen UI (chart, KPI card, leaderboard, dll)
+```
 
-## Learn More
+Setiap fitur baru pada dasarnya: 1 tabel/relasi baru (jika perlu) → 1 fungsi di
+`lib/queries` → 1 API route → 1 halaman. Tidak perlu mengubah fondasi yang ada.
 
-To learn more about Next.js, take a look at the following resources:
+## Deploy ke ZimaOS (Docker)
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+Aplikasi berjalan sebagai 2 container (app + Postgres) lewat `docker-compose.yml`, migrasi
+database berjalan otomatis setiap container start.
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+1. Salin folder proyek ini ke NAS (atau `git clone` jika sudah didorong ke suatu remote).
+2. Salin `.env.example` menjadi `.env`, ganti `POSTGRES_PASSWORD` dengan password sendiri.
+3. Di ZimaOS, gunakan menu **Install a customized app / docker-compose** dan arahkan ke
+   `docker-compose.yml` di folder proyek — atau jalankan manual lewat SSH:
 
-## Deploy on Vercel
+   ```bash
+   docker compose up -d --build
+   ```
 
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
+4. Aplikasi tersedia di `http://<ip-nas>:3000` (port bisa diganti lewat `APP_PORT` di `.env`).
 
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+Untuk update ke versi baru: tarik/salin kode terbaru, lalu `docker compose up -d --build` —
+migrasi database berjalan otomatis, data lama tidak hilang (tersimpan di volume
+`analisabee_db_data`).
+
+### Backup
+
+Data hidup di volume Docker `analisabee_db_data`. Backup rutin dengan:
+
+```bash
+docker exec analisabee-db-1 pg_dump -U analisabee analisabee > backup.sql
+```
+
+## Roadmap
+
+- **Fase 2**: perbandingan antar bulan, filter grup item pada dashboard.
+- **Fase 3**: export laporan terjadwal, alert item slow-moving.
+
+Prioritas menyesuaikan kebutuhan yang muncul saat dipakai sehari-hari.

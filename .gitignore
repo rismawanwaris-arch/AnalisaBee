@@ -39,3 +39,12 @@ yarn-error.log*
 # typescript
 *.tsbuildinfo
 next-env.d.ts
+
+/src/generated/prisma
+
+# vendored agent skill docs (synced from prisma/skills via skills-lock.json) —
+# local tooling cache, not app source; re-sync per-machine instead of committing.
+/.agents/skills
+/.claude/skills
+/.windsurf/skills
+/skills-lock.json

@@ -1,0 +1,33 @@
+name: analisabee
+
+services:
+  db:
+    image: postgres:17-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-analisabee}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-analisabee}
+      POSTGRES_DB: ${POSTGRES_DB:-analisabee}
+    volumes:
+      - db_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-analisabee}"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  app:
+    build: .
+    restart: unless-stopped
+    depends_on:
+      db:
+        condition: service_healthy
+    environment:
+      DATABASE_URL: postgresql://${POSTGRES_USER:-analisabee}:${POSTGRES_PASSWORD:-analisabee}@db:5432/${POSTGRES_DB:-analisabee}?schema=public
+      APP_PASSWORD: ${APP_PASSWORD:-analisabee}
+      SESSION_SECRET: ${SESSION_SECRET:?SESSION_SECRET wajib diisi di .env, generate dengan: openssl rand -base64 32}
+    ports:
+      - "${APP_PORT:-3000}:3000"
+
+volumes:
+  db_data:

@@ -1,0 +1,261 @@
+// Prisma schema for AnalisaBEe — POS sales analysis app
+// docs: https://pris.ly/d/prisma-schema
+
+generator client {
+  provider = "prisma-client"
+  output   = "../src/generated/prisma"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+enum ImportStatus {
+  PROCESSING
+  DONE
+  FAILED
+}
+
+enum TargetScope {
+  PERKONTER
+  ALL
+}
+
+enum BusinessLine {
+  SERVER
+  TARTUN
+  PETSHOP
+  AKSESORIS
+  SP_VOUCHER
+}
+
+enum ReportCategory {
+  PETSHOP
+  AKSESORIS
+  SP_VOUCHER
+}
+
+// One row per file uploaded through /import. Keeps history + lets us
+// trace every sale back to the file it came from.
+model ImportBatch {
+  id              Int          @id @default(autoincrement())
+  filename        String
+  uploadedAt      DateTime     @default(now())
+  status          ImportStatus @default(PROCESSING)
+  rowCount        Int          @default(0)
+  insertedCount   Int          @default(0)
+  duplicateCount  Int          @default(0)
+  errorRowCount   Int          @default(0)
+  errorMessage    String?
+  periodStart     DateTime?    @db.Date
+  periodEnd       DateTime?    @db.Date
+  sales           Sale[]
+
+  @@map("import_batches")
+}
+
+model Outlet {
+  id      Int           @id @default(autoincrement())
+  name    String        @unique
+  sales   Sale[]
+  aliases OutletAlias[]
+  tartun  TartunDaily[]
+  server  ServerDaily[]
+
+  @@map("outlets")
+}
+
+// Daily sales target — one row per (scope, businessLine) combo. "PERKONTER" is
+// the per-outlet pass/fail threshold; "ALL" is the network-wide total used for
+// the achievement percentage. A single active value, not versioned by date.
+model Target {
+  id        Int          @id @default(autoincrement())
+  scope     TargetScope
+  category  BusinessLine
+  amount    Decimal      @db.Decimal(14, 2)
+  updatedAt DateTime     @updatedAt
+
+  @@unique([scope, category])
+  @@map("targets")
+}
+
+// Maps a raw reseller/outlet name as it appears in the Tarik Tunai or Server
+// commission exports (often "PARENT ..." style names) to a canonical Outlet.
+model OutletAlias {
+  id        Int      @id @default(autoincrement())
+  alias     String   @unique
+  outletId  Int
+  outlet    Outlet   @relation(fields: [outletId], references: [id])
+  isDefault Boolean  @default(false)
+  createdAt DateTime @default(now())
+
+  @@map("outlet_aliases")
+}
+
+// Maps a raw POS "Item Group" value to one of the 3 report categories used
+// by the daily target report (Petshop / Aksesoris / SP-Voucher).
+model ItemGroupMapping {
+  id         Int             @id @default(autoincrement())
+  itemGroup  String          @unique
+  category   ReportCategory
+  isDefault  Boolean         @default(false)
+  createdAt  DateTime        @default(now())
+
+  @@map("item_group_mappings")
+}
+
+// Daily cash-withdrawal (Tarik Tunai) admin-fee summary per outlet. The
+// source export is already a one-row-per-outlet daily aggregate, so a
+// re-import for the same date+outlet updates the row instead of accumulating
+// more rows (unlike Sale, there's no line-item granularity to preserve here).
+model TartunDaily {
+  id        Int      @id @default(autoincrement())
+  tanggal   DateTime @db.Date
+  outletId  Int
+  outlet    Outlet   @relation(fields: [outletId], references: [id])
+  sales     Decimal  @db.Decimal(14, 2)
+  trx       Int
+  updatedAt DateTime @updatedAt
+
+  @@unique([tanggal, outletId])
+  @@index([tanggal])
+  @@map("tartun_daily")
+}
+
+// Daily server/voucher reseller commission summary per outlet — same
+// upsert-by-day model as TartunDaily, for the same reason.
+model ServerDaily {
+  id        Int      @id @default(autoincrement())
+  tanggal   DateTime @db.Date
+  outletId  Int
+  outlet    Outlet   @relation(fields: [outletId], references: [id])
+  sales     Decimal  @db.Decimal(14, 2)
+  trx       Int
+  updatedAt DateTime @updatedAt
+
+  @@unique([tanggal, outletId])
+  @@index([tanggal])
+  @@map("server_daily")
+}
+
+model Item {
+  id        Int     @id @default(autoincrement())
+  code      String  @unique
+  name      String
+  itemGroup String?
+  sales     Sale[]
+
+  @@index([name])
+  @@map("items")
+}
+
+// Explicit point value for a product — the "Daftar Point Penjualan" rules,
+// editable by the owner. Matched against Item.name by case-insensitive
+// substring (not a specific Item id): real POS item names carry extra detail
+// and color variants ("TWS ROBOT AIRBUDS T70E (PINK)") that a short product
+// name like "TWS Robot Airbuds T70E" should still catch as one rule. When
+// several patterns match the same item, the longest (most specific) wins.
+// Takes priority over ItemGroupPointDefault.
+model ItemPoint {
+  id        Int      @id @default(autoincrement())
+  pattern   String   @unique
+  points    Int
+  isDefault Boolean  @default(false)
+  updatedAt DateTime @updatedAt
+
+  @@map("item_points")
+}
+
+// A product pattern that must never earn points, no matter what ItemPoint or
+// ItemGroupPointDefault would otherwise say — always wins over both. Same
+// case-insensitive substring matching as ItemPoint (also color-variant safe).
+model ItemPointExclusion {
+  id        Int      @id @default(autoincrement())
+  pattern   String   @unique
+  createdAt DateTime @default(now())
+
+  @@map("item_point_exclusions")
+}
+
+// Fallback point value applied to every item of a raw POS "Item Group" that
+// has no explicit ItemPoint rule (e.g. "ACC CAMPURAN NEW" -> 5 by default).
+// Independent of ItemGroupMapping — a category can earn points without being
+// part of the Target Harian report, and vice versa.
+model ItemGroupPointDefault {
+  id        Int      @id @default(autoincrement())
+  itemGroup String   @unique
+  points    Int
+  updatedAt DateTime @updatedAt
+
+  @@map("item_group_point_defaults")
+}
+
+// Singleton (always id=1). Lets the "monthly" period used by the points
+// leaderboard start on a day other than the 1st — e.g. periodStartDay=29
+// means the period labeled "September" runs 29 Aug – 28 Sep, matching a
+// commission cycle that doesn't follow the calendar month.
+model PointSettings {
+  id             Int @id @default(1)
+  periodStartDay Int @default(1)
+
+  @@map("point_settings")
+}
+
+model Employee {
+  id       Int               @id @default(autoincrement())
+  name     String            @unique
+  sales    Sale[]
+  excluded PointsExclusion?
+
+  @@map("employees")
+}
+
+// Employees (usually staff/admin/warehouse accounts, not real sales counter
+// staff) who are left out of the points system entirely — excluded from
+// every leaderboard period regardless of what they're recorded selling.
+model PointsExclusion {
+  id         Int      @id @default(autoincrement())
+  employeeId Int      @unique
+  employee   Employee @relation(fields: [employeeId], references: [id])
+  reason     String?
+  createdAt  DateTime @default(now())
+
+  @@map("points_exclusions")
+}
+
+// One row per line-item of a transaction — mirrors the raw Excel export 1:1,
+// but pointing at normalized dimension tables instead of repeating text.
+model Sale {
+  id            Int      @id @default(autoincrement())
+  noTransaksi   String
+  tanggal       DateTime @db.Date
+  jamBuat       String
+  customer      String
+  qty           Int
+  unit          String
+  hargaJual     Decimal  @db.Decimal(14, 4)
+  diskon        Decimal  @db.Decimal(14, 4)
+  subtotal      Decimal  @db.Decimal(14, 4)
+  hpp           Decimal  @db.Decimal(14, 4)
+  labaRugi      Decimal  @db.Decimal(14, 4)
+
+  // sha256 over the full raw row — the dedup key so re-uploading an
+  // overlapping file never double-counts a sale.
+  rowHash       String   @unique
+
+  outletId   Int
+  outlet     Outlet   @relation(fields: [outletId], references: [id])
+  itemId     Int
+  item       Item     @relation(fields: [itemId], references: [id])
+  employeeId Int
+  employee   Employee @relation(fields: [employeeId], references: [id])
+  importId   Int
+  import     ImportBatch @relation(fields: [importId], references: [id], onDelete: Cascade)
+
+  @@index([itemId, tanggal])
+  @@index([outletId, tanggal])
+  @@index([tanggal])
+  @@index([employeeId, tanggal])
+  @@index([noTransaksi])
+  @@map("sales")
+}
