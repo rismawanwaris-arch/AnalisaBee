@@ -61,6 +61,7 @@ export function OutletsTable({ outlets }: { outlets: OutletRow[] }) {
       columns={columns}
       rowKey={(o) => o.id}
       defaultSortKey="subtotal"
+      caption="Matrix Outlet"
     />
   );
 }

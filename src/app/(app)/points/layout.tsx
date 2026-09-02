@@ -14,7 +14,7 @@ export default function PointsLayout({ children }: { children: React.ReactNode }
   return (
     <div className="space-y-6">
       <div>
-        <h1 className="text-xl font-semibold text-foreground">Poin Penjualan</h1>
+        <h1 className="text-sm font-bold text-foreground">Poin Penjualan</h1>
         <p className="text-sm text-muted mt-1">
           Poin per item terjual, diakumulasi per pegawai setiap bulan.
         </p>

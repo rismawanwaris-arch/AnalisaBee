@@ -5,14 +5,14 @@ import { usePathname, useRouter } from "next/navigation";
 import { ThemeToggle } from "@/components/ThemeToggle";
 
 const TITLES: { prefix: string; label: string }[] = [
-  { prefix: "/dashboard", label: "Dashboard" },
-  { prefix: "/items", label: "Item" },
-  { prefix: "/outlets", label: "Outlet" },
-  { prefix: "/employees", label: "Pegawai" },
+  { prefix: "/dashboard", label: "Ringkasan Penjualan" },
+  { prefix: "/items", label: "Item & SKU" },
+  { prefix: "/outlets", label: "Matrix Outlet" },
+  { prefix: "/employees", label: "Performa Pegawai" },
   { prefix: "/transactions", label: "Data Penjualan" },
   { prefix: "/target", label: "Target Harian" },
   { prefix: "/points", label: "Poin Penjualan" },
-  { prefix: "/import", label: "Data Management" },
+  { prefix: "/import", label: "Data Ingestion" },
 ];
 
 const MOBILE_LINKS = [
@@ -38,20 +38,20 @@ export function Topbar() {
   }
 
   return (
-    <header className="sticky top-0 z-20 bg-background/80 backdrop-blur border-b border-border">
-      <div className="h-16 flex items-center justify-between px-4 md:px-8">
-        <div>
-          <span className="md:hidden font-semibold tracking-tight mr-3">
+    <header className="sticky top-0 z-30 bg-background/85 backdrop-blur border-b border-border">
+      <div className="h-13 flex items-center justify-between px-4 md:px-5 gap-4">
+        <div className="flex items-center gap-2 min-w-0">
+          <span className="md:hidden font-semibold tracking-tight text-sm mr-1">
             Analisa<span className="text-accent">BEe</span>
           </span>
-          <span className="text-sm font-medium text-muted hidden md:inline">{title}</span>
+          <h1 className="text-xs font-semibold text-foreground truncate">{title}</h1>
         </div>
-        <div className="flex items-center gap-3">
+        <div className="flex items-center gap-2 shrink-0">
           <ThemeToggle />
           <button
             type="button"
             onClick={logout}
-            className="text-sm text-muted hover:text-foreground"
+            className="text-[11px] font-medium text-muted hover:text-foreground border border-border hover:border-border-subtle rounded px-2 py-1 transition-colors"
           >
             Keluar
           </button>
@@ -64,8 +64,10 @@ export function Topbar() {
             <Link
               key={l.href}
               href={l.href}
-              className={`px-2.5 py-1 rounded-md text-xs whitespace-nowrap ${
-                active ? "bg-accent text-accent-foreground" : "text-muted hover:bg-surface-hover"
+              className={`px-2 py-1 rounded text-[11px] whitespace-nowrap border ${
+                active
+                  ? "bg-surface-active text-foreground border-border-subtle font-medium"
+                  : "text-muted border-transparent hover:bg-surface-hover"
               }`}
             >
               {l.label}

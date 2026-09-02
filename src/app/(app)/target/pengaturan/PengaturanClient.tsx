@@ -156,7 +156,7 @@ export function PengaturanClient() {
 
   return (
     <div className="space-y-8">
-      <section className="rounded-xl border border-border bg-surface p-5">
+      <section className="rounded border border-border bg-surface p-5">
         <h2 className="text-base font-semibold text-foreground mb-1">Target Harian</h2>
         <p className="text-sm text-muted mb-4">
           Target Perkonter menentukan warna lulus/gagal per outlet. Target All menentukan
@@ -219,7 +219,7 @@ export function PengaturanClient() {
         </div>
       </section>
 
-      <section className="rounded-xl border border-border bg-surface p-5">
+      <section className="rounded border border-border bg-surface p-5">
         <h2 className="text-base font-semibold text-foreground mb-1">
           Mapping Nama Reseller → Outlet
         </h2>
@@ -295,7 +295,7 @@ export function PengaturanClient() {
         </div>
       </section>
 
-      <section className="rounded-xl border border-border bg-surface p-5">
+      <section className="rounded border border-border bg-surface p-5">
         <h2 className="text-base font-semibold text-foreground mb-1">
           Mapping Item Group POS → Kategori Laporan
         </h2>

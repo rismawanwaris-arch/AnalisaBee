@@ -9,7 +9,7 @@ import {
   XAxis,
   YAxis,
 } from "recharts";
-import { formatDate, formatNumber, formatRupiah } from "@/lib/format";
+import { formatCompactRupiah, formatDate, formatNumber, formatRupiah } from "@/lib/format";
 
 interface TrendPoint {
   tanggal: string;
@@ -20,7 +20,7 @@ interface TrendPoint {
 export function TrendChart({ data }: { data: TrendPoint[] }) {
   if (data.length === 0) {
     return (
-      <div className="text-sm text-muted flex items-center justify-center h-56">
+      <div className="text-xs text-muted flex items-center justify-center h-56">
         Belum ada data.
       </div>
     );
@@ -28,22 +28,30 @@ export function TrendChart({ data }: { data: TrendPoint[] }) {
 
   return (
     <ResponsiveContainer width="100%" height={280}>
-      <LineChart data={data} margin={{ left: 12, right: 12, top: 8, bottom: 0 }}>
-        <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="var(--border)" />
+      <LineChart data={data} margin={{ left: 4, right: 12, top: 8, bottom: 0 }}>
+        <CartesianGrid stroke="var(--chart-grid)" strokeDasharray="2 3" vertical={false} />
         <XAxis
           dataKey="tanggal"
           tickFormatter={(v) => formatDate(v)}
-          fontSize={12}
+          tick={{ fontSize: 10, fontFamily: "var(--font-mono)", fill: "var(--muted)" }}
           minTickGap={24}
-          stroke="var(--muted)"
+          stroke="var(--border)"
+          tickLine={false}
         />
-        <YAxis tickFormatter={(v) => formatNumber(v)} fontSize={12} width={70} stroke="var(--muted)" />
+        <YAxis
+          tickFormatter={(v) => formatCompactRupiah(Number(v))}
+          tick={{ fontSize: 10, fontFamily: "var(--font-mono)", fill: "var(--muted)" }}
+          width={64}
+          stroke="var(--border)"
+          tickLine={false}
+          axisLine={false}
+        />
         <Tooltip
           contentStyle={{
             background: "var(--surface)",
             border: "1px solid var(--border)",
-            borderRadius: 8,
-            fontSize: 13,
+            borderRadius: 4,
+            fontSize: 12,
           }}
           labelFormatter={(v) => formatDate(String(v))}
           formatter={(value, name) => [
@@ -51,7 +59,15 @@ export function TrendChart({ data }: { data: TrendPoint[] }) {
             name === "subtotal" ? "Omzet" : "Qty",
           ]}
         />
-        <Line type="monotone" dataKey="subtotal" stroke="var(--accent)" strokeWidth={2} dot={false} />
+        <Line
+          type="monotone"
+          dataKey="subtotal"
+          stroke="var(--chart-line)"
+          strokeWidth={2}
+          dot={{ r: 3, fill: "var(--chart-line)", strokeWidth: 0 }}
+          activeDot={{ r: 4 }}
+          isAnimationActive={false}
+        />
       </LineChart>
     </ResponsiveContainer>
   );

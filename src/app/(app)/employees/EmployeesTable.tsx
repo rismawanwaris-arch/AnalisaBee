@@ -61,6 +61,7 @@ export function EmployeesTable({ employees }: { employees: EmployeeRow[] }) {
       columns={columns}
       rowKey={(e) => e.id}
       defaultSortKey="subtotal"
+      caption="Performa Pegawai"
     />
   );
 }

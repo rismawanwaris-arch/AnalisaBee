@@ -238,7 +238,7 @@ function DateBar({
   onApply: () => void;
 }) {
   return (
-    <div className="rounded-xl border border-border bg-surface p-4 flex items-end gap-3">
+    <div className="rounded border border-border bg-surface p-4 flex items-end gap-3">
       <div>
         <label className="block text-xs text-muted mb-1">Tanggal</label>
         <input
@@ -261,7 +261,7 @@ function DateBar({
 
 function ChartCard({ title, desc, children }: { title: string; desc: string; children: React.ReactNode }) {
   return (
-    <div className="rounded-xl border border-border bg-surface p-4">
+    <div className="rounded border border-border bg-surface p-4">
       <h3 className="text-sm font-medium text-foreground">{title}</h3>
       <p className="text-xs text-muted mb-2">{desc}</p>
       {children}

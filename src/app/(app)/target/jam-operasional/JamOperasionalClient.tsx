@@ -73,7 +73,7 @@ export function JamOperasionalClient() {
 
   return (
     <div className="space-y-6">
-      <div className="rounded-xl border border-border bg-surface p-4 flex flex-wrap items-end gap-3">
+      <div className="rounded border border-border bg-surface p-4 flex flex-wrap items-end gap-3">
         <div>
           <label className="block text-xs text-muted mb-1">Tanggal</label>
           <input
@@ -117,7 +117,7 @@ export function JamOperasionalClient() {
         <div className="text-sm text-muted">Memuat...</div>
       ) : (
         <>
-          <div className="rounded-xl border border-border bg-surface p-4">
+          <div className="rounded border border-border bg-surface p-4">
             <h2 className="text-sm font-medium text-foreground mb-1">Kurva Jam Sibuk</h2>
             <p className="text-xs text-muted mb-3">
               Distribusi transaksi berdasarkan jam transaksi tercatat.
@@ -153,7 +153,7 @@ export function JamOperasionalClient() {
             )}
           </div>
 
-          <div className="rounded-xl border border-border bg-surface p-4">
+          <div className="rounded border border-border bg-surface p-4">
             <h2 className="text-sm font-medium text-foreground mb-1">
               Audit Jam Buka &amp; Tutup per Outlet
             </h2>
@@ -190,7 +190,7 @@ export function JamOperasionalClient() {
             </div>
           </div>
 
-          <div className="rounded-xl border border-border bg-surface p-4">
+          <div className="rounded border border-border bg-surface p-4">
             <h2 className="text-sm font-medium text-foreground mb-1">
               Heatmap Jam Transaksi ({outlets.length} Outlet × 17 Jam)
             </h2>

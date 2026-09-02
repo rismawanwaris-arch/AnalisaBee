@@ -17,6 +17,8 @@ interface SortableTableProps<T> {
   defaultSortKey: string;
   defaultSortDir?: "asc" | "desc";
   emptyMessage?: string;
+  /** Optional label shown in the control bar above the table, e.g. "42 outlet". */
+  caption?: string;
 }
 
 export function SortableTable<T>({
@@ -26,6 +28,7 @@ export function SortableTable<T>({
   defaultSortKey,
   defaultSortDir = "desc",
   emptyMessage = "Belum ada data.",
+  caption,
 }: SortableTableProps<T>) {
   const [sortKey, setSortKey] = useState(defaultSortKey);
   const [sortDir, setSortDir] = useState<"asc" | "desc">(defaultSortDir);
@@ -56,48 +59,65 @@ export function SortableTable<T>({
   }, [rows, columns, sortKey, sortDir]);
 
   return (
-    <div className="overflow-x-auto rounded-lg border border-border bg-surface">
-      <table className="w-full text-sm">
-        <thead className="bg-background text-muted text-left">
-          <tr>
-            {columns.map((col) => {
-              const active = sortKey === col.key;
-              return (
-                <th
-                  key={col.key}
-                  onClick={() => toggleSort(col.key)}
-                  className={`px-4 py-2 font-medium cursor-pointer select-none hover:text-foreground ${
-                    col.align === "right" ? "text-right" : "text-left"
-                  }`}
-                >
-                  {col.label} {active ? (sortDir === "asc" ? "▲" : "▼") : ""}
-                </th>
-              );
-            })}
-          </tr>
-        </thead>
-        <tbody className="divide-y divide-border">
-          {sorted.length === 0 && (
+    <div className="rounded border border-border bg-surface overflow-hidden">
+      {caption && (
+        <div className="px-3 py-2 bg-surface-subtle border-b border-border flex items-center justify-between">
+          <span className="text-[11px] font-medium uppercase tracking-wider text-muted">
+            {caption}
+          </span>
+          <span className="text-[10px] font-mono text-faint">{sorted.length} baris</span>
+        </div>
+      )}
+      <div className="overflow-x-auto">
+        <table className="w-full text-xs">
+          <thead className="bg-surface-subtle">
             <tr>
-              <td colSpan={columns.length} className="px-4 py-6 text-center text-muted">
-                {emptyMessage}
-              </td>
+              {columns.map((col) => {
+                const active = sortKey === col.key;
+                return (
+                  <th
+                    key={col.key}
+                    onClick={() => toggleSort(col.key)}
+                    className={`px-3 py-2 font-mono text-[11px] font-medium uppercase tracking-wider cursor-pointer select-none border-b border-border whitespace-nowrap transition-colors ${
+                      active ? "text-foreground" : "text-muted hover:text-foreground"
+                    } ${col.align === "right" ? "text-right" : "text-left"}`}
+                  >
+                    {col.label}
+                    <span className="ml-1 inline-block w-2">
+                      {active ? (sortDir === "asc" ? "▲" : "▼") : ""}
+                    </span>
+                  </th>
+                );
+              })}
             </tr>
-          )}
-          {sorted.map((row) => (
-            <tr key={rowKey(row)}>
-              {columns.map((col) => (
-                <td
-                  key={col.key}
-                  className={`px-4 py-2 ${col.align === "right" ? "text-right" : "text-left"}`}
-                >
-                  {col.render(row)}
+          </thead>
+          <tbody className="divide-y divide-border">
+            {sorted.length === 0 && (
+              <tr>
+                <td colSpan={columns.length} className="px-3 py-6 text-center text-muted">
+                  {emptyMessage}
                 </td>
-              ))}
-            </tr>
-          ))}
-        </tbody>
-      </table>
+              </tr>
+            )}
+            {sorted.map((row) => (
+              <tr key={rowKey(row)} className="hover:bg-surface-hover transition-colors">
+                {columns.map((col) => (
+                  <td
+                    key={col.key}
+                    className={`px-3 py-2 ${
+                      col.align === "right"
+                        ? "text-right font-mono tabular-nums text-foreground"
+                        : "text-left"
+                    }`}
+                  >
+                    {col.render(row)}
+                  </td>
+                ))}
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
     </div>
   );
 }

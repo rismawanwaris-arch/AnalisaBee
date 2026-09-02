@@ -1,45 +1,100 @@
 @import "tailwindcss";
 
+/* AnalisaBEe 2.0 — Enterprise Operations design tokens.
+   Light mode: "Clean Paper White". Dark mode: "Obsidian Slate". */
+
 :root {
-  --background: #f7f8fa;
+  --background: #f8fafc;
   --surface: #ffffff;
-  --surface-hover: #f1f3f6;
-  --border: #e4e7ec;
-  --foreground: #0f1b2d;
-  --muted: #5b6675;
-  --accent: #1d3557;
+  --surface-sidebar: #ffffff;
+  --surface-subtle: #f1f5f9;
+  --surface-active: #e2e8f0;
+  --surface-hover: #f8fafc;
+  --border: #e2e8f0;
+  --border-subtle: #cbd5e1;
+  --foreground: #0f172a;
+  --muted: #475569;
+  --faint: #94a3b8;
+  --accent: #1d4ed8;
   --accent-foreground: #ffffff;
-  --positive: #0f9d58;
-  --negative: #d64545;
-  --ring: #1d3557;
+  --positive: #059669;
+  --negative: #dc2626;
+  --ring: #1d4ed8;
+
+  /* Status pairs — background / text */
+  --status-hit-bg: #ecfdf5;
+  --status-hit-text: #059669;
+  --status-track-bg: #eff6ff;
+  --status-track-text: #2563eb;
+  --status-deficit-bg: #fef2f2;
+  --status-deficit-text: #dc2626;
+  --status-alert-bg: #fffbeb;
+  --status-alert-text: #d97706;
+
+  /* Chart */
+  --chart-line: #2563eb;
+  --chart-grid: #e2e8f0;
+  --chart-baseline: #94a3b8;
 }
 
 :root[data-theme="dark"] {
-  --background: #0a0d12;
-  --surface: #12161d;
-  --surface-hover: #1a2029;
-  --border: #232a35;
-  --foreground: #e7eaee;
-  --muted: #8b95a3;
-  --accent: #6ea8fe;
-  --accent-foreground: #0a0d12;
+  --background: #0c0e12;
+  --surface: #11151c;
+  --surface-sidebar: #0e1217;
+  --surface-subtle: #141820;
+  --surface-active: #1e2633;
+  --surface-hover: #151b24;
+  --border: #1e2633;
+  --border-subtle: #2d3748;
+  --foreground: #ffffff;
+  --muted: #8592a6;
+  --faint: #64748b;
+  --accent: #2563eb;
+  --accent-foreground: #ffffff;
   --positive: #34d399;
   --negative: #f87171;
-  --ring: #6ea8fe;
+  --ring: #2563eb;
+
+  --status-hit-bg: #022c22;
+  --status-hit-text: #34d399;
+  --status-track-bg: #172554;
+  --status-track-text: #60a5fa;
+  --status-deficit-bg: #450a0a;
+  --status-deficit-text: #f87171;
+  --status-alert-bg: #451a03;
+  --status-alert-text: #fbbf24;
+
+  --chart-line: #3b82f6;
+  --chart-grid: #1e293b;
+  --chart-baseline: #475569;
 }
 
 @theme inline {
   --color-background: var(--background);
   --color-surface: var(--surface);
+  --color-surface-sidebar: var(--surface-sidebar);
+  --color-surface-subtle: var(--surface-subtle);
+  --color-surface-active: var(--surface-active);
   --color-surface-hover: var(--surface-hover);
   --color-border: var(--border);
+  --color-border-subtle: var(--border-subtle);
   --color-foreground: var(--foreground);
   --color-muted: var(--muted);
+  --color-faint: var(--faint);
   --color-accent: var(--accent);
   --color-accent-foreground: var(--accent-foreground);
   --color-positive: var(--positive);
   --color-negative: var(--negative);
+  --color-status-hit-bg: var(--status-hit-bg);
+  --color-status-hit-text: var(--status-hit-text);
+  --color-status-track-bg: var(--status-track-bg);
+  --color-status-track-text: var(--status-track-text);
+  --color-status-deficit-bg: var(--status-deficit-bg);
+  --color-status-deficit-text: var(--status-deficit-text);
+  --color-status-alert-bg: var(--status-alert-bg);
+  --color-status-alert-text: var(--status-alert-text);
   --font-sans: var(--font-inter), system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  --font-mono: var(--font-jetbrains-mono), "Roboto Mono", ui-monospace, SFMono-Regular, monospace;
 }
 
 body {
@@ -50,6 +105,12 @@ body {
 
 * {
   border-color: var(--border);
+}
+
+/* Tabular lining figures so financial columns line up when scanned vertically. */
+.font-mono,
+.tabular-nums {
+  font-feature-settings: "tnum" 1, "zero" 1;
 }
 
 ::selection {

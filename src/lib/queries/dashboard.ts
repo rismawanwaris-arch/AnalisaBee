@@ -36,8 +36,17 @@ function trendPct(series: number[]): number | null {
 export async function getDashboardSummary(filters: DashboardFilters = {}) {
   const where = buildWhere(filters);
 
-  const [totals, byDate, topItemsRaw, topOutletsRaw, outletCount, itemCount, employeeCount, latestImport] =
-    await Promise.all([
+  const [
+    totals,
+    byDate,
+    topItemsRaw,
+    topOutletsRaw,
+    outletCount,
+    itemCount,
+    employeeCount,
+    latestImport,
+    posTargets,
+  ] = await Promise.all([
       prisma.sale.aggregate({
         where,
         _sum: { qty: true, subtotal: true, labaRugi: true },
@@ -67,6 +76,13 @@ export async function getDashboardSummary(filters: DashboardFilters = {}) {
       prisma.item.count(),
       prisma.employee.count(),
       prisma.importBatch.findFirst({ orderBy: { uploadedAt: "desc" } }),
+      // Network-wide daily LABA target for the POS-derived lines only. Server
+      // and Tarik Tunai targets are excluded because those figures come from
+      // separate imports, not from the Sale rows this dashboard charts.
+      prisma.target.findMany({
+        where: { scope: "ALL", category: { in: ["PETSHOP", "AKSESORIS", "SP_VOUCHER"] } },
+        select: { amount: true },
+      }),
     ]);
 
   const [items, outlets] = await Promise.all([
@@ -119,6 +135,7 @@ export async function getDashboardSummary(filters: DashboardFilters = {}) {
           status: latestImport.status,
         }
       : null,
+    labaTargetPerDay: posTargets.reduce((sum, t) => sum + Number(t.amount), 0) || null,
   };
 }
 

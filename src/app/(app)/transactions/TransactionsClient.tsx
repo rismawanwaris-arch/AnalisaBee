@@ -174,7 +174,7 @@ export function TransactionsClient() {
   return (
     <div className="space-y-6">
       <div>
-        <h1 className="text-xl font-semibold text-foreground">Data Penjualan</h1>
+        <h1 className="text-sm font-bold text-foreground">Data Penjualan</h1>
         <p className="text-sm text-muted mt-1">
           {showAll ? (
             "Semua transaksi hasil import, bisa difilter per tanggal, item, dan outlet."
@@ -188,7 +188,7 @@ export function TransactionsClient() {
         </p>
       </div>
 
-      <div className="rounded-xl border border-border bg-surface p-4 space-y-3">
+      <div className="rounded border border-border bg-surface p-4 space-y-3">
         <div className="flex flex-wrap items-end gap-3">
           <div>
             <label className="block text-xs text-muted mb-1">Dari tanggal</label>

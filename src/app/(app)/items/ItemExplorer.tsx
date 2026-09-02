@@ -129,7 +129,7 @@ export function ItemExplorer() {
   return (
     <div className="space-y-6">
       <div>
-        <h1 className="text-xl font-semibold">Cari Item</h1>
+        <h1 className="text-sm font-bold">Cari Item</h1>
         <p className="text-sm text-muted mt-1">
           Pilih satu item untuk melihat terjual di outlet mana, berapa pcs, dan tanggal berapa.
         </p>

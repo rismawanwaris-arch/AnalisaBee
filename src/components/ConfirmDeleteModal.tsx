@@ -41,7 +41,7 @@ export function ConfirmDeleteModal({
         if (e.target === e.currentTarget) onCancel();
       }}
     >
-      <div className="w-full max-w-md rounded-xl border border-border bg-surface p-5 shadow-xl">
+      <div className="w-full max-w-md rounded border border-border bg-surface p-5 shadow-xl">
         <h2 className="text-base font-semibold text-foreground">{title}</h2>
         <div className="text-sm text-muted mt-2">{description}</div>
 

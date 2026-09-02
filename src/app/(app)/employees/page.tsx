@@ -9,7 +9,7 @@ export default async function EmployeesPage() {
   return (
     <div className="space-y-6">
       <div>
-        <h1 className="text-xl font-semibold">Pegawai</h1>
+        <h1 className="text-sm font-bold">Pegawai</h1>
         <p className="text-sm text-muted mt-1">
           Performa penjualan per pegawai — klik judul kolom untuk urutkan.
         </p>

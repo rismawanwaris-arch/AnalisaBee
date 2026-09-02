@@ -133,7 +133,7 @@ export default function ImportPage() {
   return (
     <div className="space-y-8">
       <div>
-        <h1 className="text-xl font-semibold">Import Data Excel</h1>
+        <h1 className="text-sm font-bold">Import Data Excel</h1>
         <p className="text-sm text-muted mt-1">
           Unggah file export penjualan (.xls / .xlsx). Sebelum disimpan, Anda akan diperlihatkan
           pratinjau — baris mana yang baru dan mana yang terdeteksi duplikat — untuk dicek manual

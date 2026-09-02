@@ -23,7 +23,7 @@ export default async function EmployeeDetailPage({
         <Link href="/employees" className="text-sm text-muted hover:underline">
           ← Semua Pegawai
         </Link>
-        <h1 className="text-xl font-semibold mt-1">{detail.employee.name}</h1>
+        <h1 className="text-sm font-bold mt-1">{detail.employee.name}</h1>
       </div>
 
       <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">

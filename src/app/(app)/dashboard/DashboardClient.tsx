@@ -30,6 +30,7 @@ interface DashboardData {
   topItems: { itemId: number; code: string; name: string; qty: number; subtotal: number }[];
   topOutlets: { outletId: number; name: string; qty: number; subtotal: number }[];
   latestImport: { filename: string; uploadedAt: string; status: string } | null;
+  labaTargetPerDay: number | null;
 }
 
 export function DashboardClient() {
@@ -92,7 +93,7 @@ export function DashboardClient() {
   if (!loading && data && neverImported) {
     return (
       <div className="text-center py-16">
-        <h1 className="text-xl font-semibold mb-2">Belum ada data</h1>
+        <h1 className="text-sm font-bold mb-2">Belum ada data</h1>
         <p className="text-sm text-muted mb-4">
           Import file Excel penjualan pertama Anda untuk mulai melihat analisa.
         </p>
@@ -107,11 +108,11 @@ export function DashboardClient() {
   }
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-3">
       <div className="flex flex-wrap items-end justify-between gap-4">
         <div>
-          <h1 className="text-xl font-semibold text-foreground">Dashboard</h1>
-          <p className="text-sm text-muted mt-1">
+          <h1 className="text-sm font-bold text-foreground">Dashboard</h1>
+          <p className="text-[11px] text-muted mt-0.5">
             {showAll ? (
               "Ringkasan seluruh data penjualan."
             ) : (
@@ -124,37 +125,37 @@ export function DashboardClient() {
           </p>
         </div>
         {data?.latestImport && (
-          <p className="text-xs text-muted">
+          <p className="text-[10px] font-mono text-faint">
             Import terakhir: {data.latestImport.filename} · {formatDate(data.latestImport.uploadedAt)}
           </p>
         )}
       </div>
 
-      <div className="rounded-xl border border-border bg-surface p-4 flex flex-wrap items-end gap-3">
+      <div className="rounded border border-border bg-surface p-3 flex flex-wrap items-end gap-2.5">
         <div>
-          <label className="block text-xs text-muted mb-1">Dari tanggal</label>
+          <label className="block text-[11px] font-medium uppercase tracking-wider text-muted mb-1">Dari tanggal</label>
           <input
             type="date"
             value={from}
             onChange={(e) => setFrom(e.target.value)}
-            className="rounded-md border border-border bg-background px-2 py-1.5 text-sm"
+            className="rounded border border-border bg-surface-subtle px-2 py-1 text-xs"
           />
         </div>
         <div>
-          <label className="block text-xs text-muted mb-1">Sampai tanggal</label>
+          <label className="block text-[11px] font-medium uppercase tracking-wider text-muted mb-1">Sampai tanggal</label>
           <input
             type="date"
             value={to}
             onChange={(e) => setTo(e.target.value)}
-            className="rounded-md border border-border bg-background px-2 py-1.5 text-sm"
+            className="rounded border border-border bg-surface-subtle px-2 py-1 text-xs"
           />
         </div>
         <div>
-          <label className="block text-xs text-muted mb-1">Outlet</label>
+          <label className="block text-[11px] font-medium uppercase tracking-wider text-muted mb-1">Outlet</label>
           <select
             value={outletId}
             onChange={(e) => setOutletId(e.target.value)}
-            className="rounded-md border border-border bg-background px-2 py-1.5 text-sm min-w-40"
+            className="rounded border border-border bg-surface-subtle px-2 py-1 text-xs min-w-40"
           >
             <option value="">Semua Outlet</option>
             {outlets.map((o) => (
@@ -167,7 +168,7 @@ export function DashboardClient() {
         <button
           type="button"
           onClick={applyFilters}
-          className="rounded-md bg-accent text-accent-foreground px-3 py-1.5 text-sm font-medium hover:opacity-90"
+          className="rounded bg-accent text-accent-foreground px-3 py-1 text-xs font-medium hover:opacity-90"
         >
           Terapkan
         </button>
@@ -175,7 +176,7 @@ export function DashboardClient() {
           <button
             type="button"
             onClick={resetFilters}
-            className="text-sm text-muted hover:text-foreground underline"
+            className="text-xs text-muted hover:text-foreground underline"
           >
             Lihat Semua Data
           </button>
@@ -184,7 +185,7 @@ export function DashboardClient() {
           <button
             type="button"
             onClick={resetFilters}
-            className="text-sm text-muted hover:text-foreground underline"
+            className="text-xs text-muted hover:text-foreground underline"
           >
             Reset
           </button>
@@ -208,39 +209,61 @@ export function DashboardClient() {
         </div>
       ) : (
         <>
-          <div className="grid grid-cols-1 lg:grid-cols-3 gap-3">
-            <SparkKpiCard
-              label="Total Qty Terjual"
-              value={formatNumber(data.totals.qty)}
-              trendPct={data.trendPct.qty}
-              series={data.trend.map((t) => t.qty)}
-            />
+          <div className="grid grid-cols-2 lg:grid-cols-5 gap-2">
             <SparkKpiCard
               label="Total Omzet"
               value={formatRupiah(data.totals.subtotal)}
               trendPct={data.trendPct.subtotal}
               series={data.trend.map((t) => t.subtotal)}
+              hint={`${formatNumber(data.totals.transactionCount)} transaksi`}
             />
             <SparkKpiCard
               label="Total Laba"
               value={formatRupiah(data.totals.labaRugi)}
               trendPct={data.trendPct.labaRugi}
               series={data.trend.map((t) => t.labaRugi)}
+              hint={
+                data.totals.subtotal > 0
+                  ? `Margin ${((data.totals.labaRugi / data.totals.subtotal) * 100).toFixed(1)}%`
+                  : undefined
+              }
+            />
+            <SparkKpiCard
+              label="Qty Terjual"
+              value={`${formatNumber(data.totals.qty)} pcs`}
+              trendPct={data.trendPct.qty}
+              series={data.trend.map((t) => t.qty)}
+              hint={
+                data.totals.outletCount > 0
+                  ? `${formatNumber(
+                      Math.round(data.totals.qty / data.totals.outletCount)
+                    )} pcs/outlet`
+                  : undefined
+              }
+            />
+            <StatCard
+              label="Outlet Aktif"
+              value={formatNumber(data.totals.outletCount)}
+              hint={`${formatNumber(data.totals.itemCount)} item terjual`}
+            />
+            <StatCard
+              label="Pegawai Aktif"
+              value={formatNumber(data.totals.employeeCount)}
+              hint={
+                data.totals.employeeCount > 0
+                  ? `${formatRupiah(
+                      Math.round(data.totals.subtotal / data.totals.employeeCount)
+                    )}/orang`
+                  : undefined
+              }
             />
           </div>
 
-          <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
-            <StatCard label="Transaksi" value={formatNumber(data.totals.transactionCount)} />
-            <StatCard label="Outlet" value={formatNumber(data.totals.outletCount)} />
-            <StatCard label="Item" value={formatNumber(data.totals.itemCount)} />
-            <StatCard label="Pegawai" value={formatNumber(data.totals.employeeCount)} />
+          <div className="rounded border border-border bg-surface p-4">
+            <RevenueAreaChart data={data.trend} labaTargetPerDay={data.labaTargetPerDay} />
           </div>
 
-          <div className="rounded-xl border border-border bg-surface p-4">
-            <RevenueAreaChart data={data.trend} />
-          </div>
-
-          <div className="grid lg:grid-cols-2 gap-4">
+          <div className="grid lg:grid-cols-2 gap-3">
             <Leaderboard
               title="Top 10 Item"
               rows={data.topItems.map((it) => ({

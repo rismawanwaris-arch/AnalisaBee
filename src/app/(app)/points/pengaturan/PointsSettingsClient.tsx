@@ -236,7 +236,7 @@ export function PointsSettingsClient() {
 
   return (
     <div className="space-y-8">
-      <section className="rounded-xl border border-border bg-surface p-5">
+      <section className="rounded border border-border bg-surface p-5">
         <h2 className="text-base font-semibold text-foreground mb-1">Periode &quot;Per Bulan&quot;</h2>
         <p className="text-sm text-muted mb-4">
           Tentukan tanggal mulai siklus bulanan untuk leaderboard poin. Isi <strong>1</strong> untuk
@@ -267,7 +267,7 @@ export function PointsSettingsClient() {
         </div>
       </section>
 
-      <section className="rounded-xl border border-border bg-surface p-5">
+      <section className="rounded border border-border bg-surface p-5">
         <h2 className="text-base font-semibold text-foreground mb-1">
           Pegawai Dikecualikan dari Poin
         </h2>
@@ -349,7 +349,7 @@ export function PointsSettingsClient() {
         </div>
       </section>
 
-      <section className="rounded-xl border border-border bg-surface p-5">
+      <section className="rounded border border-border bg-surface p-5">
         <h2 className="text-base font-semibold text-foreground mb-1">Daftar Poin per Item</h2>
         <p className="text-sm text-muted mb-4">
           Nama/pola dicocokkan ke nama item POS tanpa peduli huruf besar-kecil, dan otomatis
@@ -429,7 +429,7 @@ export function PointsSettingsClient() {
         </div>
       </section>
 
-      <section className="rounded-xl border border-border bg-surface p-5">
+      <section className="rounded border border-border bg-surface p-5">
         <h2 className="text-base font-semibold text-foreground mb-1">
           Item Dikecualikan dari Poin
         </h2>
@@ -495,7 +495,7 @@ export function PointsSettingsClient() {
         </div>
       </section>
 
-      <section className="rounded-xl border border-border bg-surface p-5">
+      <section className="rounded border border-border bg-surface p-5">
         <h2 className="text-base font-semibold text-foreground mb-1">
           Poin Default per Item Group
         </h2>

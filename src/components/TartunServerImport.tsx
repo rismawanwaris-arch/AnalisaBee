@@ -18,7 +18,7 @@ export function TartunServerImport() {
   const [date, setDate] = useState(yesterdayStr());
 
   return (
-    <div className="rounded-xl border border-border bg-surface p-5 space-y-4">
+    <div className="rounded border border-border bg-surface p-5 space-y-4">
       <div>
         <h2 className="text-base font-semibold text-foreground">
           Data Tambahan: Tarik Tunai &amp; Server/Voucher

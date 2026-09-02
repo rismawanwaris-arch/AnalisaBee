@@ -235,7 +235,7 @@ export function TargetReportClient() {
             </div>
           )}
 
-          <div ref={tableWrapRef} className="report-paper bg-surface rounded-xl border border-border p-4">
+          <div ref={tableWrapRef} className="report-paper bg-surface rounded border border-border p-4">
             <div className="text-center mb-3 print-header">
               <h2 className="text-lg font-semibold">TARGET SALES HARIAN</h2>
               <p className="text-sm text-muted">

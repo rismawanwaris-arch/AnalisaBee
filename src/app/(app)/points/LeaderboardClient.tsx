@@ -115,7 +115,7 @@ export function LeaderboardClient() {
 
   return (
     <div className="space-y-6">
-      <div className="rounded-xl border border-border bg-surface p-4 space-y-3">
+      <div className="rounded border border-border bg-surface p-4 space-y-3">
         <div className="inline-flex rounded-md border border-border p-0.5 bg-background">
           {(["day", "month", "range"] as Mode[]).map((m) => (
             <button
@@ -198,7 +198,7 @@ export function LeaderboardClient() {
           Belum ada poin untuk periode ini.
         </div>
       ) : (
-        <div className="rounded-xl border border-border bg-surface overflow-hidden">
+        <div className="rounded border border-border bg-surface overflow-hidden">
           <table className="w-full text-sm">
             <thead className="bg-background text-muted text-left">
               <tr>
