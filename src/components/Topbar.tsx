@@ -1,73 +1,108 @@
-"use client";
+import { Link, useLocation, useNavigate } from "react-router-dom";
+import { ThemeToggle } from "./ThemeToggle";
+import { useAuth } from "../context/AuthContext";
 
-import Link from "next/link";
-import { usePathname, useRouter } from "next/navigation";
-import { ThemeToggle } from "@/components/ThemeToggle";
-
-const TITLES: { prefix: string; label: string }[] = [
-  { prefix: "/dashboard", label: "Ringkasan Penjualan" },
-  { prefix: "/items", label: "Item & SKU" },
-  { prefix: "/outlets", label: "Matrix Outlet" },
-  { prefix: "/employees", label: "Performa Pegawai" },
-  { prefix: "/transactions", label: "Data Penjualan" },
-  { prefix: "/target", label: "Target Harian" },
-  { prefix: "/points", label: "Poin Penjualan" },
-  { prefix: "/import", label: "Data Ingestion" },
+const TITLES: { prefix: string; label: string; section?: string }[] = [
+  { prefix: "/dashboard", label: "Ringkasan Penjualan", section: "Dashboard" },
+  { prefix: "/target", label: "Target Harian", section: "Laporan" },
+  { prefix: "/points", label: "Poin Penjualan", section: "Insentif" },
+  { prefix: "/items", label: "Item & SKU", section: "Master Data" },
+  { prefix: "/outlets", label: "Performa Outlet", section: "Cabang" },
+  { prefix: "/employees", label: "Performa Pegawai", section: "Staff" },
+  { prefix: "/transactions", label: "Data Penjualan", section: "Audit" },
+  { prefix: "/import", label: "Data Management & Ingestion", section: "Sistem" },
 ];
 
 const MOBILE_LINKS = [
   { href: "/dashboard", label: "Dashboard" },
+  { href: "/target", label: "Target" },
+  { href: "/points", label: "Poin" },
   { href: "/items", label: "Item" },
   { href: "/outlets", label: "Outlet" },
   { href: "/employees", label: "Pegawai" },
   { href: "/transactions", label: "Data" },
-  { href: "/target", label: "Target" },
-  { href: "/points", label: "Poin" },
   { href: "/import", label: "Import" },
 ];
 
 export function Topbar() {
-  const pathname = usePathname() ?? "";
-  const router = useRouter();
-  const title = TITLES.find((t) => pathname.startsWith(t.prefix))?.label ?? "AnalisaBEe";
+  const location = useLocation();
+  const pathname = location.pathname;
+  const navigate = useNavigate();
+  const { logout } = useAuth();
 
-  async function logout() {
-    await fetch("/api/auth/logout", { method: "POST" });
-    router.push("/login");
-    router.refresh();
+  const current = TITLES.find((t) => pathname.startsWith(t.prefix)) ?? {
+    label: "AnalisaBEe",
+    section: "Analisa",
+  };
+
+  async function handleLogout() {
+    await logout();
+    navigate("/login");
   }
 
   return (
-    <header className="sticky top-0 z-30 bg-background/85 backdrop-blur border-b border-border">
-      <div className="h-13 flex items-center justify-between px-4 md:px-5 gap-4">
-        <div className="flex items-center gap-2 min-w-0">
-          <span className="md:hidden font-semibold tracking-tight text-sm mr-1">
-            Analisa<span className="text-accent">BEe</span>
-          </span>
-          <h1 className="text-xs font-semibold text-foreground truncate">{title}</h1>
+    <header className="sticky top-0 z-30 bg-surface/80 backdrop-blur-md border-b border-border/80 shadow-xs">
+      <div className="h-14 flex items-center justify-between px-4 md:px-6 gap-4">
+        {/* Left: Breadcrumbs / Title */}
+        <div className="flex items-center gap-2.5 min-w-0">
+          <Link to="/dashboard" className="md:hidden flex items-center gap-2 mr-2">
+            <div className="w-6 h-6 rounded bg-gradient-to-tr from-blue-600 to-indigo-600 text-white grid place-items-center text-[10px] font-bold">
+              BE
+            </div>
+          </Link>
+          <div className="flex items-center gap-1.5 text-xs text-muted">
+            <span className="hidden sm:inline font-medium text-muted/70">{current.section}</span>
+            <span className="hidden sm:inline text-muted/40">/</span>
+            <h1 className="text-sm font-semibold text-foreground truncate tracking-tight">
+              {current.label}
+            </h1>
+          </div>
         </div>
-        <div className="flex items-center gap-2 shrink-0">
+
+        {/* Right: Actions */}
+        <div className="flex items-center gap-2.5 shrink-0">
           <ThemeToggle />
           <button
             type="button"
-            onClick={logout}
-            className="text-[11px] font-medium text-muted hover:text-foreground border border-border hover:border-border-subtle rounded px-2 py-1 transition-colors"
+            onClick={handleLogout}
+            className="inline-flex items-center gap-1.5 text-xs font-medium text-muted hover:text-foreground bg-surface-subtle/80 hover:bg-surface-hover border border-border/80 hover:border-border rounded-lg px-2.5 py-1.5 transition-all shadow-xs"
+            title="Keluar dari akun"
           >
-            Keluar
+            <svg
+              width="14"
+              height="14"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="2"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+              className="text-muted"
+            >
+              <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4" />
+              <polyline points="16 17 21 12 16 7" />
+              <line x1="21" y1="12" x2="9" y2="12" />
+            </svg>
+            <span className="hidden sm:inline">Keluar</span>
           </button>
         </div>
       </div>
-      <nav className="md:hidden flex gap-1 overflow-x-auto px-4 pb-2">
+
+      {/* Mobile Horizontal Navigation Tabs */}
+      <nav className="md:hidden flex gap-1.5 overflow-x-auto px-4 pb-2.5 pt-1 no-scrollbar border-t border-border/40">
         {MOBILE_LINKS.map((l) => {
-          const active = pathname.startsWith(l.href);
+          const active =
+            l.href === "/dashboard"
+              ? pathname === "/dashboard" || pathname === "/"
+              : pathname.startsWith(l.href);
           return (
             <Link
               key={l.href}
-              href={l.href}
-              className={`px-2 py-1 rounded text-[11px] whitespace-nowrap border ${
+              to={l.href}
+              className={`px-3 py-1 rounded-md text-xs whitespace-nowrap transition-all ${
                 active
-                  ? "bg-surface-active text-foreground border-border-subtle font-medium"
-                  : "text-muted border-transparent hover:bg-surface-hover"
+                  ? "bg-accent text-accent-foreground font-medium shadow-xs"
+                  : "text-muted hover:bg-surface-hover hover:text-foreground"
               }`}
             >
               {l.label}

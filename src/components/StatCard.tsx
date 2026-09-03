@@ -1,11 +1,14 @@
 export function StatCard({ label, value, hint }: { label: string; value: string; hint?: string }) {
   return (
-    <div className="rounded border border-border bg-surface p-3">
-      <div className="text-[11px] font-medium uppercase tracking-wider text-muted">{label}</div>
-      <div className="text-base xl:text-lg font-bold font-mono text-foreground mt-1 tracking-tight tabular-nums">
-        {value}
+    <div className="rounded-xl border border-border/80 bg-surface p-4 shadow-xs hover:border-border hover:shadow-sm transition-all duration-200 flex flex-col justify-between">
+      <div>
+        <div className="text-xs font-semibold uppercase tracking-wider text-muted/80">{label}</div>
+        <div className="text-xl xl:text-2xl font-bold font-mono text-foreground mt-2 tracking-tight tabular-nums">
+          {value}
+        </div>
       </div>
-      {hint && <div className="text-[10px] font-mono text-faint mt-0.5">{hint}</div>}
+      {hint && <div className="text-[11px] text-muted font-medium mt-2">{hint}</div>}
     </div>
   );
 }
+

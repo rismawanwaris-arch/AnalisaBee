@@ -1,8 +1,11 @@
 import { prisma } from "@/lib/prisma";
 
-export async function getOutletList() {
+export async function getOutletList(includeHidden = false) {
   const [outlets, sums] = await Promise.all([
-    prisma.outlet.findMany({ orderBy: { name: "asc" } }),
+    prisma.outlet.findMany({
+      where: includeHidden ? undefined : { isHidden: false },
+      orderBy: { name: "asc" },
+    }),
     prisma.sale.groupBy({
       by: ["outletId"],
       _sum: { qty: true, subtotal: true, labaRugi: true },
@@ -18,6 +21,7 @@ export async function getOutletList() {
       return {
         id: o.id,
         name: o.name,
+        isHidden: o.isHidden,
         qty: s?._sum.qty ?? 0,
         subtotal: Number(s?._sum.subtotal ?? 0),
         labaRugi: Number(s?._sum.labaRugi ?? 0),

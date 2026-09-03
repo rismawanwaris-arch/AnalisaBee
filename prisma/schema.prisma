@@ -55,12 +55,13 @@ model ImportBatch {
 }
 
 model Outlet {
-  id      Int           @id @default(autoincrement())
-  name    String        @unique
-  sales   Sale[]
-  aliases OutletAlias[]
-  tartun  TartunDaily[]
-  server  ServerDaily[]
+  id       Int           @id @default(autoincrement())
+  name     String        @unique
+  isHidden Boolean       @default(false)
+  sales    Sale[]
+  aliases  OutletAlias[]
+  tartun   TartunDaily[]
+  server   ServerDaily[]
 
   @@map("outlets")
 }
@@ -204,6 +205,7 @@ model PointSettings {
 model Employee {
   id       Int               @id @default(autoincrement())
   name     String            @unique
+  isHidden Boolean           @default(false)
   sales    Sale[]
   excluded PointsExclusion?
 

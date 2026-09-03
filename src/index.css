@@ -1,0 +1,164 @@
+@import "tailwindcss";
+
+/* AnalisaBEe — Modern Enterprise Analytics design tokens.
+   Light mode: "Crisp Slate White". Dark mode: "Deep Obsidian". */
+
+:root {
+  --background: #f8fafc;
+  --surface: #ffffff;
+  --surface-sidebar: #ffffff;
+  --surface-subtle: #f1f5f9;
+  --surface-active: #e0e7ff;
+  --surface-hover: #f1f5f9;
+  --border: #e2e8f0;
+  --border-subtle: #cbd5e1;
+  --foreground: #0f172a;
+  --muted: #475569;
+  --faint: #94a3b8;
+  --accent: #2563eb;
+  --accent-hover: #1d4ed8;
+  --accent-foreground: #ffffff;
+  --positive: #059669;
+  --negative: #e11d48;
+  --ring: #3b82f6;
+
+  /* Status pairs — background / text */
+  --status-hit-bg: #ecfdf5;
+  --status-hit-text: #059669;
+  --status-track-bg: #eff6ff;
+  --status-track-text: #2563eb;
+  --status-deficit-bg: #fff1f2;
+  --status-deficit-text: #e11d48;
+  --status-alert-bg: #fffbeb;
+  --status-alert-text: #d97706;
+
+  /* Chart */
+  --chart-line: #2563eb;
+  --chart-area-start: rgba(37, 99, 235, 0.25);
+  --chart-area-end: rgba(37, 99, 235, 0.0);
+  --chart-grid: #f1f5f9;
+  --chart-baseline: #94a3b8;
+}
+
+:root[data-theme="dark"] {
+  --background: #090d16;
+  --surface: #0f172a;
+  --surface-sidebar: #0b1120;
+  --surface-subtle: #131c31;
+  --surface-active: #1e293b;
+  --surface-hover: #182339;
+  --border: #1e293b;
+  --border-subtle: #334155;
+  --foreground: #f8fafc;
+  --muted: #94a3b8;
+  --faint: #64748b;
+  --accent: #38bdf8;
+  --accent-hover: #0ea5e9;
+  --accent-foreground: #090d16;
+  --positive: #34d399;
+  --negative: #fb7185;
+  --ring: #38bdf8;
+
+  --status-hit-bg: #064e3b;
+  --status-hit-text: #6ee7b7;
+  --status-track-bg: #172554;
+  --status-track-text: #93c5fd;
+  --status-deficit-bg: #4c0519;
+  --status-deficit-text: #fda4af;
+  --status-alert-bg: #451a03;
+  --status-alert-text: #fcd34d;
+
+  --chart-line: #38bdf8;
+  --chart-area-start: rgba(56, 189, 248, 0.3);
+  --chart-area-end: rgba(56, 189, 248, 0.0);
+  --chart-grid: #172033;
+  --chart-baseline: #64748b;
+}
+
+@theme inline {
+  --color-background: var(--background);
+  --color-surface: var(--surface);
+  --color-surface-sidebar: var(--surface-sidebar);
+  --color-surface-subtle: var(--surface-subtle);
+  --color-surface-active: var(--surface-active);
+  --color-surface-hover: var(--surface-hover);
+  --color-border: var(--border);
+  --color-border-subtle: var(--border-subtle);
+  --color-foreground: var(--foreground);
+  --color-muted: var(--muted);
+  --color-faint: var(--faint);
+  --color-accent: var(--accent);
+  --color-accent-hover: var(--accent-hover);
+  --color-accent-foreground: var(--accent-foreground);
+  --color-positive: var(--positive);
+  --color-negative: var(--negative);
+  --color-status-hit-bg: var(--status-hit-bg);
+  --color-status-hit-text: var(--status-hit-text);
+  --color-status-track-bg: var(--status-track-bg);
+  --color-status-track-text: var(--status-track-text);
+  --color-status-deficit-bg: var(--status-deficit-bg);
+  --color-status-deficit-text: var(--status-deficit-text);
+  --color-status-alert-bg: var(--status-alert-bg);
+  --color-status-alert-text: var(--status-alert-text);
+  --color-chart-baseline: var(--chart-baseline);
+  --color-chart-grid: var(--chart-grid);
+  --font-sans: 'Inter', system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
+  --font-mono: 'JetBrains Mono', 'Roboto Mono', ui-monospace, SFMono-Regular, monospace;
+}
+
+@layer base {
+  body {
+    background: var(--background);
+    color: var(--foreground);
+    font-family: var(--font-sans);
+  }
+
+  *,
+  ::before,
+  ::after {
+    border-color: var(--border);
+  }
+}
+
+/* Custom scrollbar for data-dense tables */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+::-webkit-scrollbar-thumb {
+  background: var(--border-subtle);
+  border-radius: 9999px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: var(--muted);
+}
+
+/* Tabular lining figures so financial columns line up when scanned vertically. */
+.font-mono,
+.tabular-nums {
+  font-feature-settings: "tnum" 1, "zero" 1;
+}
+
+::selection {
+  background: var(--accent);
+  color: var(--accent-foreground);
+}
+
+@media print {
+  aside,
+  header,
+  .no-print {
+    display: none !important;
+  }
+  main {
+    padding: 0 !important;
+    max-width: none !important;
+    margin: 0 !important;
+  }
+  body {
+    background: #ffffff !important;
+  }
+}

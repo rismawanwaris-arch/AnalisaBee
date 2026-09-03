@@ -1,6 +1,6 @@
-"use client";
 
 import { useState } from "react";
+import { Link } from "react-router-dom";
 import { formatNumber, formatRupiah } from "@/lib/format";
 import { yesterdayStr } from "@/lib/dateDefaults";
 
@@ -25,9 +25,9 @@ export function TartunServerImport() {
         </h2>
         <p className="text-sm text-muted mt-1">
           Dipakai oleh laporan{" "}
-          <a href="/target" className="underline">
+          <Link to="/target" className="underline text-accent">
             Target Harian
-          </a>
+          </Link>
           . Setiap sumber sudah berupa ringkasan per outlet per hari — mengunggah ulang tanggal
           yang sama akan menimpa angkanya, bukan menambah baris baru.
         </p>
@@ -74,9 +74,9 @@ function ResultSummary({ result }: { result: ImportResult }) {
           </ul>
           <p className="mt-1 text-muted">
             Tambahkan mapping di{" "}
-            <a href="/target/pengaturan" className="underline">
+            <Link to="/settings?tab=target" className="underline text-accent">
               Pengaturan
-            </a>
+            </Link>
             .
           </p>
         </details>

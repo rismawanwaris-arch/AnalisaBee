@@ -12,6 +12,13 @@ import { DEFAULT_GROUP_POINTS, DEFAULT_ITEM_POINTS } from "@/lib/defaults/itemPo
  * don't until the first POS import, so this can't be a one-shot "seeded" flag).
  */
 export async function ensureDefaults(): Promise<void> {
+  try {
+    await prisma.$executeRawUnsafe(`ALTER TABLE "outlets" ADD COLUMN IF NOT EXISTS "isHidden" BOOLEAN NOT NULL DEFAULT false;`);
+    await prisma.$executeRawUnsafe(`ALTER TABLE "employees" ADD COLUMN IF NOT EXISTS "isHidden" BOOLEAN NOT NULL DEFAULT false;`);
+  } catch {
+    // ignore error if tables not yet created
+  }
+
   await Promise.all(
     DEFAULT_TARGETS.map((t) =>
       prisma.target.upsert({

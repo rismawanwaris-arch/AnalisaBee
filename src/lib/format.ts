@@ -31,12 +31,18 @@ function trimZero(n: number): string {
   return String(rounded).replace(".", ",");
 }
 
-export function formatDate(value: string | Date): string {
+export function formatDate(value: string | Date | null | undefined): string {
+  if (!value) return "-";
   const date = typeof value === "string" ? new Date(value) : value;
-  return new Intl.DateTimeFormat("id-ID", {
-    day: "2-digit",
-    month: "short",
-    year: "numeric",
-    timeZone: "UTC",
-  }).format(date);
+  if (!date || Number.isNaN(date.getTime())) return "-";
+  try {
+    return new Intl.DateTimeFormat("id-ID", {
+      day: "2-digit",
+      month: "short",
+      year: "numeric",
+      timeZone: "UTC",
+    }).format(date);
+  } catch {
+    return "-";
+  }
 }
