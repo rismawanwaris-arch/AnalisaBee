@@ -185,6 +185,10 @@ export interface PreviewRow {
   qty: number;
   subtotal: number;
   pegawai: string;
+  /** DUPLICATE_IN_FILE: baris pertama dalam file ini yang memiliki data sama */
+  duplicateOfRow?: number;
+  /** DUPLICATE_EXISTING: info import batch yang sebelumnya menyimpan data ini */
+  existingImport?: { filename: string; uploadedAt: string };
 }
 
 export interface ImportPreview {
@@ -215,18 +219,25 @@ export async function previewSalesFile(buffer: Buffer): Promise<ImportPreview> {
     hash: buildRowHash(r),
   }));
 
-  const existingHashes = new Set<string>();
+  // Phase 1: check which hashes already exist in the DB
+  const existingHashes = new Map<string, { filename: string; uploadedAt: string }>();
   const allHashes = withHash.map((w) => w.hash);
   for (let i = 0; i < allHashes.length; i += HASH_CHECK_BATCH) {
     const chunk = allHashes.slice(i, i + HASH_CHECK_BATCH);
     const found = await prisma.sale.findMany({
       where: { rowHash: { in: chunk } },
-      select: { rowHash: true },
+      select: { rowHash: true, import: { select: { filename: true, uploadedAt: true } } },
     });
-    found.forEach((f) => existingHashes.add(f.rowHash));
+    found.forEach((f) =>
+      existingHashes.set(f.rowHash, {
+        filename: f.import.filename,
+        uploadedAt: f.import.uploadedAt.toISOString(),
+      })
+    );
   }
 
-  const seenInFile = new Set<string>();
+  // Phase 2: classify rows — track first occurrence per hash for in-file dedup
+  const seenInFile = new Map<string, number>(); // hash → first rowNumber
   const duplicates: PreviewRow[] = [];
   const newSample: PreviewRow[] = [];
   let newCount = 0;
@@ -236,7 +247,8 @@ export async function previewSalesFile(buffer: Buffer): Promise<ImportPreview> {
 
   const toPreviewRow = (
     w: (typeof withHash)[number],
-    status: PreviewRow["status"]
+    status: PreviewRow["status"],
+    extra?: Pick<PreviewRow, "duplicateOfRow" | "existingImport">
   ): PreviewRow => ({
     rowNumber: w.rowNumber,
     status,
@@ -247,19 +259,25 @@ export async function previewSalesFile(buffer: Buffer): Promise<ImportPreview> {
     qty: w.row.qty,
     subtotal: w.row.subtotal,
     pegawai: w.row.pegawai,
+    ...extra,
   });
 
   for (const w of withHash) {
-    if (existingHashes.has(w.hash)) {
+    const existingImport = existingHashes.get(w.hash);
+    if (existingImport) {
       duplicateExistingCount++;
-      if (duplicates.length < DUPLICATE_LIST_CAP) duplicates.push(toPreviewRow(w, "DUPLICATE_EXISTING"));
+      if (duplicates.length < DUPLICATE_LIST_CAP)
+        duplicates.push(toPreviewRow(w, "DUPLICATE_EXISTING", { existingImport }));
       else duplicatesTruncated = true;
     } else if (seenInFile.has(w.hash)) {
       duplicateInFileCount++;
-      if (duplicates.length < DUPLICATE_LIST_CAP) duplicates.push(toPreviewRow(w, "DUPLICATE_IN_FILE"));
+      if (duplicates.length < DUPLICATE_LIST_CAP)
+        duplicates.push(
+          toPreviewRow(w, "DUPLICATE_IN_FILE", { duplicateOfRow: seenInFile.get(w.hash) })
+        );
       else duplicatesTruncated = true;
     } else {
-      seenInFile.add(w.hash);
+      seenInFile.set(w.hash, w.rowNumber);
       newCount++;
       if (newSample.length < NEW_SAMPLE_SIZE) newSample.push(toPreviewRow(w, "NEW"));
     }

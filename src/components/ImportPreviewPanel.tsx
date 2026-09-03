@@ -13,6 +13,8 @@ export interface PreviewRow {
   qty: number;
   subtotal: number;
   pegawai: string;
+  duplicateOfRow?: number;
+  existingImport?: { filename: string; uploadedAt: string };
 }
 
 export interface ImportPreview {
@@ -121,9 +123,9 @@ export function ImportPreviewPanel({
                     </td>
                     <td className="px-3.5 py-2 font-mono text-right text-foreground">{formatNumber(r.qty)}</td>
                     <td className="px-3.5 py-2 font-mono text-right text-foreground">{formatRupiah(r.subtotal)}</td>
-                    <td className="px-3.5 py-2 whitespace-nowrap">
+                    <td className="px-3.5 py-2">
                       <span
-                        className={`text-[10px] font-semibold px-2 py-0.5 rounded-full border ${
+                        className={`text-[10px] font-semibold px-2 py-0.5 rounded-full border whitespace-nowrap ${
                           r.status === "DUPLICATE_EXISTING"
                             ? "bg-amber-500/10 text-amber-600 dark:text-amber-400 border-amber-500/20"
                             : "bg-rose-500/10 text-rose-600 dark:text-rose-400 border-rose-500/20"
@@ -131,6 +133,16 @@ export function ImportPreviewPanel({
                       >
                         {STATUS_LABEL[r.status]}
                       </span>
+                      {r.status === "DUPLICATE_IN_FILE" && r.duplicateOfRow != null && (
+                        <div className="text-[10px] text-muted mt-0.5 whitespace-nowrap">
+                          ↳ sama dengan baris {r.duplicateOfRow}
+                        </div>
+                      )}
+                      {r.status === "DUPLICATE_EXISTING" && r.existingImport && (
+                        <div className="text-[10px] text-muted mt-0.5 max-w-48 truncate" title={r.existingImport.filename}>
+                          ↳ {r.existingImport.filename}
+                        </div>
+                      )}
                     </td>
                   </tr>
                 ))}
