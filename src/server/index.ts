@@ -851,7 +851,83 @@ app.post("/api/import/server", requireAuth, upload.single("file"), async (req, r
 });
 
 // ==========================================
-// 9. PRODUCTION STATIC SPA SERVING
+// 9. DAILY IMPORT HISTORY (TARTUN & SERVER)
+// ==========================================
+
+app.get("/api/daily-imports/tartun", requireAuth, async (req, res) => {
+  try {
+    const rows = await prisma.tartunDaily.groupBy({
+      by: ["tanggal"],
+      _count: { id: true },
+      _sum: { sales: true, trx: true },
+      _max: { updatedAt: true },
+      orderBy: { tanggal: "desc" },
+    });
+    return res.json(
+      rows.map((r) => ({
+        tanggal: r.tanggal.toISOString().slice(0, 10),
+        outletCount: r._count.id,
+        totalSales: Number(r._sum.sales ?? 0),
+        totalTrx: r._sum.trx ?? 0,
+        updatedAt: r._max.updatedAt?.toISOString() ?? null,
+      }))
+    );
+  } catch (err: any) {
+    return res.status(500).json({ error: err.message });
+  }
+});
+
+app.delete("/api/daily-imports/tartun/:date", requireAuth, async (req, res) => {
+  try {
+    const date = new Date(String(req.params.date));
+    if (Number.isNaN(date.getTime())) return res.status(400).json({ error: "Tanggal tidak valid." });
+    const { count } = await prisma.tartunDaily.deleteMany({
+      where: { tanggal: { gte: date, lt: new Date(date.getTime() + 86400000) } },
+    });
+    return res.json({ ok: true, deletedCount: count });
+  } catch (err: any) {
+    return res.status(500).json({ error: err.message });
+  }
+});
+
+app.get("/api/daily-imports/server", requireAuth, async (req, res) => {
+  try {
+    const rows = await prisma.serverDaily.groupBy({
+      by: ["tanggal"],
+      _count: { id: true },
+      _sum: { sales: true, trx: true },
+      _max: { updatedAt: true },
+      orderBy: { tanggal: "desc" },
+    });
+    return res.json(
+      rows.map((r) => ({
+        tanggal: r.tanggal.toISOString().slice(0, 10),
+        outletCount: r._count.id,
+        totalSales: Number(r._sum.sales ?? 0),
+        totalTrx: r._sum.trx ?? 0,
+        updatedAt: r._max.updatedAt?.toISOString() ?? null,
+      }))
+    );
+  } catch (err: any) {
+    return res.status(500).json({ error: err.message });
+  }
+});
+
+app.delete("/api/daily-imports/server/:date", requireAuth, async (req, res) => {
+  try {
+    const date = new Date(String(req.params.date));
+    if (Number.isNaN(date.getTime())) return res.status(400).json({ error: "Tanggal tidak valid." });
+    const { count } = await prisma.serverDaily.deleteMany({
+      where: { tanggal: { gte: date, lt: new Date(date.getTime() + 86400000) } },
+    });
+    return res.json({ ok: true, deletedCount: count });
+  } catch (err: any) {
+    return res.status(500).json({ error: err.message });
+  }
+});
+
+// ==========================================
+// 10. PRODUCTION STATIC SPA SERVING
 // ==========================================
 
 const distPath = path.resolve(process.cwd(), "dist");
