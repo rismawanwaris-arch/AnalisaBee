@@ -21,8 +21,9 @@ services:
       - "8080:3001"
     environment:
       DATABASE_URL: postgresql://analisabee:${POSTGRES_PASSWORD:?POSTGRES_PASSWORD wajib diset di .env}@db:5432/analisabee
-      SESSION_SECRET: ${SESSION_SECRET}
-      APP_PASSWORD: ${APP_PASSWORD}
+      SESSION_SECRET: ${SESSION_SECRET:?SESSION_SECRET wajib diset di .env}
+      MASTER_PASSWORD: ${MASTER_PASSWORD:?MASTER_PASSWORD wajib diset di .env}
+      ADMIN_PASSWORD: ${ADMIN_PASSWORD}
       NODE_ENV: production
       PORT: 3001
     depends_on:
