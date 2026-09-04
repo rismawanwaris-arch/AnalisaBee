@@ -27,8 +27,7 @@ RUN npm ci
 # copy built frontend
 COPY --from=builder /app/dist ./dist
 
-# copy Prisma schema + generated client
-COPY --from=builder /app/node_modules/.prisma ./node_modules/.prisma
+# copy Prisma generated client (output = src/generated/prisma per schema.prisma)
 COPY --from=builder /app/src/generated ./src/generated
 COPY prisma ./prisma
 
