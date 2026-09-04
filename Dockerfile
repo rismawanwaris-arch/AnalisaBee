@@ -20,9 +20,9 @@ WORKDIR /app
 
 ENV NODE_ENV=production
 
+# reuse node_modules from builder — avoids a second npm ci over the network
+COPY --from=builder /app/node_modules ./node_modules
 COPY package*.json ./
-# install all deps — tsx is a devDep but used by `npm start`
-RUN npm ci
 
 # copy built frontend
 COPY --from=builder /app/dist ./dist
