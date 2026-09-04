@@ -70,16 +70,19 @@ const upload = multer({
 // Security headers
 app.use(helmet({ contentSecurityPolicy: false }));
 
-// CORS: only allow same-origin or explicit whitelist — credentials require exact origin
-const ALLOWED_ORIGINS = process.env.ALLOWED_ORIGINS?.split(",").map((o) => o.trim()) ?? [];
-app.use(cors({
-  origin: (origin, cb) => {
-    // same-origin requests (SPA served from Express) have no Origin header
-    if (!origin || ALLOWED_ORIGINS.includes(origin)) return cb(null, true);
-    cb(new Error("CORS: origin tidak diizinkan"));
-  },
-  credentials: true,
-}));
+// CORS: only needed in development (Vite :5173 → Express :3001).
+// In production the SPA is served by Express itself — same origin, no CORS required.
+if (process.env.NODE_ENV !== "production") {
+  const DEV_ORIGINS = (process.env.ALLOWED_ORIGINS ?? "http://localhost:5173")
+    .split(",").map((o) => o.trim());
+  app.use(cors({
+    origin: (origin, cb) => {
+      if (!origin || DEV_ORIGINS.includes(origin)) return cb(null, true);
+      cb(new Error("CORS: origin tidak diizinkan"));
+    },
+    credentials: true,
+  }));
+}
 
 app.use(cookieParser());
 app.use(express.json({ limit: "10mb" }));
