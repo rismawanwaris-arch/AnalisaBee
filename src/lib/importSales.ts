@@ -13,6 +13,7 @@ export interface ImportSummary {
   insertedCount: number;
   duplicateCount: number;
   errorRowCount: number;
+  noCabangCount: number;
   errors: RowError[];
   periodStart: Date | null;
   periodEnd: Date | null;
@@ -43,6 +44,15 @@ export function buildRowHash(r: ParsedSaleRow): string {
 
 export async function importSalesFile(filename: string, buffer: Buffer): Promise<ImportSummary> {
   const { rows, errors, totalRows } = parseExcelBuffer(buffer);
+
+  // Build row hashes BEFORE inferring cabang so dedup key is stable across re-imports.
+  // A row with an empty Cabang always hashes with "", so the same POS row is always
+  // identified as the same record regardless of which outlet we later infer for it.
+  const precomputedHashes = new Map<ParsedSaleRow, string>();
+  for (const r of rows) precomputedHashes.set(r, buildRowHash(r));
+
+  // Fill in missing Cabang values from employee history
+  const noCabangCount = await inferCabangForRows(rows);
 
   const periodStart = rows.length
     ? new Date(Math.min(...rows.map((r) => r.tanggal.getTime())))
@@ -117,7 +127,7 @@ export async function importSalesFile(filename: string, buffer: Buffer): Promise
       subtotal: r.subtotal,
       hpp: r.hpp,
       labaRugi: r.labaRugi,
-      rowHash: buildRowHash(r),
+      rowHash: precomputedHashes.get(r)!,
       outletId: outletIdByName.get(r.cabang)!,
       itemId: itemIdByCode.get(r.kodeItem)!,
       employeeId: employeeIdByName.get(r.pegawai)!,
@@ -151,6 +161,7 @@ export async function importSalesFile(filename: string, buffer: Buffer): Promise
       insertedCount,
       duplicateCount,
       errorRowCount: errors.length,
+      noCabangCount,
       errors: errors.slice(0, 50),
       periodStart,
       periodEnd,
@@ -171,9 +182,59 @@ function uniq(arr: string[]): string[] {
   return [...new Set(arr.filter(Boolean))];
 }
 
+const FALLBACK_OUTLET = "TIDAK DIKETAHUI";
+
+/**
+ * For rows where Cabang is empty in the source file, look up each pegawai's
+ * most recent outlet from DB history. Falls back to FALLBACK_OUTLET if no
+ * history exists.
+ *
+ * IMPORTANT: Call this AFTER building the row hash — the hash intentionally
+ * uses the raw empty-string cabang so the same row produces the same dedup
+ * key on every re-import.
+ */
+async function inferCabangForRows(rows: ParsedSaleRow[]): Promise<number> {
+  const noCabang = rows.filter((r) => !r.cabang);
+  if (noCabang.length === 0) return 0;
+
+  const pegawaiNames = uniq(noCabang.map((r) => r.pegawai));
+  const inferred = new Map<string, string>();
+
+  if (pegawaiNames.length > 0) {
+    const sales = await prisma.sale.findMany({
+      where: { employee: { name: { in: pegawaiNames } } },
+      select: { employee: { select: { name: true } }, outlet: { select: { name: true } } },
+      orderBy: { tanggal: "desc" },
+      distinct: ["employeeId"],
+    });
+    sales.forEach((s) => {
+      if (!inferred.has(s.employee.name)) {
+        inferred.set(s.employee.name, s.outlet.name);
+      }
+    });
+  }
+
+  for (const row of noCabang) {
+    row.cabang = inferred.get(row.pegawai) ?? FALLBACK_OUTLET;
+  }
+
+  return noCabang.length;
+}
+
 const HASH_CHECK_BATCH = 5000;
 const DUPLICATE_LIST_CAP = 5000;
 const NEW_SAMPLE_SIZE = 20;
+
+export interface OriginalRowSnapshot {
+  rowNumber: number;
+  noTransaksi: string;
+  tanggal: string;
+  cabang: string;
+  namaItem: string;
+  qty: number;
+  subtotal: number;
+  pegawai: string;
+}
 
 export interface PreviewRow {
   rowNumber: number;
@@ -187,6 +248,8 @@ export interface PreviewRow {
   pegawai: string;
   /** DUPLICATE_IN_FILE: baris pertama dalam file ini yang memiliki data sama */
   duplicateOfRow?: number;
+  /** DUPLICATE_IN_FILE: full data baris pertama, untuk perbandingan manual */
+  originalRow?: OriginalRowSnapshot;
   /** DUPLICATE_EXISTING: info import batch yang sebelumnya menyimpan data ini */
   existingImport?: { filename: string; uploadedAt: string };
 }
@@ -197,6 +260,7 @@ export interface ImportPreview {
   duplicateExistingCount: number;
   duplicateInFileCount: number;
   errorCount: number;
+  noCabangCount: number;
   errors: RowError[];
   /** Every row flagged as a duplicate (capped — see DUPLICATE_LIST_CAP), for manual review. */
   duplicates: PreviewRow[];
@@ -213,11 +277,15 @@ export interface ImportPreview {
 export async function previewSalesFile(buffer: Buffer): Promise<ImportPreview> {
   const { rows, errors, totalRows } = parseExcelBuffer(buffer);
 
+  // Hash BEFORE inferring cabang — keeps dedup key stable across re-imports
   const withHash = rows.map((r, idx) => ({
     row: r,
     rowNumber: idx + 2,
     hash: buildRowHash(r),
   }));
+
+  // Fill in missing Cabang values from employee history (mutates row.cabang in withHash)
+  const noCabangCount = await inferCabangForRows(rows);
 
   // Phase 1: check which hashes already exist in the DB
   const existingHashes = new Map<string, { filename: string; uploadedAt: string }>();
@@ -237,7 +305,7 @@ export async function previewSalesFile(buffer: Buffer): Promise<ImportPreview> {
   }
 
   // Phase 2: classify rows — track first occurrence per hash for in-file dedup
-  const seenInFile = new Map<string, number>(); // hash → first rowNumber
+  const seenInFile = new Map<string, OriginalRowSnapshot>(); // hash → first occurrence data
   const duplicates: PreviewRow[] = [];
   const newSample: PreviewRow[] = [];
   let newCount = 0;
@@ -248,7 +316,7 @@ export async function previewSalesFile(buffer: Buffer): Promise<ImportPreview> {
   const toPreviewRow = (
     w: (typeof withHash)[number],
     status: PreviewRow["status"],
-    extra?: Pick<PreviewRow, "duplicateOfRow" | "existingImport">
+    extra?: Pick<PreviewRow, "duplicateOfRow" | "originalRow" | "existingImport">
   ): PreviewRow => ({
     rowNumber: w.rowNumber,
     status,
@@ -273,11 +341,24 @@ export async function previewSalesFile(buffer: Buffer): Promise<ImportPreview> {
       duplicateInFileCount++;
       if (duplicates.length < DUPLICATE_LIST_CAP)
         duplicates.push(
-          toPreviewRow(w, "DUPLICATE_IN_FILE", { duplicateOfRow: seenInFile.get(w.hash) })
+          toPreviewRow(w, "DUPLICATE_IN_FILE", {
+            duplicateOfRow: seenInFile.get(w.hash)!.rowNumber,
+            originalRow: seenInFile.get(w.hash),
+          })
         );
       else duplicatesTruncated = true;
     } else {
-      seenInFile.set(w.hash, w.rowNumber);
+      const snapshot: OriginalRowSnapshot = {
+        rowNumber: w.rowNumber,
+        noTransaksi: w.row.noTransaksi,
+        tanggal: w.row.tanggal.toISOString(),
+        cabang: w.row.cabang,
+        namaItem: w.row.namaItem,
+        qty: w.row.qty,
+        subtotal: w.row.subtotal,
+        pegawai: w.row.pegawai,
+      };
+      seenInFile.set(w.hash, snapshot);
       newCount++;
       if (newSample.length < NEW_SAMPLE_SIZE) newSample.push(toPreviewRow(w, "NEW"));
     }
@@ -289,6 +370,7 @@ export async function previewSalesFile(buffer: Buffer): Promise<ImportPreview> {
     duplicateExistingCount,
     duplicateInFileCount,
     errorCount: errors.length,
+    noCabangCount,
     errors: errors.slice(0, 50),
     duplicates,
     duplicatesTruncated,

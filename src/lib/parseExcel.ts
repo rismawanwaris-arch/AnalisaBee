@@ -22,6 +22,16 @@ export interface ParsedSaleRow {
 export interface RowError {
   rowNumber: number; // 1-indexed, matches the row number in Excel (header = 1)
   message: string;
+  /** Snapshot of whatever fields were readable before the error — for manual investigation. */
+  rawSnapshot?: {
+    noTransaksi: string;
+    tanggal: string;
+    cabang: string;
+    kodeItem: string;
+    namaItem: string;
+    qty: string;
+    pegawai: string;
+  };
 }
 
 export interface ParseResult {
@@ -81,9 +91,22 @@ export function parseExcelBuffer(buffer: Buffer): ParseResult {
     try {
       rows.push(toSaleRow(r));
     } catch (err) {
+      const rawTanggal =
+        r["Tanggal"] instanceof Date
+          ? (r["Tanggal"] as Date).toISOString().slice(0, 10)
+          : String(r["Tanggal"] ?? "");
       errors.push({
         rowNumber,
         message: err instanceof Error ? err.message : "Baris tidak valid",
+        rawSnapshot: {
+          noTransaksi: str(r["No Transaksi"]),
+          tanggal: rawTanggal,
+          cabang: str(r["Cabang"]),
+          kodeItem: str(r["Kode Item"]),
+          namaItem: str(r["Nama Item"]),
+          qty: r["qty"] != null ? String(r["qty"]) : "",
+          pegawai: str(r["Pegawai"]),
+        },
       });
     }
   });
@@ -101,7 +124,7 @@ function toSaleRow(r: Record<string, unknown>): ParsedSaleRow {
 
   if (!noTransaksi) throw new Error("No Transaksi kosong");
   if (!tanggal) throw new Error("Tanggal tidak valid / tidak bisa dibaca");
-  if (!cabang) throw new Error("Cabang kosong");
+  // cabang boleh kosong — akan diinferensikan dari riwayat pegawai di importSales.ts
   if (!kodeItem) throw new Error("Kode Item kosong");
   if (!namaItem) throw new Error("Nama Item kosong");
 
