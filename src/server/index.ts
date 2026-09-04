@@ -91,7 +91,7 @@ app.post("/api/auth/login", async (req, res) => {
   const { token } = await createSessionToken();
   res.cookie(COOKIE_NAME, token, {
     httpOnly: true,
-    secure: process.env.NODE_ENV === "production",
+    secure: process.env.HTTPS === "true",
     sameSite: "lax",
     maxAge: SESSION_DURATION_MS,
     path: "/",
