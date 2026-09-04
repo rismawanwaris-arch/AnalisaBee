@@ -21,6 +21,7 @@ const EmployeeDetailPage = lazy(() => import("./pages/employees/EmployeeDetailPa
 const TransactionsPage = lazy(() => import("./pages/transactions/TransactionsPage").then((m) => ({ default: m.TransactionsPage })));
 const ImportPage = lazy(() => import("./pages/import/ImportPage").then((m) => ({ default: m.ImportPage })));
 const SettingsPage = lazy(() => import("./pages/settings/SettingsPage").then((m) => ({ default: m.SettingsPage })));
+const ActivityLogPage = lazy(() => import("./pages/log/ActivityLogPage").then((m) => ({ default: m.ActivityLogPage })));
 
 function PageLoader() {
   return (
@@ -70,7 +71,10 @@ export function App() {
                 <Route path="/transactions" element={<TransactionsPage />} />
                 <Route path="/import" element={<ImportPage />} />
 
-                {/* Centralized Settings */}
+                {/* Activity Log */}
+                <Route path="/log" element={<ActivityLogPage />} />
+
+                {/* Centralized Settings (master only — guard in AppLayout) */}
                 <Route path="/settings" element={<SettingsPage />} />
               </Route>
 

@@ -14,7 +14,18 @@ import {
   verifySessionToken,
   COOKIE_NAME,
   SESSION_DURATION_MS,
+  type UserRole,
 } from "../lib/session";
+
+// Extend Express request type to carry role
+declare global {
+  // eslint-disable-next-line @typescript-eslint/no-namespace
+  namespace Express {
+    interface Request {
+      userRole?: UserRole;
+    }
+  }
+}
 
 import { getSystemStatus } from "../lib/queries/systemStatus";
 import { getDashboardSummary } from "../lib/queries/dashboard";
@@ -111,11 +122,36 @@ ensureDefaults().catch((err) => console.error("ensureDefaults error:", err));
 // Auth Middleware for API
 async function requireAuth(req: express.Request, res: express.Response, next: express.NextFunction) {
   const token = req.cookies[COOKIE_NAME];
-  const authed = await verifySessionToken(token);
-  if (!authed) {
+  const role = await verifySessionToken(token);
+  if (!role) {
     return res.status(401).json({ error: "Belum login." });
   }
+  req.userRole = role;
   next();
+}
+
+async function requireMaster(req: express.Request, res: express.Response, next: express.NextFunction) {
+  const token = req.cookies[COOKIE_NAME];
+  const role = await verifySessionToken(token);
+  if (!role) return res.status(401).json({ error: "Belum login." });
+  if (role !== "master") return res.status(403).json({ error: "Akses ditolak. Hanya master yang bisa mengubah pengaturan." });
+  req.userRole = role;
+  next();
+}
+
+async function logActivity(req: express.Request, action: string, detail?: string) {
+  try {
+    await prisma.activityLog.create({
+      data: {
+        role: req.userRole ?? "unknown",
+        action,
+        detail: detail ?? null,
+        ip: (req.headers["x-forwarded-for"] as string)?.split(",")[0].trim() ?? req.socket.remoteAddress ?? null,
+      },
+    });
+  } catch {
+    // log failure must never break the main request
+  }
 }
 
 function parseDateParam(val: unknown): Date | undefined {
@@ -130,11 +166,12 @@ function parseDateParam(val: unknown): Date | undefined {
 
 app.post("/api/auth/login", loginLimiter, async (req, res) => {
   const { password } = req.body;
-  if (!password || !verifyPassword(String(password))) {
+  const role = password ? verifyPassword(String(password)) : null;
+  if (!role) {
     return res.status(401).json({ error: "Password salah." });
   }
 
-  const { token } = await createSessionToken();
+  const { token } = await createSessionToken(role);
   res.cookie(COOKIE_NAME, token, {
     httpOnly: true,
     secure: process.env.HTTPS === "true",
@@ -143,7 +180,11 @@ app.post("/api/auth/login", loginLimiter, async (req, res) => {
     path: "/",
   });
 
-  return res.json({ ok: true });
+  // Log login (fire-and-forget, no req.userRole yet so set manually)
+  const ip = (req.headers["x-forwarded-for"] as string)?.split(",")[0].trim() ?? req.socket.remoteAddress ?? null;
+  prisma.activityLog.create({ data: { role, action: "LOGIN", ip } }).catch(() => {});
+
+  return res.json({ ok: true, role });
 });
 
 app.post("/api/auth/logout", (req, res) => {
@@ -153,8 +194,8 @@ app.post("/api/auth/logout", (req, res) => {
 
 app.get("/api/auth/me", async (req, res) => {
   const token = req.cookies[COOKIE_NAME];
-  const authed = await verifySessionToken(token);
-  return res.json({ authenticated: authed });
+  const role = await verifySessionToken(token);
+  return res.json({ authenticated: !!role, role: role ?? null });
 });
 
 // ==========================================
@@ -210,7 +251,7 @@ app.get("/api/outlets/summary", requireAuth, async (req, res) => {
   }
 });
 
-app.put("/api/outlets/:id/visibility", requireAuth, async (req, res) => {
+app.put("/api/outlets/:id/visibility", requireMaster, async (req, res) => {
   try {
     const id = Number(req.params.id);
     if (Number.isNaN(id)) return res.status(400).json({ error: "ID tidak valid" });
@@ -218,7 +259,9 @@ app.put("/api/outlets/:id/visibility", requireAuth, async (req, res) => {
     const updated = await prisma.outlet.update({
       where: { id },
       data: { isHidden: Boolean(isHidden) },
+      select: { id: true, name: true, isHidden: true },
     });
+    await logActivity(req, "OUTLET_VISIBILITY", `${updated.name} → ${isHidden ? "disembunyikan" : "ditampilkan"}`);
     return res.json(updated);
   } catch (err: any) {
     return res.status(500).json({ error: err.message });
@@ -247,7 +290,7 @@ app.get("/api/employees", requireAuth, async (req, res) => {
   }
 });
 
-app.put("/api/employees/:id/visibility", requireAuth, async (req, res) => {
+app.put("/api/employees/:id/visibility", requireMaster, async (req, res) => {
   try {
     const id = Number(req.params.id);
     if (Number.isNaN(id)) return res.status(400).json({ error: "ID tidak valid" });
@@ -255,7 +298,9 @@ app.put("/api/employees/:id/visibility", requireAuth, async (req, res) => {
     const updated = await prisma.employee.update({
       where: { id },
       data: { isHidden: Boolean(isHidden) },
+      select: { id: true, name: true, isHidden: true },
     });
+    await logActivity(req, "EMPLOYEE_VISIBILITY", `${updated.name} → ${isHidden ? "disembunyikan" : "ditampilkan"}`);
     return res.json(updated);
   } catch (err: any) {
     return res.status(500).json({ error: err.message });
@@ -411,7 +456,7 @@ app.get("/api/target", requireAuth, async (req, res) => {
   }
 });
 
-app.put("/api/target", requireAuth, async (req, res) => {
+app.put("/api/target", requireMaster, async (req, res) => {
   try {
     const body = req.body;
     if (Array.isArray(body)) {
@@ -420,13 +465,14 @@ app.put("/api/target", requireAuth, async (req, res) => {
       );
     }
     const targets = await getTargetAmounts();
+    await logActivity(req, "TARGET_UPDATE", `${Array.isArray(body) ? body.length : 1} entri diperbarui`);
     return res.json(targets);
   } catch (err: any) {
     return res.status(500).json({ error: err.message });
   }
 });
 
-app.post("/api/target", requireAuth, async (req, res) => {
+app.post("/api/target", requireMaster, async (req, res) => {
   try {
     const { scope, category, amount } = req.body;
     if (scope !== "PERKONTER" && scope !== "ALL") {
@@ -447,6 +493,7 @@ app.post("/api/target", requireAuth, async (req, res) => {
       return res.status(400).json({ error: "amount harus angka positif" });
     }
     await setTargetAmount(scope, category, numAmount);
+    await logActivity(req, "TARGET_UPDATE", `${scope} ${category} = ${numAmount}`);
     return res.json({ ok: true });
   } catch (err: any) {
     return res.status(500).json({ error: err.message });
@@ -514,7 +561,7 @@ app.get("/api/points/settings", requireAuth, async (req, res) => {
   }
 });
 
-app.put("/api/points/settings", requireAuth, async (req, res) => {
+app.put("/api/points/settings", requireMaster, async (req, res) => {
   try {
     const { periodStartDay } = req.body;
     const day = Number(periodStartDay);
@@ -522,13 +569,14 @@ app.put("/api/points/settings", requireAuth, async (req, res) => {
       return res.status(400).json({ error: "Tanggal harus 1-31." });
     }
     await setPointPeriodSetting(day);
+    await logActivity(req, "PERIOD_UPDATE", `Tanggal mulai siklus → ${day}`);
     return res.json({ ok: true });
   } catch (err: any) {
     return res.status(500).json({ error: err.message });
   }
 });
 
-app.post("/api/points/settings", requireAuth, async (req, res) => {
+app.post("/api/points/settings", requireMaster, async (req, res) => {
   try {
     const { periodStartDay } = req.body;
     const day = Number(periodStartDay);
@@ -536,6 +584,7 @@ app.post("/api/points/settings", requireAuth, async (req, res) => {
       return res.status(400).json({ error: "Tanggal harus 1-31." });
     }
     await setPointPeriodSetting(day);
+    await logActivity(req, "PERIOD_UPDATE", `Tanggal mulai siklus → ${day}`);
     return res.json({ ok: true });
   } catch (err: any) {
     return res.status(500).json({ error: err.message });
@@ -580,7 +629,7 @@ app.get("/api/points/items", requireAuth, async (req, res) => {
   }
 });
 
-app.post("/api/points/items", requireAuth, async (req, res) => {
+app.post("/api/points/items", requireMaster, async (req, res) => {
   try {
     const { pattern, points } = req.body;
     const p = String(pattern || "").trim();
@@ -590,15 +639,17 @@ app.post("/api/points/items", requireAuth, async (req, res) => {
       return res.status(400).json({ error: "Poin harus integer >= 0." });
     }
     const rule = await upsertItemPointRule(p, pts);
+    await logActivity(req, "ITEM_RULE_ADD", `"${p}" = ${pts} poin`);
     return res.json(rule);
   } catch (err: any) {
     return res.status(500).json({ error: err.message });
   }
 });
 
-app.delete("/api/points/items/:id", requireAuth, async (req, res) => {
+app.delete("/api/points/items/:id", requireMaster, async (req, res) => {
   try {
     await deleteItemPointRule(Number(req.params.id));
+    await logActivity(req, "ITEM_RULE_DELETE", `id=${req.params.id}`);
     return res.json({ ok: true });
   } catch (err: any) {
     return res.status(500).json({ error: err.message });
@@ -614,21 +665,23 @@ app.get("/api/points/item-exclusions", requireAuth, async (req, res) => {
   }
 });
 
-app.post("/api/points/item-exclusions", requireAuth, async (req, res) => {
+app.post("/api/points/item-exclusions", requireMaster, async (req, res) => {
   try {
     const { pattern } = req.body;
     const p = String(pattern || "").trim();
     if (!p) return res.status(400).json({ error: "Pola item wajib diisi." });
     const excl = await addItemPointExclusion(p);
+    await logActivity(req, "ITEM_EXCLUSION_ADD", `"${p}"`);
     return res.json(excl);
   } catch (err: any) {
     return res.status(500).json({ error: err.message });
   }
 });
 
-app.delete("/api/points/item-exclusions/:id", requireAuth, async (req, res) => {
+app.delete("/api/points/item-exclusions/:id", requireMaster, async (req, res) => {
   try {
     await removeItemPointExclusion(Number(req.params.id));
+    await logActivity(req, "ITEM_EXCLUSION_DELETE", `id=${req.params.id}`);
     return res.json({ ok: true });
   } catch (err: any) {
     return res.status(500).json({ error: err.message });
@@ -644,7 +697,7 @@ app.get("/api/points/group-defaults", requireAuth, async (req, res) => {
   }
 });
 
-app.post("/api/points/group-defaults", requireAuth, async (req, res) => {
+app.post("/api/points/group-defaults", requireMaster, async (req, res) => {
   try {
     const { itemGroup, points } = req.body;
     const g = String(itemGroup || "").trim();
@@ -654,15 +707,17 @@ app.post("/api/points/group-defaults", requireAuth, async (req, res) => {
       return res.status(400).json({ error: "Poin harus integer >= 0." });
     }
     const row = await upsertGroupPointDefault(g, pts);
+    await logActivity(req, "GROUP_DEFAULT_ADD", `"${g}" = ${pts} poin`);
     return res.json(row);
   } catch (err: any) {
     return res.status(500).json({ error: err.message });
   }
 });
 
-app.delete("/api/points/group-defaults/:id", requireAuth, async (req, res) => {
+app.delete("/api/points/group-defaults/:id", requireMaster, async (req, res) => {
   try {
     await deleteGroupPointDefault(Number(req.params.id));
+    await logActivity(req, "GROUP_DEFAULT_DELETE", `id=${req.params.id}`);
     return res.json({ ok: true });
   } catch (err: any) {
     return res.status(500).json({ error: err.message });
@@ -685,21 +740,24 @@ app.get("/api/points/excluded-employees", requireAuth, async (req, res) => {
   }
 });
 
-app.post("/api/points/excluded-employees", requireAuth, async (req, res) => {
+app.post("/api/points/excluded-employees", requireMaster, async (req, res) => {
   try {
     const { employeeId, reason } = req.body;
     const empId = Number(employeeId);
     if (Number.isNaN(empId)) return res.status(400).json({ error: "Pilih pegawai." });
     const row = await excludeEmployee(empId, reason ? String(reason).trim() : undefined);
+    const emp = await prisma.employee.findUnique({ where: { id: empId }, select: { name: true } });
+    await logActivity(req, "EMPLOYEE_EXCLUSION_ADD", `${emp?.name ?? empId}${reason ? ` (${reason})` : ""}`);
     return res.json(row);
   } catch (err: any) {
     return res.status(500).json({ error: err.message });
   }
 });
 
-app.delete("/api/points/excluded-employees/:id", requireAuth, async (req, res) => {
+app.delete("/api/points/excluded-employees/:id", requireMaster, async (req, res) => {
   try {
     await includeEmployee(Number(req.params.id));
+    await logActivity(req, "EMPLOYEE_EXCLUSION_DELETE", `id=${req.params.id}`);
     return res.json({ ok: true });
   } catch (err: any) {
     return res.status(500).json({ error: err.message });
@@ -721,7 +779,7 @@ app.get("/api/mappings/item-group", requireAuth, async (req, res) => {
   }
 });
 
-app.post("/api/mappings/item-group", requireAuth, async (req, res) => {
+app.post("/api/mappings/item-group", requireMaster, async (req, res) => {
   try {
     const { itemGroup, category } = req.body;
     const group = String(itemGroup || "").trim();
@@ -736,15 +794,17 @@ app.post("/api/mappings/item-group", requireAuth, async (req, res) => {
       update: { category, isDefault: false },
       create: { itemGroup: group, category, isDefault: false },
     });
+    await logActivity(req, "GROUP_MAPPING_ADD", `"${group}" → ${category}`);
     return res.json(mapping);
   } catch (err: any) {
     return res.status(500).json({ error: err.message });
   }
 });
 
-app.delete("/api/mappings/item-group/:id", requireAuth, async (req, res) => {
+app.delete("/api/mappings/item-group/:id", requireMaster, async (req, res) => {
   try {
     await prisma.itemGroupMapping.delete({ where: { id: Number(req.params.id) } });
+    await logActivity(req, "GROUP_MAPPING_DELETE", `id=${req.params.id}`);
     return res.json({ ok: true });
   } catch (err: any) {
     return res.status(500).json({ error: err.message });
@@ -771,7 +831,7 @@ app.get("/api/mappings/outlet-alias", requireAuth, async (req, res) => {
   }
 });
 
-app.post("/api/mappings/outlet-alias", requireAuth, async (req, res) => {
+app.post("/api/mappings/outlet-alias", requireMaster, async (req, res) => {
   try {
     const { alias, outletId } = req.body;
     const al = String(alias || "").trim();
@@ -784,15 +844,18 @@ app.post("/api/mappings/outlet-alias", requireAuth, async (req, res) => {
       update: { outletId: oid, isDefault: false },
       create: { alias: al, outletId: oid, isDefault: false },
     });
+    const outlet = await prisma.outlet.findUnique({ where: { id: oid }, select: { name: true } });
+    await logActivity(req, "ALIAS_ADD", `"${al}" → ${outlet?.name ?? oid}`);
     return res.json(mapping);
   } catch (err: any) {
     return res.status(500).json({ error: err.message });
   }
 });
 
-app.delete("/api/mappings/outlet-alias/:id", requireAuth, async (req, res) => {
+app.delete("/api/mappings/outlet-alias/:id", requireMaster, async (req, res) => {
   try {
     await prisma.outletAlias.delete({ where: { id: Number(req.params.id) } });
+    await logActivity(req, "ALIAS_DELETE", `id=${req.params.id}`);
     return res.json({ ok: true });
   } catch (err: any) {
     return res.status(500).json({ error: err.message });
@@ -827,6 +890,7 @@ app.post("/api/import", requireAuth, upload.single("file"), async (req, res) => 
     const summary = await importSalesFile(req.file.originalname, req.file.buffer, forceImportHashes);
     // Refresh outlet alias seeding so newly-imported outlets get their aliases
     invalidateDefaults();
+    await logActivity(req, "IMPORT_SALES", `${req.file.originalname} — ${summary.insertedCount} baris diimpor`);
     return res.json(summary);
   } catch (err: any) {
     return res.status(422).json({ error: err.message || "Gagal mengimpor file." });
@@ -1012,7 +1076,44 @@ app.delete("/api/daily-imports/server/:date", requireAuth, async (req, res) => {
 });
 
 // ==========================================
-// 10. PRODUCTION STATIC SPA SERVING
+// 10. ACTIVITY LOG
+// ==========================================
+
+app.get("/api/activity-log", requireAuth, async (req, res) => {
+  try {
+    const limit = Math.min(Number(req.query.limit) || 100, 500);
+    const offset = Number(req.query.offset) || 0;
+    const role = typeof req.query.role === "string" && req.query.role ? req.query.role : undefined;
+    const from = parseDateParam(req.query.from);
+    const to = parseDateParam(req.query.to);
+
+    const where: Record<string, unknown> = {};
+    if (role) where.role = role;
+    if (from || to) {
+      where.createdAt = {
+        ...(from ? { gte: from } : {}),
+        ...(to ? { lte: new Date(to.getTime() + 86400000) } : {}),
+      };
+    }
+
+    const [logs, total] = await Promise.all([
+      prisma.activityLog.findMany({
+        where,
+        orderBy: { createdAt: "desc" },
+        take: limit,
+        skip: offset,
+      }),
+      prisma.activityLog.count({ where }),
+    ]);
+
+    return res.json({ logs, total, limit, offset });
+  } catch (err: any) {
+    return res.status(500).json({ error: err.message });
+  }
+});
+
+// ==========================================
+// 11. PRODUCTION STATIC SPA SERVING
 // ==========================================
 
 const distPath = path.resolve(process.cwd(), "dist");

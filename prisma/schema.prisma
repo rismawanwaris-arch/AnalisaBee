@@ -261,3 +261,15 @@ model Sale {
   @@index([noTransaksi])
   @@map("sales")
 }
+
+model ActivityLog {
+  id        Int      @id @default(autoincrement())
+  role      String
+  action    String
+  detail    String?
+  ip        String?
+  createdAt DateTime @default(now())
+
+  @@index([createdAt])
+  @@map("activity_logs")
+}

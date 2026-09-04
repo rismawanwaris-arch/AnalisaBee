@@ -1,12 +1,13 @@
 import { useEffect, useState } from "react";
-import { Outlet, Navigate } from "react-router-dom";
+import { Outlet, Navigate, useLocation } from "react-router-dom";
 import { Sidebar } from "./Sidebar";
 import { Topbar } from "./Topbar";
 import { useAuth } from "../context/AuthContext";
 import type { SystemStatus } from "../lib/queries/systemStatus";
 
 export function AppLayout() {
-  const { authenticated } = useAuth();
+  const { authenticated, role } = useAuth();
+  const location = useLocation();
   const [status, setStatus] = useState<SystemStatus | null>(null);
 
   useEffect(() => {
@@ -33,6 +34,11 @@ export function AppLayout() {
 
   if (!authenticated) {
     return <Navigate to="/login" replace />;
+  }
+
+  // Guard: settings page hanya untuk master
+  if (location.pathname === "/settings" && role === "admin") {
+    return <Navigate to="/dashboard" replace />;
   }
 
   return (
