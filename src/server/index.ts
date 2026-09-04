@@ -1,6 +1,8 @@
 import "dotenv/config";
 import express from "express";
 import cors from "cors";
+import helmet from "helmet";
+import rateLimit from "express-rate-limit";
 import cookieParser from "cookie-parser";
 import multer from "multer";
 import path from "node:path";
@@ -16,9 +18,9 @@ import {
 
 import { getSystemStatus } from "../lib/queries/systemStatus";
 import { getDashboardSummary } from "../lib/queries/dashboard";
-import { getOutletList, getOutletDetail } from "../lib/queries/outlets";
+import { getOutletList, getOutletDetail, getOutletSummary } from "../lib/queries/outlets";
 import { getEmployeeList, getEmployeeDetail } from "../lib/queries/employees";
-import { searchItems, getItemDetail } from "../lib/queries/items";
+import { searchItems, getItemDetail, getItemsByCategory } from "../lib/queries/items";
 import { getSalesList, getSalesForExport, type SalesFilters } from "../lib/queries/sales";
 import { parseSalesFilterParams } from "../lib/parseSalesFilterParams";
 import {
@@ -47,17 +49,58 @@ import {
   includeEmployee,
 } from "../lib/queries/points";
 import { previewSalesFile, importSalesFile } from "../lib/importSales";
+import { invalidateDefaults } from "../lib/ensureDefaults";
 import { parseTartunBuffer, parseServerBuffer, parseServerText } from "../lib/parseTartunServer";
 import { importDailyMetric } from "../lib/importTartunServer";
 import type { BusinessLine, ReportCategory } from "@/generated/prisma/client";
 
 const app = express();
-const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 50 * 1024 * 1024 } });
 
-app.use(cors({ origin: true, credentials: true }));
+// Multer: validate file type server-side, consistent 25MB limit with frontend
+const upload = multer({
+  storage: multer.memoryStorage(),
+  limits: { fileSize: 25 * 1024 * 1024 },
+  fileFilter: (_req, file, cb) => {
+    const ext = path.extname(file.originalname).toLowerCase();
+    if (ext === ".xls" || ext === ".xlsx") return cb(null, true);
+    cb(new Error("Format file tidak didukung. Gunakan .xls atau .xlsx."));
+  },
+});
+
+// Security headers
+app.use(helmet({ contentSecurityPolicy: false }));
+
+// CORS: only allow same-origin or explicit whitelist — credentials require exact origin
+const ALLOWED_ORIGINS = process.env.ALLOWED_ORIGINS?.split(",").map((o) => o.trim()) ?? [];
+app.use(cors({
+  origin: (origin, cb) => {
+    // same-origin requests (SPA served from Express) have no Origin header
+    if (!origin || ALLOWED_ORIGINS.includes(origin)) return cb(null, true);
+    cb(new Error("CORS: origin tidak diizinkan"));
+  },
+  credentials: true,
+}));
+
 app.use(cookieParser());
-app.use(express.json({ limit: "50mb" }));
-app.use(express.urlencoded({ extended: true, limit: "50mb" }));
+app.use(express.json({ limit: "10mb" }));
+app.use(express.urlencoded({ extended: true, limit: "10mb" }));
+
+// Centralized error response — never leak internal details to client in production
+function sendError(res: express.Response, status: number, err: unknown, fallback = "Terjadi kesalahan server.") {
+  const isDev = process.env.NODE_ENV !== "production";
+  const msg = isDev && err instanceof Error ? err.message : fallback;
+  if (status >= 500) console.error(err);
+  return res.status(status).json({ error: msg });
+}
+
+// Rate limiter for login — max 20 attempts per 15 minutes per IP
+const loginLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  max: 20,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { error: "Terlalu banyak percobaan login. Coba lagi dalam 15 menit." },
+});
 
 // Initialize defaults on server startup
 ensureDefaults().catch((err) => console.error("ensureDefaults error:", err));
@@ -82,7 +125,7 @@ function parseDateParam(val: unknown): Date | undefined {
 // 1. AUTHENTICATION
 // ==========================================
 
-app.post("/api/auth/login", async (req, res) => {
+app.post("/api/auth/login", loginLimiter, async (req, res) => {
   const { password } = req.body;
   if (!password || !verifyPassword(String(password))) {
     return res.status(401).json({ error: "Password salah." });
@@ -144,6 +187,21 @@ app.get("/api/outlets", requireAuth, async (req, res) => {
     const includeHidden = req.query.includeHidden === "true" || req.query.includeHidden === "1";
     const list = await getOutletList(includeHidden);
     return res.json(list);
+  } catch (err: any) {
+    return res.status(500).json({ error: err.message });
+  }
+});
+
+app.get("/api/outlets/summary", requireAuth, async (req, res) => {
+  try {
+    const from = parseDateParam(req.query.from);
+    const to = parseDateParam(req.query.to);
+    const itemId = req.query.itemId ? Number(req.query.itemId) : undefined;
+    const employeeId = req.query.employeeId ? Number(req.query.employeeId) : undefined;
+    const subtotalMin = req.query.subtotalMin ? Number(req.query.subtotalMin) : undefined;
+    const subtotalMax = req.query.subtotalMax ? Number(req.query.subtotalMax) : undefined;
+    const rows = await getOutletSummary({ from, to, itemId, employeeId, subtotalMin, subtotalMax });
+    return res.json(rows);
   } catch (err: any) {
     return res.status(500).json({ error: err.message });
   }
@@ -228,6 +286,17 @@ app.get("/api/items", requireAuth, async (req, res) => {
   }
 });
 
+app.get("/api/items/by-category", requireAuth, async (req, res) => {
+  try {
+    const from = parseDateParam(req.query.from);
+    const to = parseDateParam(req.query.to);
+    const rows = await getItemsByCategory({ from, to });
+    return res.json(rows);
+  } catch (err: any) {
+    return res.status(500).json({ error: err.message });
+  }
+});
+
 app.get("/api/items/:id", requireAuth, async (req, res) => {
   try {
     const id = Number(req.params.id);
@@ -246,8 +315,8 @@ app.get("/api/sales", requireAuth, async (req, res) => {
   try {
     const params = new URLSearchParams(req.query as any);
     const filter = parseSalesFilterParams(params);
-    const page = Number(req.query.page) || 1;
-    const pageSize = Number(req.query.pageSize) || 50;
+    const page = Math.max(1, Number(req.query.page) || 1);
+    const pageSize = Math.min(Math.max(1, Number(req.query.pageSize) || 50), 200);
     const result = await getSalesList(filter, page, pageSize);
     return res.json(result);
   } catch (err: any) {
@@ -390,7 +459,10 @@ app.get("/api/hourly", requireAuth, async (req, res) => {
       return res.status(400).json({ error: "Tanggal tidak valid." });
     }
 
-    const granularity = (req.query.granularity as Granularity) || "EXACT";
+    const VALID_GRANULARITIES: Granularity[] = ["EXACT", "15MIN", "30MIN", "1HOUR"];
+    const granularity: Granularity = VALID_GRANULARITIES.includes(req.query.granularity as Granularity)
+      ? (req.query.granularity as Granularity)
+      : "EXACT";
     const outletId = req.query.outletId ? Number(req.query.outletId) : undefined;
     const report = await getHourlyAnalytics(date, outletId, granularity);
     return res.json(report);
@@ -743,9 +815,15 @@ app.post("/api/import", requireAuth, upload.single("file"), async (req, res) => 
   try {
     let forceImportHashes: string[] = [];
     if (req.body.forceImportHashes) {
-      forceImportHashes = JSON.parse(req.body.forceImportHashes);
+      const parsed = JSON.parse(req.body.forceImportHashes);
+      if (!Array.isArray(parsed) || parsed.length > 500) {
+        return res.status(400).json({ error: "forceImportHashes tidak valid." });
+      }
+      forceImportHashes = parsed.filter((h): h is string => typeof h === "string");
     }
     const summary = await importSalesFile(req.file.originalname, req.file.buffer, forceImportHashes);
+    // Refresh outlet alias seeding so newly-imported outlets get their aliases
+    invalidateDefaults();
     return res.json(summary);
   } catch (err: any) {
     return res.status(422).json({ error: err.message || "Gagal mengimpor file." });

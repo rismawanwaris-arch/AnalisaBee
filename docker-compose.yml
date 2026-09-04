@@ -5,7 +5,7 @@ services:
     environment:
       POSTGRES_DB: analisabee
       POSTGRES_USER: analisabee
-      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-changeme}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?POSTGRES_PASSWORD wajib diset di .env}
     volumes:
       - pgdata:/var/lib/postgresql/data
     healthcheck:
@@ -20,7 +20,7 @@ services:
     ports:
       - "8080:3001"
     environment:
-      DATABASE_URL: postgresql://analisabee:${POSTGRES_PASSWORD:-changeme}@db:5432/analisabee
+      DATABASE_URL: postgresql://analisabee:${POSTGRES_PASSWORD:?POSTGRES_PASSWORD wajib diset di .env}@db:5432/analisabee
       SESSION_SECRET: ${SESSION_SECRET}
       APP_PASSWORD: ${APP_PASSWORD}
       NODE_ENV: production

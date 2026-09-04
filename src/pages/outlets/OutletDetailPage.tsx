@@ -13,7 +13,43 @@ interface OutletDetail {
     transactionCount: number;
   };
   trend: { tanggal: string; qty: number; subtotal: number }[];
-  topItems: { itemId: number; code: string; name: string; qty: number; subtotal: number }[];
+  topItems: {
+    itemId: number;
+    code: string;
+    name: string;
+    qty: number;
+    subtotal: number;
+    employees: { employeeId: number; employeeName: string; qty: number; subtotal: number }[];
+  }[];
+}
+
+function EmployeeList({ employees }: { employees: OutletDetail["topItems"][number]["employees"] }) {
+  const SHOW_LIMIT = 3;
+  const [expanded, setExpanded] = useState(false);
+  const visible = expanded ? employees : employees.slice(0, SHOW_LIMIT);
+  const hiddenCount = employees.length - SHOW_LIMIT;
+
+  return (
+    <div className="space-y-0.5">
+      {visible.map((e) => (
+        <div key={e.employeeId} className="flex items-center gap-1.5 text-[11px]">
+          <span className="text-foreground font-medium truncate max-w-[120px]">{e.employeeName}</span>
+          <span className="text-muted shrink-0">{formatNumber(e.qty)} pcs</span>
+          <span className="text-muted/60 shrink-0">·</span>
+          <span className="text-muted shrink-0 font-mono">{formatRupiah(e.subtotal)}</span>
+        </div>
+      ))}
+      {!expanded && hiddenCount > 0 && (
+        <button
+          type="button"
+          onClick={() => setExpanded(true)}
+          className="text-[10px] text-accent hover:underline font-medium mt-0.5"
+        >
+          +{hiddenCount} karyawan lainnya
+        </button>
+      )}
+    </div>
+  );
 }
 
 export function OutletDetailPage() {
@@ -92,19 +128,27 @@ export function OutletDetailPage() {
               <tr>
                 <th className="px-4 py-2.5 font-semibold text-[11px] uppercase">Nama Item</th>
                 <th className="px-4 py-2.5 font-semibold text-[11px] uppercase">Kode SKU</th>
+                <th className="px-4 py-2.5 font-semibold text-[11px] uppercase">Karyawan Penjual</th>
                 <th className="px-4 py-2.5 font-semibold text-[11px] uppercase text-right">Qty Terjual</th>
                 <th className="px-4 py-2.5 font-semibold text-[11px] uppercase text-right">Total Omzet</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-border/60">
               {detail.topItems.map((it) => (
-                <tr key={it.itemId} className="hover:bg-surface-hover/70 transition-colors">
+                <tr key={it.itemId} className="hover:bg-surface-hover/70 transition-colors align-top">
                   <td className="px-4 py-2.5 font-medium text-foreground">
                     <Link to={`/items?id=${it.itemId}`} className="hover:text-accent hover:underline">
                       {it.name}
                     </Link>
                   </td>
                   <td className="px-4 py-2.5 font-mono text-muted text-[11px]">{it.code}</td>
+                  <td className="px-4 py-2.5">
+                    {it.employees.length > 0 ? (
+                      <EmployeeList employees={it.employees} />
+                    ) : (
+                      <span className="text-[11px] text-muted">—</span>
+                    )}
+                  </td>
                   <td className="px-4 py-2.5 font-mono text-right text-foreground font-medium">{formatNumber(it.qty)}</td>
                   <td className="px-4 py-2.5 font-mono text-right text-foreground font-semibold">{formatRupiah(it.subtotal)}</td>
                 </tr>

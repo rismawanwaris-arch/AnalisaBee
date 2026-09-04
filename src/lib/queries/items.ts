@@ -15,6 +15,53 @@ export async function searchItems(q: string, limit = 20) {
   });
 }
 
+export interface ItemCategoryRow {
+  itemId: number;
+  code: string;
+  name: string;
+  itemGroup: string;
+  qty: number;
+  subtotal: number;
+  labaRugi: number;
+}
+
+export async function getItemsByCategory(range: { from?: Date; to?: Date } = {}): Promise<ItemCategoryRow[]> {
+  const { from, to } = range;
+  const where = from || to
+    ? { tanggal: { ...(from ? { gte: from } : {}), ...(to ? { lte: to } : {}) } }
+    : {};
+
+  const sums = await prisma.sale.groupBy({
+    by: ["itemId"],
+    where,
+    _sum: { qty: true, subtotal: true, labaRugi: true },
+    orderBy: { _sum: { subtotal: "desc" } },
+    take: 500,
+  });
+
+  const itemIds = sums.map((s) => s.itemId);
+  const items = await prisma.item.findMany({
+    where: { id: { in: itemIds } },
+    select: { id: true, code: true, name: true, itemGroup: true },
+  });
+  const itemById = new Map(items.map((i) => [i.id, i]));
+
+  return sums
+    .map((s) => {
+      const item = itemById.get(s.itemId);
+      return {
+        itemId: s.itemId,
+        code: item?.code ?? "",
+        name: item?.name ?? "—",
+        itemGroup: item?.itemGroup?.trim() || "Tanpa Kategori",
+        qty: s._sum.qty ?? 0,
+        subtotal: Number(s._sum.subtotal ?? 0),
+        labaRugi: Number(s._sum.labaRugi ?? 0),
+      };
+    })
+    .sort((a, b) => b.subtotal - a.subtotal);
+}
+
 export async function getItemDetail(itemId: number, range: { from?: Date; to?: Date } = {}) {
   const item = await prisma.item.findUnique({ where: { id: itemId } });
   if (!item) return null;
@@ -32,7 +79,7 @@ export async function getItemDetail(itemId: number, range: { from?: Date; to?: D
       : {}),
   };
 
-  const [byOutletDate, totals, outlets] = await Promise.all([
+  const [byOutletDate, totals] = await Promise.all([
     prisma.sale.groupBy({
       by: ["outletId", "tanggal"],
       where,
@@ -45,8 +92,10 @@ export async function getItemDetail(itemId: number, range: { from?: Date; to?: D
       _sum: { qty: true, subtotal: true, labaRugi: true },
       _count: { _all: true },
     }),
-    prisma.outlet.findMany(),
   ]);
+
+  const outletIds = [...new Set(byOutletDate.map((g) => g.outletId))];
+  const outlets = await prisma.outlet.findMany({ where: { id: { in: outletIds } } });
 
   const outletNameById = new Map(outlets.map((o) => [o.id, o.name]));
 

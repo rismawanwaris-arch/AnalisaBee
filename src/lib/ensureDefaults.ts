@@ -4,14 +4,21 @@ import { DEFAULT_GROUP_MAP } from "@/lib/defaults/itemGroupMapping";
 import { DEFAULT_TARGETS } from "@/lib/defaults/targets";
 import { DEFAULT_GROUP_POINTS, DEFAULT_ITEM_POINTS } from "@/lib/defaults/itemPoints";
 
+let _ensured = false;
+
 /**
  * Idempotently seeds default targets, item-group mappings, outlet aliases,
- * and point rules. Cheap (a few dozen upserts) and safe to call on every load
- * of a page that needs them — self-heals a fresh database without a separate
- * seed step, and naturally catches up on aliases once outlets exist (they
- * don't until the first POS import, so this can't be a one-shot "seeded" flag).
+ * and point rules. Safe to call repeatedly — only runs once per process
+ * lifetime. Call invalidateDefaults() after a POS import so aliases for
+ * newly-created outlets are seeded on the next request.
  */
+export function invalidateDefaults() {
+  _ensured = false;
+}
+
 export async function ensureDefaults(): Promise<void> {
+  if (_ensured) return;
+  _ensured = true;
   try {
     await prisma.$executeRawUnsafe(`ALTER TABLE "outlets" ADD COLUMN IF NOT EXISTS "isHidden" BOOLEAN NOT NULL DEFAULT false;`);
     await prisma.$executeRawUnsafe(`ALTER TABLE "employees" ADD COLUMN IF NOT EXISTS "isHidden" BOOLEAN NOT NULL DEFAULT false;`);

@@ -50,6 +50,18 @@ const NAV_GROUPS: NavGroup[] = [
         icon: <path d="M4 7h16M4 12h16M4 17h10" />,
       },
       {
+        href: "/items/categories",
+        label: "Kategori Item",
+        icon: (
+          <>
+            <rect x="3" y="3" width="7" height="7" rx="1" />
+            <rect x="14" y="3" width="7" height="7" rx="1" />
+            <rect x="3" y="14" width="7" height="7" rx="1" />
+            <path d="M14 17.5h7M17.5 14v7" />
+          </>
+        ),
+      },
+      {
         href: "/outlets",
         label: "Performa Outlet",
         icon: <path d="M3 9.5 12 3l9 6.5M5 9v11h14V9M9 20v-6h6v6" />,

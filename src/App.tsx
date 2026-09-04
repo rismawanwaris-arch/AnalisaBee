@@ -13,6 +13,7 @@ const JamOperasionalPage = lazy(() => import("./pages/target/JamOperasionalPage"
 const PointsLayout = lazy(() => import("./pages/points/PointsLayout").then((m) => ({ default: m.PointsLayout })));
 const PointsLeaderboardPage = lazy(() => import("./pages/points/PointsLeaderboardPage").then((m) => ({ default: m.PointsLeaderboardPage })));
 const ItemsPage = lazy(() => import("./pages/items/ItemsPage").then((m) => ({ default: m.ItemsPage })));
+const ItemsByCategoryPage = lazy(() => import("./pages/items/ItemsByCategoryPage").then((m) => ({ default: m.ItemsByCategoryPage })));
 const OutletsPage = lazy(() => import("./pages/outlets/OutletsPage").then((m) => ({ default: m.OutletsPage })));
 const OutletDetailPage = lazy(() => import("./pages/outlets/OutletDetailPage").then((m) => ({ default: m.OutletDetailPage })));
 const EmployeesPage = lazy(() => import("./pages/employees/EmployeesPage").then((m) => ({ default: m.EmployeesPage })));
@@ -61,6 +62,7 @@ export function App() {
 
                 {/* Dimension & Analysis Sections */}
                 <Route path="/items" element={<ItemsPage />} />
+                <Route path="/items/categories" element={<ItemsByCategoryPage />} />
                 <Route path="/outlets" element={<OutletsPage />} />
                 <Route path="/outlets/:id" element={<OutletDetailPage />} />
                 <Route path="/employees" element={<EmployeesPage />} />

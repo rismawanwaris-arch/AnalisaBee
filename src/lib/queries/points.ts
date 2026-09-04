@@ -142,11 +142,13 @@ export function computeItemPoints(
   return result;
 }
 
-/** Fetches the current rules/exclusions from the database and resolves every
- * item's per-unit point value. See computeItemPoints() for the algorithm. */
-async function resolveItemPoints(): Promise<Map<number, number>> {
+/** Resolves point values only for the given itemIds — avoids loading all items. */
+async function resolveItemPointsForIds(itemIds: number[]): Promise<Map<number, number>> {
   const [items, rules, groupDefaults, exclusions] = await Promise.all([
-    prisma.item.findMany({ select: { id: true, name: true, itemGroup: true } }),
+    prisma.item.findMany({
+      where: { id: { in: itemIds } },
+      select: { id: true, name: true, itemGroup: true },
+    }),
     prisma.itemPoint.findMany(),
     prisma.itemGroupPointDefault.findMany(),
     prisma.itemPointExclusion.findMany(),
@@ -193,38 +195,52 @@ export async function getLeaderboard(
 ): Promise<{ rows: EmployeeLeaderboardRow[]; from: string; to: string }> {
   await ensureDefaults();
 
-  const [pointsByItem, excludedIds, sales] = await Promise.all([
-    resolveItemPoints(),
-    getExcludedEmployeeIds(),
-    prisma.sale.findMany({
-      where: { tanggal: { gte: from, lte: to } },
-      select: { employeeId: true, itemId: true, qty: true, employee: { select: { name: true } } },
-    }),
-  ]);
+  const excludedIds = await getExcludedEmployeeIds();
   const excludedSet = new Set(excludedIds);
 
+  // Aggregate at DB level — avoids pulling every sale row into memory
+  const salesAgg = await prisma.sale.groupBy({
+    by: ["itemId", "employeeId"],
+    where: {
+      tanggal: { gte: from, lte: to },
+      ...(excludedIds.length > 0 ? { employeeId: { notIn: excludedIds } } : {}),
+    },
+    _sum: { qty: true },
+  });
+
+  const itemIds = [...new Set(salesAgg.map((s) => s.itemId))];
+  const empIds = [...new Set(salesAgg.map((s) => s.employeeId))];
+
+  const [pointsByItem, employees] = await Promise.all([
+    resolveItemPointsForIds(itemIds),
+    prisma.employee.findMany({
+      where: { id: { in: empIds } },
+      select: { id: true, name: true },
+    }),
+  ]);
+  const empNameById = new Map(employees.map((e) => [e.id, e.name]));
+
   const byEmployee = new Map<number, EmployeeLeaderboardRow>();
-  for (const s of sales) {
-    if (excludedSet.has(s.employeeId)) continue;
+  for (const s of salesAgg) {
     const pointsPerUnit = pointsByItem.get(s.itemId) ?? 0;
     if (pointsPerUnit === 0) continue;
+    const qty = s._sum.qty ?? 0;
+    const earned = pointsPerUnit * qty;
     const existing = byEmployee.get(s.employeeId);
-    const earned = pointsPerUnit * s.qty;
     if (existing) {
       existing.totalPoints += earned;
-      existing.pointItemsQty += s.qty;
+      existing.pointItemsQty += qty;
     } else {
       byEmployee.set(s.employeeId, {
         employeeId: s.employeeId,
-        employeeName: s.employee.name,
+        employeeName: empNameById.get(s.employeeId) ?? "—",
         totalPoints: earned,
-        pointItemsQty: s.qty,
+        pointItemsQty: qty,
       });
     }
   }
 
   const rows = [...byEmployee.values()].sort((a, b) => b.totalPoints - a.totalPoints);
-
   return { rows, from: from.toISOString(), to: to.toISOString() };
 }
 
@@ -235,36 +251,38 @@ export async function getEmployeePointBreakdown(
 ): Promise<ItemPointBreakdownRow[]> {
   await ensureDefaults();
 
-  const [pointsByItem, sales, items] = await Promise.all([
-    resolveItemPoints(),
-    prisma.sale.findMany({
-      where: { employeeId, tanggal: { gte: from, lte: to } },
-      select: { itemId: true, qty: true },
+  // Aggregate at DB level — group by item, not individual sale rows
+  const salesAgg = await prisma.sale.groupBy({
+    by: ["itemId"],
+    where: { employeeId, tanggal: { gte: from, lte: to } },
+    _sum: { qty: true },
+  });
+
+  const itemIds = salesAgg.map((s) => s.itemId);
+
+  const [pointsByItem, items] = await Promise.all([
+    resolveItemPointsForIds(itemIds),
+    prisma.item.findMany({
+      where: { id: { in: itemIds } },
+      select: { id: true, name: true, itemGroup: true },
     }),
-    prisma.item.findMany({ select: { id: true, name: true, itemGroup: true } }),
   ]);
   const itemById = new Map(items.map((i) => [i.id, i]));
 
-  const byItem = new Map<number, ItemPointBreakdownRow>();
-  for (const s of sales) {
-    const pointsPerUnit = pointsByItem.get(s.itemId) ?? 0;
-    if (pointsPerUnit === 0) continue;
-    const item = itemById.get(s.itemId);
-    const existing = byItem.get(s.itemId);
-    if (existing) {
-      existing.qty += s.qty;
-      existing.totalPoints += pointsPerUnit * s.qty;
-    } else {
-      byItem.set(s.itemId, {
+  return salesAgg
+    .flatMap((s) => {
+      const pointsPerUnit = pointsByItem.get(s.itemId) ?? 0;
+      if (pointsPerUnit === 0) return [];
+      const qty = s._sum.qty ?? 0;
+      const item = itemById.get(s.itemId);
+      return [{
         itemId: s.itemId,
         itemName: item?.name ?? "Tidak diketahui",
         itemGroup: item?.itemGroup ?? null,
-        qty: s.qty,
+        qty,
         pointsPerUnit,
-        totalPoints: pointsPerUnit * s.qty,
-      });
-    }
-  }
-
-  return [...byItem.values()].sort((a, b) => b.totalPoints - a.totalPoints);
+        totalPoints: pointsPerUnit * qty,
+      }] satisfies ItemPointBreakdownRow[];
+    })
+    .sort((a, b) => b.totalPoints - a.totalPoints);
 }

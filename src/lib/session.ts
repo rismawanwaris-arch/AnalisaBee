@@ -5,7 +5,8 @@ export const COOKIE_NAME = "analisabee_session";
 export const SESSION_DURATION_MS = 30 * 24 * 60 * 60 * 1000; // 30 hari
 
 function getSecretKey() {
-  const secret = process.env.SESSION_SECRET || "analisabee_fallback_super_secret_jwt_key_32bytes_long";
+  const secret = process.env.SESSION_SECRET;
+  if (!secret) throw new Error("SESSION_SECRET wajib diset di environment.");
   return new TextEncoder().encode(secret);
 }
 
