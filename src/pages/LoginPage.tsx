@@ -21,24 +21,38 @@ export function LoginPage() {
     setError(null);
     setLoading(true);
 
-    try {
-      const res = await fetch("/api/auth/login", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ password }),
-      });
-      const data = await res.json();
-      if (!res.ok) {
-        setError(data.error || "Gagal masuk.");
+    const MAX_RETRIES = 3;
+    let lastError: unknown;
+
+    for (let attempt = 0; attempt <= MAX_RETRIES; attempt++) {
+      try {
+        const res = await fetch("/api/auth/login", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ password }),
+        });
+        const data = await res.json();
+        if (!res.ok) {
+          // Wrong password or other server error — don't retry
+          setError(data.error || "Gagal masuk.");
+          setLoading(false);
+          return;
+        }
+        await checkAuth();
+        navigate(from, { replace: true });
         return;
+      } catch (err) {
+        // Network error (server still starting) — retry after short delay
+        lastError = err;
+        if (attempt < MAX_RETRIES) {
+          await new Promise((r) => setTimeout(r, 1000));
+        }
       }
-      await checkAuth();
-      navigate(from, { replace: true });
-    } catch {
-      setError("Terjadi kesalahan jaringan.");
-    } finally {
-      setLoading(false);
     }
+
+    setError("Terjadi kesalahan jaringan. Pastikan server berjalan.");
+    setLoading(false);
+    void lastError;
   }
 
   return (

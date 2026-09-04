@@ -84,11 +84,18 @@ app.use(helmet({ contentSecurityPolicy: false }));
 // CORS: only needed in development (Vite :5173 → Express :3001).
 // In production the SPA is served by Express itself — same origin, no CORS required.
 if (process.env.NODE_ENV !== "production") {
-  const DEV_ORIGINS = (process.env.ALLOWED_ORIGINS ?? "http://localhost:5173")
-    .split(",").map((o) => o.trim());
+  const allowedOrigins = process.env.ALLOWED_ORIGINS
+    ? process.env.ALLOWED_ORIGINS.split(",").map((o) => o.trim())
+    : null; // null = allow all localhost
   app.use(cors({
     origin: (origin, cb) => {
-      if (!origin || DEV_ORIGINS.includes(origin)) return cb(null, true);
+      if (!origin) return cb(null, true);
+      if (!allowedOrigins) {
+        // dev default: allow any localhost regardless of port
+        if (/^https?:\/\/localhost(:\d+)?$/.test(origin)) return cb(null, true);
+      } else if (allowedOrigins.includes(origin)) {
+        return cb(null, true);
+      }
       cb(new Error("CORS: origin tidak diizinkan"));
     },
     credentials: true,

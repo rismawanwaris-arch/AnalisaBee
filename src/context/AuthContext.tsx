@@ -20,24 +20,31 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [authenticated, setAuthenticated] = useState<boolean | null>(null);
   const [role, setRole] = useState<UserRole>(null);
 
-  const checkAuth = async () => {
-    try {
-      const res = await fetch("/api/auth/me");
-      if (res.ok) {
-        const data = await res.json();
-        const authed = data.authenticated === true;
-        setAuthenticated(authed);
-        setRole(authed ? (data.role as UserRole) : null);
-        return authed;
+  const checkAuth = async (retries = 3): Promise<boolean> => {
+    for (let attempt = 0; attempt <= retries; attempt++) {
+      try {
+        const res = await fetch("/api/auth/me");
+        if (res.ok) {
+          const data = await res.json();
+          const authed = data.authenticated === true;
+          setAuthenticated(authed);
+          setRole(authed ? (data.role as UserRole) : null);
+          return authed;
+        }
+        // 4xx = server up but auth failed — no retry needed
+        setAuthenticated(false);
+        setRole(null);
+        return false;
+      } catch {
+        // Network error = server probably still starting up, retry
+        if (attempt < retries) {
+          await new Promise((r) => setTimeout(r, 800 * (attempt + 1)));
+        }
       }
-      setAuthenticated(false);
-      setRole(null);
-      return false;
-    } catch {
-      setAuthenticated(false);
-      setRole(null);
-      return false;
     }
+    setAuthenticated(false);
+    setRole(null);
+    return false;
   };
 
   const logout = async () => {
