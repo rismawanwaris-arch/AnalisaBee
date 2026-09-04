@@ -1,17 +1,15 @@
-name: analisabee
-
 services:
   db:
-    image: postgres:17-alpine
+    image: postgres:16-alpine
     restart: unless-stopped
     environment:
-      POSTGRES_USER: ${POSTGRES_USER:-analisabee}
-      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-analisabee}
-      POSTGRES_DB: ${POSTGRES_DB:-analisabee}
+      POSTGRES_DB: analisabee
+      POSTGRES_USER: analisabee
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-changeme}
     volumes:
-      - db_data:/var/lib/postgresql/data
+      - pgdata:/var/lib/postgresql/data
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-analisabee}"]
+      test: ["CMD-SHELL", "pg_isready -U analisabee"]
       interval: 5s
       timeout: 5s
       retries: 10
@@ -19,15 +17,17 @@ services:
   app:
     build: .
     restart: unless-stopped
+    ports:
+      - "8080:3001"
+    environment:
+      DATABASE_URL: postgresql://analisabee:${POSTGRES_PASSWORD:-changeme}@db:5432/analisabee
+      SESSION_SECRET: ${SESSION_SECRET}
+      APP_PASSWORD: ${APP_PASSWORD}
+      NODE_ENV: production
+      PORT: 3001
     depends_on:
       db:
         condition: service_healthy
-    environment:
-      DATABASE_URL: postgresql://${POSTGRES_USER:-analisabee}:${POSTGRES_PASSWORD:-analisabee}@db:5432/${POSTGRES_DB:-analisabee}?schema=public
-      APP_PASSWORD: ${APP_PASSWORD:-analisabee}
-      SESSION_SECRET: ${SESSION_SECRET:?SESSION_SECRET wajib diisi di .env, generate dengan: openssl rand -base64 32}
-    ports:
-      - "${APP_PORT:-3000}:3000"
 
 volumes:
-  db_data:
+  pgdata:

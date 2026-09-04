@@ -1,8 +1,11 @@
 #!/bin/sh
 set -e
 
-echo "Menjalankan migrasi database..."
-npx prisma migrate deploy
+echo "▶ Menunggu database siap..."
+until npx prisma migrate deploy; do
+  echo "  Database belum siap — coba lagi dalam 3 detik..."
+  sleep 3
+done
 
-echo "Migrasi selesai, menjalankan aplikasi..."
-exec "$@"
+echo "▶ Menjalankan server..."
+exec npm start

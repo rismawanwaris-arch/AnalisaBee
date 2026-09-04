@@ -1,39 +1,46 @@
-# syntax=docker/dockerfile:1
-
-FROM node:24-alpine AS deps
+# ── Stage 1: build Vite frontend ──────────────────────────────────────────────
+FROM node:22-alpine AS builder
 WORKDIR /app
-COPY package.json package-lock.json ./
+
+COPY package*.json ./
+# install everything (dev deps needed for vite build + tsx + tsc)
 RUN npm ci
 
-FROM node:24-alpine AS builder
-WORKDIR /app
-COPY --from=deps /app/node_modules ./node_modules
 COPY . .
-# Only needed so `prisma generate` / `next build` don't fail on a missing
-# DATABASE_URL — no real database connection happens during the build.
-ENV DATABASE_URL="postgresql://build:build@localhost:5432/build"
-RUN npx prisma generate
+
+# generate Prisma client (needs dummy DATABASE_URL at build time)
+RUN DATABASE_URL="postgresql://x:x@localhost:5432/x" npx prisma generate
+
+# build the React SPA into dist/
 RUN npm run build
 
-FROM node:24-alpine AS runner
+# ── Stage 2: production image ──────────────────────────────────────────────────
+FROM node:22-alpine AS runner
 WORKDIR /app
+
 ENV NODE_ENV=production
-RUN addgroup -S nodejs && adduser -S nextjs -G nodejs
 
-COPY --from=deps /app/node_modules ./node_modules
-COPY --from=builder /app/.next ./.next
-COPY --from=builder /app/public ./public
-COPY --from=builder /app/prisma ./prisma
-COPY --from=builder /app/prisma.config.ts ./prisma.config.ts
-COPY --from=builder /app/next.config.ts ./next.config.ts
-COPY --from=builder /app/package.json ./package.json
-COPY docker-entrypoint.sh ./docker-entrypoint.sh
-RUN chmod +x docker-entrypoint.sh && chown -R nextjs:nodejs /app
+COPY package*.json ./
+# install all deps — tsx is a devDep but used by `npm start`
+RUN npm ci
 
-USER nextjs
-EXPOSE 3000
-ENV PORT=3000
-ENV HOSTNAME=0.0.0.0
+# copy built frontend
+COPY --from=builder /app/dist ./dist
+
+# copy Prisma schema + generated client
+COPY --from=builder /app/node_modules/.prisma ./node_modules/.prisma
+COPY --from=builder /app/src/generated ./src/generated
+COPY prisma ./prisma
+
+# copy server source (tsx transpiles at runtime in production)
+COPY src/server ./src/server
+COPY src/lib ./src/lib
+COPY tsconfig.json ./
+
+# entrypoint: run migrations then start server
+COPY docker-entrypoint.sh ./
+RUN chmod +x docker-entrypoint.sh
+
+EXPOSE 3001
 
 ENTRYPOINT ["./docker-entrypoint.sh"]
-CMD ["npm", "run", "start"]
