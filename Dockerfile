@@ -30,6 +30,7 @@ COPY --from=builder /app/dist ./dist
 # copy Prisma generated client (output = src/generated/prisma per schema.prisma)
 COPY --from=builder /app/src/generated ./src/generated
 COPY prisma ./prisma
+COPY prisma.config.ts ./
 
 # copy server source (tsx transpiles at runtime in production)
 COPY src/server ./src/server
