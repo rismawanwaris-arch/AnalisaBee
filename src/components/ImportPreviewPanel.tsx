@@ -7,6 +7,7 @@ import type { OriginalRowSnapshot } from "@/lib/importSales";
 export interface PreviewRow {
   rowNumber: number;
   status: "NEW" | "DUPLICATE_EXISTING" | "DUPLICATE_IN_FILE";
+  rowHash?: string;
   noTransaksi: string;
   tanggal: string;
   cabang: string;
@@ -103,10 +104,11 @@ export function ImportPreviewPanel({
   preview: ImportPreview;
   busy: boolean;
   onCancel: () => void;
-  onConfirm: () => void;
+  onConfirm: (forceImportHashes: string[]) => void;
 }) {
   const [page, setPage] = useState(1);
   const [expandedRows, setExpandedRows] = useState<Set<number>>(new Set());
+  const [forcedHashes, setForcedHashes] = useState<Set<string>>(new Set());
   const totalPages = Math.max(1, Math.ceil(preview.duplicates.length / PAGE_SIZE));
   const pageRows = preview.duplicates.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE);
   const totalDuplicates = preview.duplicateExistingCount + preview.duplicateInFileCount;
@@ -115,6 +117,22 @@ export function ImportPreviewPanel({
     setExpandedRows((prev) => {
       const next = new Set(prev);
       next.has(rowNumber) ? next.delete(rowNumber) : next.add(rowNumber);
+      return next;
+    });
+  }
+
+  function toggleForce(hash: string) {
+    setForcedHashes((prev) => {
+      const next = new Set(prev);
+      next.has(hash) ? next.delete(hash) : next.add(hash);
+      return next;
+    });
+  }
+
+  function toggleForceAll(hashes: string[], checked: boolean) {
+    setForcedHashes((prev) => {
+      const next = new Set(prev);
+      hashes.forEach((h) => (checked ? next.add(h) : next.delete(h)));
       return next;
     });
   }
@@ -223,7 +241,14 @@ export function ImportPreviewPanel({
       )}
 
       {/* Duplicate section */}
-      {totalDuplicates > 0 && (
+      {totalDuplicates > 0 && (() => {
+        const existingRows = pageRows.filter((r) => r.status === "DUPLICATE_EXISTING" && r.rowHash);
+        const existingHashesOnPage = existingRows.map((r) => r.rowHash!);
+        const allPageForcedCount = existingHashesOnPage.filter((h) => forcedHashes.has(h)).length;
+        const allPageChecked = existingHashesOnPage.length > 0 && allPageForcedCount === existingHashesOnPage.length;
+        const allPageIndeterminate = allPageForcedCount > 0 && !allPageChecked;
+
+        return (
         <div>
           <div className="flex items-baseline gap-2 mb-1">
             <h3 className="text-xs font-bold uppercase tracking-wider text-foreground">
@@ -235,13 +260,25 @@ export function ImportPreviewPanel({
           </div>
           <p className="text-[11px] text-muted mb-2">
             Baris duplikat <strong>tidak akan diimport ulang</strong>.
-            Klik baris <span className="text-rose-400 font-semibold">Duplikat di File</span> untuk
-            melihat data baris asli dan memverifikasi apakah memang sama.
+            Klik baris <span className="text-rose-400 font-semibold">Duplikat di File</span> untuk verifikasi perbandingan data.
+            Baris <span className="text-amber-500 font-semibold">Sudah Ada di DB</span> bisa di-centang untuk <strong>Timpa</strong> (hapus dari DB lalu import ulang).
           </p>
           <div className="overflow-x-auto rounded-xl border border-border/80 shadow-xs">
             <table className="w-full text-xs">
               <thead className="bg-surface-subtle/70 text-muted text-left border-b border-border/80">
                 <tr>
+                  <th className="px-3 py-2 font-semibold text-[11px] uppercase">
+                    {existingHashesOnPage.length > 0 && (
+                      <input
+                        type="checkbox"
+                        title="Timpa semua yang sudah ada di DB (halaman ini)"
+                        checked={allPageChecked}
+                        ref={(el) => { if (el) el.indeterminate = allPageIndeterminate; }}
+                        onChange={(e) => toggleForceAll(existingHashesOnPage, e.target.checked)}
+                        className="cursor-pointer accent-accent"
+                      />
+                    )}
+                  </th>
                   <th className="px-3.5 py-2 font-semibold text-[11px] uppercase">Baris</th>
                   <th className="px-3.5 py-2 font-semibold text-[11px] uppercase">No Transaksi</th>
                   <th className="px-3.5 py-2 font-semibold text-[11px] uppercase">Tanggal</th>
@@ -256,12 +293,24 @@ export function ImportPreviewPanel({
                 {pageRows.map((r) => {
                   const isExpanded = expandedRows.has(r.rowNumber);
                   const canExpand = r.status === "DUPLICATE_IN_FILE" && (r.originalRow != null || r.duplicateOfRow != null);
+                  const isForced = r.rowHash ? forcedHashes.has(r.rowHash) : false;
                   return (
                     <Fragment key={r.rowNumber}>
                       <tr
-                        className={`transition-colors ${canExpand ? "cursor-pointer hover:bg-surface-hover/60" : "hover:bg-surface-hover/40"} ${isExpanded ? "bg-amber-500/5" : ""}`}
+                        className={`transition-colors ${canExpand ? "cursor-pointer hover:bg-surface-hover/60" : "hover:bg-surface-hover/40"} ${isExpanded ? "bg-amber-500/5" : ""} ${isForced ? "bg-blue-500/5" : ""}`}
                         onClick={() => canExpand && toggleRow(r.rowNumber)}
                       >
+                        <td className="px-3 py-2.5" onClick={(e) => e.stopPropagation()}>
+                          {r.status === "DUPLICATE_EXISTING" && r.rowHash && (
+                            <input
+                              type="checkbox"
+                              title="Timpa: hapus dari DB lalu import ulang baris ini"
+                              checked={isForced}
+                              onChange={() => toggleForce(r.rowHash!)}
+                              className="cursor-pointer accent-accent"
+                            />
+                          )}
+                        </td>
                         <td className="px-3.5 py-2.5 font-mono text-muted text-[11px]">{r.rowNumber}</td>
                         <td className="px-3.5 py-2.5 font-mono whitespace-nowrap text-foreground">{r.noTransaksi}</td>
                         <td className="px-3.5 py-2.5 font-mono whitespace-nowrap text-muted">{formatDate(r.tanggal)}</td>
@@ -290,10 +339,10 @@ export function ImportPreviewPanel({
                             </div>
                           ) : (
                             <div>
-                              <span className="text-[10px] font-semibold px-2 py-0.5 rounded-full border bg-amber-500/10 text-amber-600 dark:text-amber-400 border-amber-500/20 whitespace-nowrap">
-                                Sudah Ada di DB
+                              <span className={`text-[10px] font-semibold px-2 py-0.5 rounded-full border whitespace-nowrap ${isForced ? "bg-blue-500/10 text-blue-500 dark:text-blue-400 border-blue-500/20" : "bg-amber-500/10 text-amber-600 dark:text-amber-400 border-amber-500/20"}`}>
+                                {isForced ? "Akan Ditimpa ✓" : "Sudah Ada di DB"}
                               </span>
-                              {r.existingImport && (
+                              {r.existingImport && !isForced && (
                                 <div className="text-[10px] text-muted mt-0.5 max-w-44">
                                   <div className="truncate" title={r.existingImport.filename}>
                                     ↳ {r.existingImport.filename}
@@ -311,7 +360,7 @@ export function ImportPreviewPanel({
                       {/* Expanded comparison for DUPLICATE_IN_FILE */}
                       {isExpanded && r.status === "DUPLICATE_IN_FILE" && (
                         <tr className="bg-amber-500/5">
-                          <td colSpan={8} className="px-4 pb-3 pt-1">
+                          <td colSpan={9} className="px-4 pb-3 pt-1">
                             <div className="text-[11px] font-semibold text-amber-600 dark:text-amber-400 mb-1">
                               Perbandingan data — baris {r.rowNumber} vs baris asli #{r.duplicateOfRow}
                             </div>
@@ -348,8 +397,7 @@ export function ImportPreviewPanel({
                             </div>
                             <p className="text-[10px] text-muted mt-2">
                               Kedua baris memiliki hash yang sama — sistem memastikan datanya identik.
-                              Jika menurut Anda ini bukan duplikat, periksa file sumber dan pastikan
-                              tidak ada baris yang terduplikasi saat export dari POS.
+                              Baris kedua ini tidak perlu di-import karena data aslinya identik dan sudah ada dalam file ini.
                             </p>
                           </td>
                         </tr>
@@ -385,7 +433,8 @@ export function ImportPreviewPanel({
             </div>
           )}
         </div>
-      )}
+        );
+      })()}
 
       {/* New rows sample */}
       {preview.newSample.length > 0 && (
@@ -428,6 +477,11 @@ export function ImportPreviewPanel({
             Import tetap bisa dilanjutkan untuk {formatNumber(preview.newCount)} baris baru yang valid.
           </p>
         )}
+        {forcedHashes.size > 0 && (
+          <p className="text-[11px] text-blue-500 dark:text-blue-400">
+            ↺ {formatNumber(forcedHashes.size)} baris akan ditimpa — data lama di database akan dihapus dan diganti dengan baris ini.
+          </p>
+        )}
         <div className="flex justify-end gap-2.5">
           <button
             type="button"
@@ -439,8 +493,8 @@ export function ImportPreviewPanel({
           </button>
           <button
             type="button"
-            onClick={onConfirm}
-            disabled={busy || preview.newCount === 0}
+            onClick={() => onConfirm([...forcedHashes])}
+            disabled={busy || (preview.newCount === 0 && forcedHashes.size === 0)}
             className="inline-flex items-center gap-1.5 rounded-xl bg-accent text-accent-foreground px-4 py-2 text-xs font-semibold hover:bg-accent-hover transition-all disabled:opacity-40 disabled:cursor-not-allowed shadow-xs"
           >
             {busy ? (
@@ -448,6 +502,8 @@ export function ImportPreviewPanel({
                 <span className="w-3.5 h-3.5 border-2 border-white/30 border-t-white rounded-full animate-spin" />
                 <span>Mengimpor data...</span>
               </>
+            ) : forcedHashes.size > 0 ? (
+              `Import ${formatNumber(preview.newCount)} Baru + Timpa ${formatNumber(forcedHashes.size)}`
             ) : (
               `Konfirmasi & Import ${formatNumber(preview.newCount)} Baris Baru`
             )}

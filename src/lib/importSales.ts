@@ -42,14 +42,38 @@ export function buildRowHash(r: ParsedSaleRow): string {
   ]);
 }
 
-export async function importSalesFile(filename: string, buffer: Buffer): Promise<ImportSummary> {
+/**
+ * Builds hashes for all rows, adding a `_N` suffix for rows that appear
+ * more than once in the file (identical raw data). This handles the POS bug
+ * where an item update creates two separate rows instead of one with qty 2.
+ *
+ * The suffix is positional within the file, so re-importing the same file
+ * always produces the same hashes → still deduplicates correctly.
+ * Overlapping period imports only ever see one occurrence per transaction,
+ * so no double-counting occurs.
+ */
+function buildHashesWithOccurrence(rows: ParsedSaleRow[]): Map<ParsedSaleRow, string> {
+  const baseCount = new Map<string, number>();
+  const result = new Map<ParsedSaleRow, string>();
+  for (const r of rows) {
+    const base = buildRowHash(r);
+    const n = baseCount.get(base) ?? 0;
+    baseCount.set(base, n + 1);
+    result.set(r, n === 0 ? base : `${base}_${n}`);
+  }
+  return result;
+}
+
+export async function importSalesFile(
+  filename: string,
+  buffer: Buffer,
+  forceImportHashes: string[] = []
+): Promise<ImportSummary> {
   const { rows, errors, totalRows } = parseExcelBuffer(buffer);
 
   // Build row hashes BEFORE inferring cabang so dedup key is stable across re-imports.
-  // A row with an empty Cabang always hashes with "", so the same POS row is always
-  // identified as the same record regardless of which outlet we later infer for it.
-  const precomputedHashes = new Map<ParsedSaleRow, string>();
-  for (const r of rows) precomputedHashes.set(r, buildRowHash(r));
+  // Uses occurrence-aware hashing so POS-bug duplicate lines each get a unique hash.
+  const precomputedHashes = buildHashesWithOccurrence(rows);
 
   // Fill in missing Cabang values from employee history
   const noCabangCount = await inferCabangForRows(rows);
@@ -133,6 +157,11 @@ export async function importSalesFile(filename: string, buffer: Buffer): Promise
       employeeId: employeeIdByName.get(r.pegawai)!,
       importId: batch.id,
     }));
+
+    // Delete existing records for rows the user chose to force-import (overwrite).
+    if (forceImportHashes.length > 0) {
+      await prisma.sale.deleteMany({ where: { rowHash: { in: forceImportHashes } } });
+    }
 
     let insertedCount = 0;
     for (let i = 0; i < saleData.length; i += BATCH_SIZE) {
@@ -239,6 +268,7 @@ export interface OriginalRowSnapshot {
 export interface PreviewRow {
   rowNumber: number;
   status: "NEW" | "DUPLICATE_EXISTING" | "DUPLICATE_IN_FILE";
+  rowHash?: string;
   noTransaksi: string;
   tanggal: string;
   cabang: string;
@@ -277,12 +307,19 @@ export interface ImportPreview {
 export async function previewSalesFile(buffer: Buffer): Promise<ImportPreview> {
   const { rows, errors, totalRows } = parseExcelBuffer(buffer);
 
-  // Hash BEFORE inferring cabang — keeps dedup key stable across re-imports
-  const withHash = rows.map((r, idx) => ({
-    row: r,
-    rowNumber: idx + 2,
-    hash: buildRowHash(r),
-  }));
+  // Hash BEFORE inferring cabang — keeps dedup key stable across re-imports.
+  // Uses occurrence-aware hashing so POS-bug duplicate lines each get a unique hash.
+  const occurrenceCount = new Map<string, number>();
+  const withHash = rows.map((r, idx) => {
+    const base = buildRowHash(r);
+    const n = occurrenceCount.get(base) ?? 0;
+    occurrenceCount.set(base, n + 1);
+    return {
+      row: r,
+      rowNumber: idx + 2,
+      hash: n === 0 ? base : `${base}_${n}`,
+    };
+  });
 
   // Fill in missing Cabang values from employee history (mutates row.cabang in withHash)
   const noCabangCount = await inferCabangForRows(rows);
@@ -320,6 +357,7 @@ export async function previewSalesFile(buffer: Buffer): Promise<ImportPreview> {
   ): PreviewRow => ({
     rowNumber: w.rowNumber,
     status,
+    rowHash: status === "DUPLICATE_EXISTING" ? w.hash : undefined,
     noTransaksi: w.row.noTransaksi,
     tanggal: w.row.tanggal.toISOString(),
     cabang: w.row.cabang,

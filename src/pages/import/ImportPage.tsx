@@ -108,13 +108,16 @@ export function ImportPage() {
     setPreview(null);
   }
 
-  async function handleConfirmImport() {
+  async function handleConfirmImport(forceImportHashes: string[] = []) {
     if (!pendingFile) return;
     setConfirmBusy(true);
     setError(null);
     try {
       const formData = new FormData();
       formData.append("file", pendingFile);
+      if (forceImportHashes.length > 0) {
+        formData.append("forceImportHashes", JSON.stringify(forceImportHashes));
+      }
       const res = await fetch("/api/import", { method: "POST", body: formData });
       const data = await res.json();
       if (!res.ok) {

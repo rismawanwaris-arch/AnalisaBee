@@ -741,7 +741,11 @@ app.post("/api/import/preview", requireAuth, upload.single("file"), async (req, 
 app.post("/api/import", requireAuth, upload.single("file"), async (req, res) => {
   if (!req.file) return res.status(400).json({ error: "File wajib diupload." });
   try {
-    const summary = await importSalesFile(req.file.originalname, req.file.buffer);
+    let forceImportHashes: string[] = [];
+    if (req.body.forceImportHashes) {
+      forceImportHashes = JSON.parse(req.body.forceImportHashes);
+    }
+    const summary = await importSalesFile(req.file.originalname, req.file.buffer, forceImportHashes);
     return res.json(summary);
   } catch (err: any) {
     return res.status(422).json({ error: err.message || "Gagal mengimpor file." });
