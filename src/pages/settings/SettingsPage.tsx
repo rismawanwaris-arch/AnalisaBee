@@ -1,5 +1,4 @@
 import { useCallback, useEffect, useState } from "react";
-import { useSearchParams } from "react-router-dom";
 import { formatNumber, formatRupiah } from "@/lib/format";
 
 type BusinessLine = "SERVER" | "TARTUN" | "PETSHOP" | "AKSESORIS" | "SP_VOUCHER";
@@ -70,12 +69,15 @@ interface ItemExclusion {
 }
 
 export function SettingsPage() {
-  const [searchParams, setSearchParams] = useSearchParams();
-  const rawTab = searchParams.get("tab");
-  const currentTab = rawTab === "points" ? "points" : rawTab === "visibility" ? "visibility" : "target";
+  const [openSections, setOpenSections] = useState<Set<string>>(new Set());
 
-  function setTab(tab: "target" | "points" | "visibility") {
-    setSearchParams({ tab });
+  function toggleSection(id: string) {
+    setOpenSections((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
   }
 
   // ========================================================
@@ -588,83 +590,34 @@ export function SettingsPage() {
   const hiddenEmployeeCount = allEmployees.filter((e) => e.isHidden).length;
 
   return (
-    <div className="space-y-6">
-      {/* Header & Category Switcher */}
-      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 pb-4 border-b border-border/70">
-        <div>
-          <h1 className="text-xl font-bold tracking-tight text-foreground">Pusat Pengaturan Sistem</h1>
-          <p className="text-xs text-muted mt-1 leading-relaxed">
-            Kelola parameter nominal target penjualan, skema insentif poin staf, dan sembunyikan/tampilkan performa outlet &amp; karyawan secara terpusat.
-          </p>
-        </div>
-
-        <div className="inline-flex flex-wrap items-center gap-1.5 p-1 rounded-xl bg-surface-subtle border border-border/80 shadow-2xs self-start md:self-auto">
-          <button
-            type="button"
-            onClick={() => setTab("target")}
-            className={`inline-flex items-center gap-2 px-3.5 py-1.5 text-xs font-semibold rounded-lg transition-all ${
-              currentTab === "target"
-                ? "bg-surface text-foreground shadow-xs border border-border/80"
-                : "text-muted hover:text-foreground"
-            }`}
-          >
-            <span className="w-2 h-2 rounded-full bg-blue-500" />
-            <span>Target &amp; Laporan Harian</span>
-          </button>
-          <button
-            type="button"
-            onClick={() => setTab("points")}
-            className={`inline-flex items-center gap-2 px-3.5 py-1.5 text-xs font-semibold rounded-lg transition-all ${
-              currentTab === "points"
-                ? "bg-surface text-foreground shadow-xs border border-border/80"
-                : "text-muted hover:text-foreground"
-            }`}
-          >
-            <span className="w-2 h-2 rounded-full bg-amber-500" />
-            <span>Poin &amp; Insentif Sales</span>
-          </button>
-          <button
-            type="button"
-            onClick={() => setTab("visibility")}
-            className={`inline-flex items-center gap-2 px-3.5 py-1.5 text-xs font-semibold rounded-lg transition-all ${
-              currentTab === "visibility"
-                ? "bg-surface text-foreground shadow-xs border border-border/80"
-                : "text-muted hover:text-foreground"
-            }`}
-          >
-            <span className="w-2 h-2 rounded-full bg-rose-500" />
-            <span>Visibilitas Outlet &amp; Pegawai</span>
-            {(hiddenOutletCount > 0 || hiddenEmployeeCount > 0) && (
-              <span className="bg-rose-500/15 text-rose-600 dark:text-rose-400 text-[10px] font-bold px-1.5 py-0.2 rounded-full">
-                {hiddenOutletCount + hiddenEmployeeCount} hidden
-              </span>
-            )}
-          </button>
-        </div>
+    <div className="space-y-3">
+      {/* Header */}
+      <div className="pb-3 border-b border-border/70">
+        <h1 className="text-xl font-bold tracking-tight text-foreground">Pusat Pengaturan Sistem</h1>
+        <p className="text-xs text-muted mt-1 leading-relaxed">
+          Kelola parameter nominal target penjualan, skema insentif poin staf, dan sembunyikan/tampilkan performa outlet &amp; karyawan secara terpusat.
+        </p>
       </div>
 
-      {/* ======================================================== */}
-      {/* TAB 1: PENGATURAN TARGET PENJUALAN                       */}
-      {/* ======================================================== */}
-      {currentTab === "target" && (
-        <div className="space-y-6 animate-in fade-in duration-200">
-          {/* Target Amount Form */}
-          <section className="rounded-xl border border-border/80 bg-surface p-5 space-y-4 shadow-xs">
-            <div className="flex items-center justify-between">
-              <div className="flex items-center gap-2">
-                <span className="w-2.5 h-2.5 rounded-full bg-blue-500" />
-                <h2 className="text-sm font-bold uppercase tracking-wider text-foreground">
-                  Nominal Target Harian
-                </h2>
-              </div>
-              <span className="text-[11px] font-mono text-muted bg-surface-subtle border border-border/60 rounded px-2 py-0.5">
-                Target Harian
-              </span>
-            </div>
+      {/* ── 1. Nominal Target Harian ──────────────────────────── */}
+      <div className="rounded-xl border border-border/80 bg-surface shadow-xs overflow-hidden">
+        <button type="button" onClick={() => toggleSection("nominal-target")}
+          className="w-full flex items-center justify-between gap-3 px-5 py-3.5 text-left hover:bg-surface-hover/50 transition-colors">
+          <div className="flex items-center gap-2.5 min-w-0">
+            <span className="w-2.5 h-2.5 rounded-full bg-blue-500 shrink-0" />
+            <span className="text-sm font-bold uppercase tracking-wider text-foreground">Nominal Target Harian</span>
+            <span className="text-[11px] font-mono text-muted bg-surface-subtle border border-border/60 rounded px-2 py-0.5">Target Harian</span>
+          </div>
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"
+            className={`shrink-0 text-muted transition-transform duration-200 ${openSections.has("nominal-target") ? "rotate-180" : ""}`}>
+            <polyline points="6 9 12 15 18 9" />
+          </svg>
+        </button>
+        {openSections.has("nominal-target") && (
+          <div className="px-5 pb-5 pt-4 space-y-4 border-t border-border/60">
             <p className="text-xs text-muted leading-relaxed">
               <strong>Per Konter</strong> adalah batas kelulusan per cabang. <strong>Target ALL</strong> adalah total akumulasi seluruh outlet untuk menghitung persentase capaian.
             </p>
-
             {perkonter && all ? (
               <div className="space-y-4 pt-1">
                 <div className="grid sm:grid-cols-2 gap-4">
@@ -688,7 +641,6 @@ export function SettingsPage() {
                       </div>
                     ))}
                   </div>
-
                   <div className="space-y-3 rounded-xl bg-surface-subtle/60 border border-border/60 p-4">
                     <h3 className="text-xs font-bold text-foreground uppercase tracking-wider">
                       Target ALL Jaringan (Rp / hari)
@@ -710,7 +662,6 @@ export function SettingsPage() {
                     ))}
                   </div>
                 </div>
-
                 <div className="flex items-center gap-3 pt-2">
                   <button
                     type="button"
@@ -733,25 +684,29 @@ export function SettingsPage() {
             ) : (
               <div className="text-xs text-muted py-4">Memuat data target...</div>
             )}
-          </section>
+          </div>
+        )}
+      </div>
 
-          {/* Group Mapping */}
-          <section className="rounded-xl border border-border/80 bg-surface p-5 space-y-4 shadow-xs">
-            <div className="flex items-center justify-between">
-              <div className="flex items-center gap-2">
-                <span className="w-2.5 h-2.5 rounded-full bg-emerald-500" />
-                <h2 className="text-sm font-bold uppercase tracking-wider text-foreground">
-                  Pemetaan Kategori Item Group POS
-                </h2>
-              </div>
-              <span className="text-[11px] font-mono text-muted bg-surface-subtle border border-border/60 rounded px-2 py-0.5">
-                {groups.length} mapping
-              </span>
-            </div>
+      {/* ── 2. Pemetaan Kategori Item Group POS ──────────────── */}
+      <div className="rounded-xl border border-border/80 bg-surface shadow-xs overflow-hidden">
+        <button type="button" onClick={() => toggleSection("kategori-group")}
+          className="w-full flex items-center justify-between gap-3 px-5 py-3.5 text-left hover:bg-surface-hover/50 transition-colors">
+          <div className="flex items-center gap-2.5 min-w-0">
+            <span className="w-2.5 h-2.5 rounded-full bg-emerald-500 shrink-0" />
+            <span className="text-sm font-bold uppercase tracking-wider text-foreground">Pemetaan Kategori Item Group POS</span>
+            <span className="text-[11px] font-mono text-muted bg-surface-subtle border border-border/60 rounded px-2 py-0.5">{groups.length} mapping</span>
+          </div>
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"
+            className={`shrink-0 text-muted transition-transform duration-200 ${openSections.has("kategori-group") ? "rotate-180" : ""}`}>
+            <polyline points="6 9 12 15 18 9" />
+          </svg>
+        </button>
+        {openSections.has("kategori-group") && (
+          <div className="px-5 pb-5 pt-4 space-y-4 border-t border-border/60">
             <p className="text-xs text-muted leading-relaxed">
               Memetakan nilai <strong>Item Group</strong> mentah dari file POS ke dalam salah satu dari 3 kategori laporan: <strong>Petshop</strong>, <strong>Aksesoris</strong>, atau <strong>SP / Voucher</strong>.
             </p>
-
             <div className="flex flex-wrap items-end gap-3 pt-1">
               <div className="flex-1 min-w-56">
                 <label className="block text-[11px] font-semibold uppercase tracking-wider text-muted mb-1">
@@ -790,7 +745,6 @@ export function SettingsPage() {
               </button>
             </div>
             {groupError && <p className="text-xs text-rose-600 dark:text-rose-400 font-medium">{groupError}</p>}
-
             <div className="overflow-x-auto rounded-xl border border-border/80 shadow-xs max-h-72 overflow-y-auto">
               <table className="w-full text-xs">
                 <thead className="bg-surface-subtle/80 text-muted text-left sticky top-0 border-b border-border/80">
@@ -833,25 +787,29 @@ export function SettingsPage() {
                 </tbody>
               </table>
             </div>
-          </section>
+          </div>
+        )}
+      </div>
 
-          {/* Outlet Alias Mapping */}
-          <section className="rounded-xl border border-border/80 bg-surface p-5 space-y-4 shadow-xs">
-            <div className="flex items-center justify-between">
-              <div className="flex items-center gap-2">
-                <span className="w-2.5 h-2.5 rounded-full bg-violet-500" />
-                <h2 className="text-sm font-bold uppercase tracking-wider text-foreground">
-                  Pemetaan Alias Nama Outlet
-                </h2>
-              </div>
-              <span className="text-[11px] font-mono text-muted bg-surface-subtle border border-border/60 rounded px-2 py-0.5">
-                {aliases.length} alias
-              </span>
-            </div>
+      {/* ── 3. Pemetaan Alias Nama Outlet ─────────────────────── */}
+      <div className="rounded-xl border border-border/80 bg-surface shadow-xs overflow-hidden">
+        <button type="button" onClick={() => toggleSection("alias-outlet")}
+          className="w-full flex items-center justify-between gap-3 px-5 py-3.5 text-left hover:bg-surface-hover/50 transition-colors">
+          <div className="flex items-center gap-2.5 min-w-0">
+            <span className="w-2.5 h-2.5 rounded-full bg-violet-500 shrink-0" />
+            <span className="text-sm font-bold uppercase tracking-wider text-foreground">Pemetaan Alias Nama Outlet</span>
+            <span className="text-[11px] font-mono text-muted bg-surface-subtle border border-border/60 rounded px-2 py-0.5">{aliases.length} alias</span>
+          </div>
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"
+            className={`shrink-0 text-muted transition-transform duration-200 ${openSections.has("alias-outlet") ? "rotate-180" : ""}`}>
+            <polyline points="6 9 12 15 18 9" />
+          </svg>
+        </button>
+        {openSections.has("alias-outlet") && (
+          <div className="px-5 pb-5 pt-4 space-y-4 border-t border-border/60">
             <p className="text-xs text-muted leading-relaxed">
               Menghubungkan nama outlet / reseller yang tertulis di file Tarik Tunai atau Server ke nama outlet resmi.
             </p>
-
             <div className="flex flex-wrap items-end gap-3 pt-1">
               <div className="flex-1 min-w-56">
                 <label className="block text-[11px] font-semibold uppercase tracking-wider text-muted mb-1">
@@ -890,7 +848,6 @@ export function SettingsPage() {
               </button>
             </div>
             {aliasError && <p className="text-xs text-rose-600 dark:text-rose-400 font-medium">{aliasError}</p>}
-
             <div className="overflow-x-auto rounded-xl border border-border/80 shadow-xs max-h-72 overflow-y-auto">
               <table className="w-full text-xs">
                 <thead className="bg-surface-subtle/80 text-muted text-left sticky top-0 border-b border-border/80">
@@ -933,23 +890,26 @@ export function SettingsPage() {
                 </tbody>
               </table>
             </div>
-          </section>
-        </div>
-      )}
+          </div>
+        )}
+      </div>
 
-      {/* ======================================================== */}
-      {/* TAB 2: PENGATURAN SKEMA POIN & INSENTIF SALES            */}
-      {/* ======================================================== */}
-      {currentTab === "points" && (
-        <div className="space-y-6 animate-in fade-in duration-200">
-          {/* Siklus Bulanan */}
-          <section className="rounded-xl border border-border/80 bg-surface p-5 space-y-3 shadow-xs">
-            <div className="flex items-center gap-2">
-              <span className="w-2.5 h-2.5 rounded-full bg-amber-500" />
-              <h2 className="text-sm font-bold uppercase tracking-wider text-foreground">
-                Siklus Cut-off Periode Bulanan
-              </h2>
-            </div>
+      {/* ── 4. Siklus Cut-off Periode Bulanan ─────────────────── */}
+      <div className="rounded-xl border border-border/80 bg-surface shadow-xs overflow-hidden">
+        <button type="button" onClick={() => toggleSection("siklus-periode")}
+          className="w-full flex items-center justify-between gap-3 px-5 py-3.5 text-left hover:bg-surface-hover/50 transition-colors">
+          <div className="flex items-center gap-2.5 min-w-0">
+            <span className="w-2.5 h-2.5 rounded-full bg-amber-500 shrink-0" />
+            <span className="text-sm font-bold uppercase tracking-wider text-foreground">Siklus Cut-off Periode Bulanan</span>
+            <span className="text-[11px] font-mono text-muted bg-surface-subtle border border-border/60 rounded px-2 py-0.5">Tanggal {periodStartDay}</span>
+          </div>
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"
+            className={`shrink-0 text-muted transition-transform duration-200 ${openSections.has("siklus-periode") ? "rotate-180" : ""}`}>
+            <polyline points="6 9 12 15 18 9" />
+          </svg>
+        </button>
+        {openSections.has("siklus-periode") && (
+          <div className="px-5 pb-5 pt-4 space-y-3 border-t border-border/60">
             <p className="text-xs text-muted leading-relaxed">
               Tentukan tanggal awal dimulainya siklus bulanan. Masukkan <strong>1</strong> untuk siklus kalender normal (1–akhir bulan), atau tanggal lain (contoh: <strong>29</strong> untuk periode 29 s/d 28 bulan berikutnya).
             </p>
@@ -984,20 +944,29 @@ export function SettingsPage() {
                 </span>
               )}
             </div>
-          </section>
+          </div>
+        )}
+      </div>
 
-          {/* Pegawai Dikecualikan */}
-          <section className="rounded-xl border border-border/80 bg-surface p-5 space-y-4 shadow-xs">
-            <div className="flex items-center gap-2">
-              <span className="w-2.5 h-2.5 rounded-full bg-rose-500" />
-              <h2 className="text-sm font-bold uppercase tracking-wider text-foreground">
-                Pegawai yang Dikecualikan dari Poin
-              </h2>
-            </div>
+      {/* ── 5. Pegawai Dikecualikan dari Poin ─────────────────── */}
+      <div className="rounded-xl border border-border/80 bg-surface shadow-xs overflow-hidden">
+        <button type="button" onClick={() => toggleSection("pegawai-dikecualikan")}
+          className="w-full flex items-center justify-between gap-3 px-5 py-3.5 text-left hover:bg-surface-hover/50 transition-colors">
+          <div className="flex items-center gap-2.5 min-w-0">
+            <span className="w-2.5 h-2.5 rounded-full bg-rose-500 shrink-0" />
+            <span className="text-sm font-bold uppercase tracking-wider text-foreground">Pegawai Dikecualikan dari Poin</span>
+            <span className="text-[11px] font-mono text-muted bg-surface-subtle border border-border/60 rounded px-2 py-0.5">{excluded.length} dikecualikan</span>
+          </div>
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"
+            className={`shrink-0 text-muted transition-transform duration-200 ${openSections.has("pegawai-dikecualikan") ? "rotate-180" : ""}`}>
+            <polyline points="6 9 12 15 18 9" />
+          </svg>
+        </button>
+        {openSections.has("pegawai-dikecualikan") && (
+          <div className="px-5 pb-5 pt-4 space-y-4 border-t border-border/60">
             <p className="text-xs text-muted leading-relaxed">
               Staf non-sales, admin, atau gudang yang tidak diikutsertakan dalam kompetisi leaderboard poin.
             </p>
-
             <div className="flex flex-wrap items-end gap-3 pt-1">
               <div className="flex-1 min-w-56">
                 <label className="block text-[11px] font-semibold uppercase tracking-wider text-muted mb-1">
@@ -1037,7 +1006,6 @@ export function SettingsPage() {
               </button>
             </div>
             {excludeError && <p className="text-xs text-rose-600 dark:text-rose-400 font-medium">{excludeError}</p>}
-
             <div className="overflow-x-auto rounded-xl border border-border/80 shadow-xs max-h-72 overflow-y-auto">
               <table className="w-full text-xs">
                 <thead className="bg-surface-subtle/80 text-muted text-left sticky top-0 border-b border-border/80">
@@ -1073,20 +1041,29 @@ export function SettingsPage() {
                 </tbody>
               </table>
             </div>
-          </section>
+          </div>
+        )}
+      </div>
 
-          {/* Item Rules */}
-          <section className="rounded-xl border border-border/80 bg-surface p-5 space-y-4 shadow-xs">
-            <div className="flex items-center gap-2">
-              <span className="w-2.5 h-2.5 rounded-full bg-blue-500" />
-              <h2 className="text-sm font-bold uppercase tracking-wider text-foreground">
-                Daftar Poin Khusus per Item / SKU
-              </h2>
-            </div>
+      {/* ── 6. Poin Khusus per Item / SKU ─────────────────────── */}
+      <div className="rounded-xl border border-border/80 bg-surface shadow-xs overflow-hidden">
+        <button type="button" onClick={() => toggleSection("poin-per-item")}
+          className="w-full flex items-center justify-between gap-3 px-5 py-3.5 text-left hover:bg-surface-hover/50 transition-colors">
+          <div className="flex items-center gap-2.5 min-w-0">
+            <span className="w-2.5 h-2.5 rounded-full bg-blue-500 shrink-0" />
+            <span className="text-sm font-bold uppercase tracking-wider text-foreground">Poin Khusus per Item / SKU</span>
+            <span className="text-[11px] font-mono text-muted bg-surface-subtle border border-border/60 rounded px-2 py-0.5">{itemRules.length} aturan</span>
+          </div>
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"
+            className={`shrink-0 text-muted transition-transform duration-200 ${openSections.has("poin-per-item") ? "rotate-180" : ""}`}>
+            <polyline points="6 9 12 15 18 9" />
+          </svg>
+        </button>
+        {openSections.has("poin-per-item") && (
+          <div className="px-5 pb-5 pt-4 space-y-4 border-t border-border/60">
             <p className="text-xs text-muted leading-relaxed">
               Pola pencocokan nama item POS secara case-insensitive dan mencakup semua varian warna (contoh: <code>&quot;TWS Robot Airbuds T70E&quot;</code>). Jika ada pola bertumpuk, pola yang lebih spesifik / panjang akan diutamakan.
             </p>
-
             <div className="flex flex-wrap items-end gap-3 pt-1">
               <div className="flex-1 min-w-56">
                 <label className="block text-[11px] font-semibold uppercase tracking-wider text-muted mb-1">
@@ -1122,7 +1099,6 @@ export function SettingsPage() {
               </button>
             </div>
             {itemError && <p className="text-xs text-rose-600 dark:text-rose-400 font-medium">{itemError}</p>}
-
             <div className="overflow-x-auto rounded-xl border border-border/80 shadow-xs max-h-96 overflow-y-auto">
               <table className="w-full text-xs">
                 <thead className="bg-surface-subtle/80 text-muted text-left sticky top-0 border-b border-border/80">
@@ -1165,20 +1141,29 @@ export function SettingsPage() {
                 </tbody>
               </table>
             </div>
-          </section>
+          </div>
+        )}
+      </div>
 
-          {/* Item Exclusions */}
-          <section className="rounded-xl border border-border/80 bg-surface p-5 space-y-4 shadow-xs">
-            <div className="flex items-center gap-2">
-              <span className="w-2.5 h-2.5 rounded-full bg-amber-500" />
-              <h2 className="text-sm font-bold uppercase tracking-wider text-foreground">
-                Item yang Dikecualikan dari Perhitungan Poin
-              </h2>
-            </div>
+      {/* ── 7. Item Dikecualikan dari Poin ────────────────────── */}
+      <div className="rounded-xl border border-border/80 bg-surface shadow-xs overflow-hidden">
+        <button type="button" onClick={() => toggleSection("item-dikecualikan")}
+          className="w-full flex items-center justify-between gap-3 px-5 py-3.5 text-left hover:bg-surface-hover/50 transition-colors">
+          <div className="flex items-center gap-2.5 min-w-0">
+            <span className="w-2.5 h-2.5 rounded-full bg-amber-500 shrink-0" />
+            <span className="text-sm font-bold uppercase tracking-wider text-foreground">Item Dikecualikan dari Poin</span>
+            <span className="text-[11px] font-mono text-muted bg-surface-subtle border border-border/60 rounded px-2 py-0.5">{itemExclusions.length} item</span>
+          </div>
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"
+            className={`shrink-0 text-muted transition-transform duration-200 ${openSections.has("item-dikecualikan") ? "rotate-180" : ""}`}>
+            <polyline points="6 9 12 15 18 9" />
+          </svg>
+        </button>
+        {openSections.has("item-dikecualikan") && (
+          <div className="px-5 pb-5 pt-4 space-y-4 border-t border-border/60">
             <p className="text-xs text-muted leading-relaxed">
               Item yang diblokir dari perolehan poin meskipun tergolong kategori berpoin.
             </p>
-
             <div className="flex flex-wrap items-end gap-3 pt-1">
               <div className="flex-1 min-w-56">
                 <label className="block text-[11px] font-semibold uppercase tracking-wider text-muted mb-1">
@@ -1201,7 +1186,6 @@ export function SettingsPage() {
               </button>
             </div>
             {itemExclusionError && <p className="text-xs text-rose-600 dark:text-rose-400 font-medium">{itemExclusionError}</p>}
-
             <div className="overflow-x-auto rounded-xl border border-border/80 shadow-xs max-h-72 overflow-y-auto">
               <table className="w-full text-xs">
                 <thead className="bg-surface-subtle/80 text-muted text-left sticky top-0 border-b border-border/80">
@@ -1235,20 +1219,29 @@ export function SettingsPage() {
                 </tbody>
               </table>
             </div>
-          </section>
+          </div>
+        )}
+      </div>
 
-          {/* Group Defaults */}
-          <section className="rounded-xl border border-border/80 bg-surface p-5 space-y-4 shadow-xs">
-            <div className="flex items-center gap-2">
-              <span className="w-2.5 h-2.5 rounded-full bg-emerald-500" />
-              <h2 className="text-sm font-bold uppercase tracking-wider text-foreground">
-                Poin Default per Item Group
-              </h2>
-            </div>
+      {/* ── 8. Poin Default per Item Group ───────────────────── */}
+      <div className="rounded-xl border border-border/80 bg-surface shadow-xs overflow-hidden">
+        <button type="button" onClick={() => toggleSection("poin-per-group")}
+          className="w-full flex items-center justify-between gap-3 px-5 py-3.5 text-left hover:bg-surface-hover/50 transition-colors">
+          <div className="flex items-center gap-2.5 min-w-0">
+            <span className="w-2.5 h-2.5 rounded-full bg-emerald-500 shrink-0" />
+            <span className="text-sm font-bold uppercase tracking-wider text-foreground">Poin Default per Item Group</span>
+            <span className="text-[11px] font-mono text-muted bg-surface-subtle border border-border/60 rounded px-2 py-0.5">{groupRules.length} grup</span>
+          </div>
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"
+            className={`shrink-0 text-muted transition-transform duration-200 ${openSections.has("poin-per-group") ? "rotate-180" : ""}`}>
+            <polyline points="6 9 12 15 18 9" />
+          </svg>
+        </button>
+        {openSections.has("poin-per-group") && (
+          <div className="px-5 pb-5 pt-4 space-y-4 border-t border-border/60">
             <p className="text-xs text-muted leading-relaxed">
               Poin standar untuk seluruh item dalam satu kelompok (Item Group) jika tidak terdapat aturan item khusus di atas.
             </p>
-
             <div className="flex flex-wrap items-end gap-3 pt-1">
               <div className="flex-1 min-w-56">
                 <label className="block text-[11px] font-semibold uppercase tracking-wider text-muted mb-1">
@@ -1284,7 +1277,6 @@ export function SettingsPage() {
               </button>
             </div>
             {groupRuleError && <p className="text-xs text-rose-600 dark:text-rose-400 font-medium">{groupRuleError}</p>}
-
             <div className="overflow-x-auto rounded-xl border border-border/80 shadow-xs max-h-72 overflow-y-auto">
               <table className="w-full text-xs">
                 <thead className="bg-surface-subtle/80 text-muted text-left sticky top-0 border-b border-border/80">
@@ -1320,39 +1312,32 @@ export function SettingsPage() {
                 </tbody>
               </table>
             </div>
-          </section>
-        </div>
-      )}
+          </div>
+        )}
+      </div>
 
-      {/* ======================================================== */}
-      {/* TAB 3: VISIBILITAS PERFORMA OUTLET & PEGAWAI             */}
-      {/* ======================================================== */}
-      {currentTab === "visibility" && (
-        <div className="space-y-6 animate-in fade-in duration-200">
-          {/* Section 1: Outlet Visibility */}
-          <section className="rounded-xl border border-border/80 bg-surface p-5 space-y-4 shadow-xs">
-            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
-              <div>
-                <div className="flex items-center gap-2">
-                  <span className="w-2.5 h-2.5 rounded-full bg-rose-500" />
-                  <h2 className="text-sm font-bold uppercase tracking-wider text-foreground">
-                    Visibilitas Matrix Performa Outlet
-                  </h2>
-                </div>
-                <p className="text-xs text-muted mt-1 leading-relaxed">
-                  Pilih cabang outlet yang ingin ditampilkan atau disembunyikan dari tabel matriks performa dan ranking. Outlet yang disembunyikan tidak akan muncul di daftar performa utama.
-                </p>
-              </div>
-              <div className="flex items-center gap-2 self-start sm:self-auto shrink-0">
-                <span className="text-xs font-mono px-2 py-0.5 rounded-full bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/20">
-                  {allOutlets.length - hiddenOutletCount} Tampil
-                </span>
-                <span className="text-xs font-mono px-2 py-0.5 rounded-full bg-rose-500/10 text-rose-600 dark:text-rose-400 border border-rose-500/20">
-                  {hiddenOutletCount} Disembunyikan
-                </span>
-              </div>
-            </div>
-
+      {/* ── 9. Visibilitas Outlet ─────────────────────────────── */}
+      <div className="rounded-xl border border-border/80 bg-surface shadow-xs overflow-hidden">
+        <button type="button" onClick={() => toggleSection("visibilitas-outlet")}
+          className="w-full flex items-center justify-between gap-3 px-5 py-3.5 text-left hover:bg-surface-hover/50 transition-colors">
+          <div className="flex items-center gap-2.5 min-w-0 flex-wrap">
+            <span className="w-2.5 h-2.5 rounded-full bg-rose-500 shrink-0" />
+            <span className="text-sm font-bold uppercase tracking-wider text-foreground">Visibilitas Outlet</span>
+            <span className="text-[11px] font-mono text-emerald-600 dark:text-emerald-400 bg-emerald-500/10 border border-emerald-500/20 rounded px-2 py-0.5">{allOutlets.length - hiddenOutletCount} tampil</span>
+            {hiddenOutletCount > 0 && (
+              <span className="text-[11px] font-mono text-rose-600 dark:text-rose-400 bg-rose-500/10 border border-rose-500/20 rounded px-2 py-0.5">{hiddenOutletCount} disembunyikan</span>
+            )}
+          </div>
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"
+            className={`shrink-0 text-muted transition-transform duration-200 ${openSections.has("visibilitas-outlet") ? "rotate-180" : ""}`}>
+            <polyline points="6 9 12 15 18 9" />
+          </svg>
+        </button>
+        {openSections.has("visibilitas-outlet") && (
+          <div className="px-5 pb-5 pt-4 space-y-4 border-t border-border/60">
+            <p className="text-xs text-muted leading-relaxed">
+              Pilih cabang outlet yang ingin ditampilkan atau disembunyikan dari tabel matriks performa dan ranking. Outlet yang disembunyikan tidak akan muncul di daftar performa utama.
+            </p>
             <div className="flex items-center gap-3 pt-1">
               <input
                 type="text"
@@ -1362,7 +1347,6 @@ export function SettingsPage() {
                 className="w-full max-w-sm rounded-lg border border-border/80 bg-surface-subtle px-3 py-1.5 text-xs text-foreground placeholder:text-muted/60 focus:outline-none focus:ring-2 focus:ring-accent/20 focus:border-accent transition-all"
               />
             </div>
-
             <div className="overflow-x-auto rounded-xl border border-border/80 shadow-xs max-h-96 overflow-y-auto">
               <table className="w-full text-xs">
                 <thead className="bg-surface-subtle/80 text-muted text-left sticky top-0 border-b border-border/80 z-10">
@@ -1438,32 +1422,32 @@ export function SettingsPage() {
                 </tbody>
               </table>
             </div>
-          </section>
+          </div>
+        )}
+      </div>
 
-          {/* Section 2: Employee Visibility */}
-          <section className="rounded-xl border border-border/80 bg-surface p-5 space-y-4 shadow-xs">
-            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
-              <div>
-                <div className="flex items-center gap-2">
-                  <span className="w-2.5 h-2.5 rounded-full bg-indigo-500" />
-                  <h2 className="text-sm font-bold uppercase tracking-wider text-foreground">
-                    Visibilitas Matrix Performa Pegawai / Karyawan
-                  </h2>
-                </div>
-                <p className="text-xs text-muted mt-1 leading-relaxed">
-                  Pilih pegawai/karyawan yang ingin ditampilkan atau disembunyikan dari tabel performa sales. Pegawai yang disembunyikan tidak akan tercantum di matriks performa pegawai.
-                </p>
-              </div>
-              <div className="flex items-center gap-2 self-start sm:self-auto shrink-0">
-                <span className="text-xs font-mono px-2 py-0.5 rounded-full bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/20">
-                  {allEmployees.length - hiddenEmployeeCount} Tampil
-                </span>
-                <span className="text-xs font-mono px-2 py-0.5 rounded-full bg-rose-500/10 text-rose-600 dark:text-rose-400 border border-rose-500/20">
-                  {hiddenEmployeeCount} Disembunyikan
-                </span>
-              </div>
-            </div>
-
+      {/* ── 10. Visibilitas Pegawai ───────────────────────────── */}
+      <div className="rounded-xl border border-border/80 bg-surface shadow-xs overflow-hidden">
+        <button type="button" onClick={() => toggleSection("visibilitas-pegawai")}
+          className="w-full flex items-center justify-between gap-3 px-5 py-3.5 text-left hover:bg-surface-hover/50 transition-colors">
+          <div className="flex items-center gap-2.5 min-w-0 flex-wrap">
+            <span className="w-2.5 h-2.5 rounded-full bg-indigo-500 shrink-0" />
+            <span className="text-sm font-bold uppercase tracking-wider text-foreground">Visibilitas Pegawai</span>
+            <span className="text-[11px] font-mono text-emerald-600 dark:text-emerald-400 bg-emerald-500/10 border border-emerald-500/20 rounded px-2 py-0.5">{allEmployees.length - hiddenEmployeeCount} tampil</span>
+            {hiddenEmployeeCount > 0 && (
+              <span className="text-[11px] font-mono text-rose-600 dark:text-rose-400 bg-rose-500/10 border border-rose-500/20 rounded px-2 py-0.5">{hiddenEmployeeCount} disembunyikan</span>
+            )}
+          </div>
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"
+            className={`shrink-0 text-muted transition-transform duration-200 ${openSections.has("visibilitas-pegawai") ? "rotate-180" : ""}`}>
+            <polyline points="6 9 12 15 18 9" />
+          </svg>
+        </button>
+        {openSections.has("visibilitas-pegawai") && (
+          <div className="px-5 pb-5 pt-4 space-y-4 border-t border-border/60">
+            <p className="text-xs text-muted leading-relaxed">
+              Pilih pegawai/karyawan yang ingin ditampilkan atau disembunyikan dari tabel performa sales. Pegawai yang disembunyikan tidak akan tercantum di matriks performa pegawai.
+            </p>
             <div className="flex items-center gap-3 pt-1">
               <input
                 type="text"
@@ -1473,7 +1457,6 @@ export function SettingsPage() {
                 className="w-full max-w-sm rounded-lg border border-border/80 bg-surface-subtle px-3 py-1.5 text-xs text-foreground placeholder:text-muted/60 focus:outline-none focus:ring-2 focus:ring-accent/20 focus:border-accent transition-all"
               />
             </div>
-
             <div className="overflow-x-auto rounded-xl border border-border/80 shadow-xs max-h-96 overflow-y-auto">
               <table className="w-full text-xs">
                 <thead className="bg-surface-subtle/80 text-muted text-left sticky top-0 border-b border-border/80 z-10">
@@ -1549,9 +1532,9 @@ export function SettingsPage() {
                 </tbody>
               </table>
             </div>
-          </section>
-        </div>
-      )}
+          </div>
+        )}
+      </div>
     </div>
   );
 }

@@ -4,6 +4,7 @@ import { formatNumber, formatRupiah } from "@/lib/format";
 import { SortableTable, type Column } from "@/components/SortableTable";
 import { ItemPicker, type ItemOption } from "@/components/ItemPicker";
 import { todayStr } from "@/lib/dateDefaults";
+import { useMonthPeriod } from "@/lib/useMonthPeriod";
 
 interface OutletRow {
   id: number;
@@ -19,25 +20,11 @@ interface EmployeeOption {
   name: string;
 }
 
-function startOfMonthStr(): string {
+function startOfWeekStr(): string {
   const d = new Date();
-  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-01`;
+  d.setDate(d.getDate() - d.getDay());
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
 }
-
-const SHORTCUTS = [
-  { label: "Hari Ini", from: () => todayStr(), to: () => todayStr() },
-  {
-    label: "Minggu Ini",
-    from: () => {
-      const d = new Date();
-      d.setDate(d.getDate() - d.getDay());
-      return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
-    },
-    to: () => todayStr(),
-  },
-  { label: "Bulan Ini", from: startOfMonthStr, to: () => todayStr() },
-  { label: "Semua", from: () => "", to: () => "" },
-];
 
 const columns: Column<OutletRow>[] = [
   {
@@ -81,13 +68,21 @@ const columns: Column<OutletRow>[] = [
 ];
 
 export function OutletsPage() {
+  const { currentPeriod, periodStartDay, loaded: periodLoaded } = useMonthPeriod();
   const [outlets, setOutlets] = useState<OutletRow[]>([]);
   const [employees, setEmployees] = useState<EmployeeOption[]>([]);
   const [loading, setLoading] = useState(true);
 
-  // Filter state
-  const [from, setFrom] = useState(startOfMonthStr());
-  const [to, setTo] = useState(todayStr());
+  // Filter state — initialised from custom period once loaded
+  const [from, setFrom] = useState("");
+  const [to, setTo] = useState("");
+
+  useEffect(() => {
+    if (periodLoaded && !from && !to) {
+      setFrom(currentPeriod.from);
+      setTo(currentPeriod.to);
+    }
+  }, [periodLoaded]); // eslint-disable-line react-hooks/exhaustive-deps
   const [outletSearch, setOutletSearch] = useState("");
   const [selectedItem, setSelectedItem] = useState<ItemOption | null>(null);
   const [employeeId, setEmployeeId] = useState("");
@@ -126,14 +121,21 @@ export function OutletsPage() {
     loadData();
   }, [loadData]);
 
-  function applyShortcut(s: (typeof SHORTCUTS)[number]) {
-    setFrom(s.from());
-    setTo(s.to());
+  const SHORTCUTS = [
+    { label: "Hari Ini", from: todayStr(), to: todayStr() },
+    { label: "Minggu Ini", from: startOfWeekStr(), to: todayStr() },
+    { label: "Bulan Ini", from: currentPeriod.from, to: currentPeriod.to },
+    { label: "Semua", from: "", to: "" },
+  ];
+
+  function applyShortcut(s: { label: string; from: string; to: string }) {
+    setFrom(s.from);
+    setTo(s.to);
   }
 
   function resetFilters() {
-    setFrom(startOfMonthStr());
-    setTo(todayStr());
+    setFrom(currentPeriod.from);
+    setTo(currentPeriod.to);
     setOutletSearch("");
     setSelectedItem(null);
     setEmployeeId("");
@@ -146,7 +148,7 @@ export function OutletsPage() {
     : outlets;
 
   const hasFilter = outletSearch || selectedItem || employeeId || subtotalMin || subtotalMax
-    || from !== startOfMonthStr() || to !== todayStr();
+    || from !== currentPeriod.from || to !== currentPeriod.to;
 
   return (
     <div className="space-y-5">

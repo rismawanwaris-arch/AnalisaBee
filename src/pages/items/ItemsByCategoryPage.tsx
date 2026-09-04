@@ -3,6 +3,7 @@ import { Link } from "react-router-dom";
 import { formatNumber, formatRupiah } from "@/lib/format";
 import { SortableTable, type Column } from "@/components/SortableTable";
 import { todayStr } from "@/lib/dateDefaults";
+import { useMonthPeriod } from "@/lib/useMonthPeriod";
 
 interface ItemRow {
   itemId: number;
@@ -14,16 +15,6 @@ interface ItemRow {
   labaRugi: number;
 }
 
-function startOfMonthStr(): string {
-  const d = new Date();
-  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-01`;
-}
-
-const SHORTCUTS = [
-  { label: "Hari Ini", from: () => todayStr(), to: () => todayStr() },
-  { label: "Bulan Ini", from: startOfMonthStr, to: () => todayStr() },
-  { label: "Semua", from: () => "", to: () => "" },
-];
 
 const COLUMNS: Column<ItemRow>[] = [
   {
@@ -79,11 +70,19 @@ const COLUMNS: Column<ItemRow>[] = [
 ];
 
 export function ItemsByCategoryPage() {
+  const { currentPeriod, loaded: periodLoaded } = useMonthPeriod();
   const [rows, setRows] = useState<ItemRow[]>([]);
   const [loading, setLoading] = useState(true);
 
-  const [from, setFrom] = useState(startOfMonthStr());
-  const [to, setTo] = useState(todayStr());
+  const [from, setFrom] = useState("");
+  const [to, setTo] = useState("");
+
+  useEffect(() => {
+    if (periodLoaded && !from && !to) {
+      setFrom(currentPeriod.from);
+      setTo(currentPeriod.to);
+    }
+  }, [periodLoaded]); // eslint-disable-line react-hooks/exhaustive-deps
   const [categorySearch, setCategorySearch] = useState("");
   const [itemSearch, setItemSearch] = useState("");
   const [groupMode, setGroupMode] = useState(false);
@@ -170,11 +169,15 @@ export function ItemsByCategoryPage() {
             />
           </div>
           <div className="flex gap-1.5 flex-wrap pb-0.5">
-            {SHORTCUTS.map((s) => (
+            {[
+              { label: "Hari Ini", from: todayStr(), to: todayStr() },
+              { label: "Bulan Ini", from: currentPeriod.from, to: currentPeriod.to },
+              { label: "Semua", from: "", to: "" },
+            ].map((s) => (
               <button
                 key={s.label}
                 type="button"
-                onClick={() => { setFrom(s.from()); setTo(s.to()); }}
+                onClick={() => { setFrom(s.from); setTo(s.to); }}
                 className="rounded-lg border border-border/80 bg-surface-subtle px-2.5 py-1.5 text-[11px] font-medium text-muted hover:text-foreground hover:bg-surface-hover transition-colors"
               >
                 {s.label}
