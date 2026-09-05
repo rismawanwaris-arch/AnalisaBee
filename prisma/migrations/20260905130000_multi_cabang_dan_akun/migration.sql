@@ -1,28 +1,35 @@
+-- This migration was previously applied partially on the ZimaOS deployment —
+-- the "Branch" enum committed before a later statement failed, and Postgres
+-- DDL here isn't rolled back as one all-or-nothing unit the way a normal
+-- migrate deploy run assumes. Every statement below is written to be safe to
+-- re-run regardless of how far a prior attempt got.
+
 -- CreateEnum
-CREATE TYPE "Branch" AS ENUM ('BANDUNG', 'CIMAHI');
+DO $$ BEGIN
+  CREATE TYPE "Branch" AS ENUM ('BANDUNG', 'CIMAHI');
+EXCEPTION
+  WHEN duplicate_object THEN NULL;
+END $$;
 
 -- DropIndex
-DROP INDEX "targets_scope_category_key";
+DROP INDEX IF EXISTS "targets_scope_category_key";
 
 -- AlterTable
--- isHidden may already exist on some deployments that were patched ad-hoc with
--- `prisma db push` before this project switched to tracked migrations — guard
--- both ADD COLUMNs so `migrate deploy` can't fail with "column already exists".
 ALTER TABLE "employees" ADD COLUMN IF NOT EXISTS "isHidden" BOOLEAN NOT NULL DEFAULT false;
 
 -- AlterTable
-ALTER TABLE "import_batches" ADD COLUMN "branch" "Branch" NOT NULL DEFAULT 'BANDUNG';
+ALTER TABLE "import_batches" ADD COLUMN IF NOT EXISTS "branch" "Branch" NOT NULL DEFAULT 'BANDUNG';
 
 -- AlterTable
 ALTER TABLE "outlets"
-  ADD COLUMN "branch" "Branch" NOT NULL DEFAULT 'BANDUNG',
+  ADD COLUMN IF NOT EXISTS "branch" "Branch" NOT NULL DEFAULT 'BANDUNG',
   ADD COLUMN IF NOT EXISTS "isHidden" BOOLEAN NOT NULL DEFAULT false;
 
 -- AlterTable
-ALTER TABLE "targets" ADD COLUMN "branch" "Branch" NOT NULL DEFAULT 'BANDUNG';
+ALTER TABLE "targets" ADD COLUMN IF NOT EXISTS "branch" "Branch" NOT NULL DEFAULT 'BANDUNG';
 
 -- CreateTable
-CREATE TABLE "users" (
+CREATE TABLE IF NOT EXISTS "users" (
     "id" SERIAL NOT NULL,
     "username" TEXT NOT NULL,
     "displayName" TEXT,
@@ -37,7 +44,7 @@ CREATE TABLE "users" (
 );
 
 -- CreateTable
-CREATE TABLE "sessions" (
+CREATE TABLE IF NOT EXISTS "sessions" (
     "id" SERIAL NOT NULL,
     "tokenHash" TEXT NOT NULL,
     "userId" INTEGER,
@@ -54,19 +61,23 @@ CREATE TABLE "sessions" (
 );
 
 -- CreateIndex
-CREATE UNIQUE INDEX "users_username_key" ON "users"("username");
+CREATE UNIQUE INDEX IF NOT EXISTS "users_username_key" ON "users"("username");
 
 -- CreateIndex
-CREATE UNIQUE INDEX "sessions_tokenHash_key" ON "sessions"("tokenHash");
+CREATE UNIQUE INDEX IF NOT EXISTS "sessions_tokenHash_key" ON "sessions"("tokenHash");
 
 -- CreateIndex
-CREATE INDEX "sessions_userId_idx" ON "sessions"("userId");
+CREATE INDEX IF NOT EXISTS "sessions_userId_idx" ON "sessions"("userId");
 
 -- CreateIndex
-CREATE INDEX "sessions_expiresAt_idx" ON "sessions"("expiresAt");
+CREATE INDEX IF NOT EXISTS "sessions_expiresAt_idx" ON "sessions"("expiresAt");
 
 -- CreateIndex
-CREATE UNIQUE INDEX "targets_scope_category_branch_key" ON "targets"("scope", "category", "branch");
+CREATE UNIQUE INDEX IF NOT EXISTS "targets_scope_category_branch_key" ON "targets"("scope", "category", "branch");
 
 -- AddForeignKey
-ALTER TABLE "sessions" ADD CONSTRAINT "sessions_userId_fkey" FOREIGN KEY ("userId") REFERENCES "users"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+DO $$ BEGIN
+  ALTER TABLE "sessions" ADD CONSTRAINT "sessions_userId_fkey" FOREIGN KEY ("userId") REFERENCES "users"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+EXCEPTION
+  WHEN duplicate_object THEN NULL;
+END $$;
