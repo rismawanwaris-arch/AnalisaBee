@@ -281,3 +281,45 @@ model ActivityLog {
   @@index([createdAt])
   @@map("activity_logs")
 }
+
+// An application account. Role is stored as the lowercase string "master" or
+// "admin" to match what the session token and the frontend already compare
+// against — same convention as ActivityLog.role.
+model User {
+  id           Int       @id @default(autoincrement())
+  username     String    @unique
+  displayName  String?
+  passwordHash String
+  role         String    @default("admin")
+  isActive     Boolean   @default(true)
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
+  lastLoginAt  DateTime?
+  sessions     Session[]
+
+  @@map("users")
+}
+
+// A server-side record of one logged-in session. The JWT handed to the browser
+// carries only a random session id; what's stored here is its SHA-256 hash, so
+// a database leak alone cannot be replayed as a valid session. Revoking a row
+// (setting revokedAt) is what makes the "kick" feature possible — without this
+// table a signed JWT would stay valid until it expired.
+model Session {
+  id         Int       @id @default(autoincrement())
+  tokenHash  String    @unique
+  userId     Int?
+  user       User?     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  username   String
+  role       String
+  ip         String?
+  userAgent  String?
+  createdAt  DateTime  @default(now())
+  lastSeenAt DateTime  @default(now())
+  expiresAt  DateTime
+  revokedAt  DateTime?
+
+  @@index([userId])
+  @@index([expiresAt])
+  @@map("sessions")
+}

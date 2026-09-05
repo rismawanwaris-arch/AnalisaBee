@@ -9,20 +9,38 @@ import path from "node:path";
 import { prisma } from "../lib/prisma";
 import { ensureDefaults } from "../lib/ensureDefaults";
 import {
-  verifyPassword,
-  createSessionToken,
+  verifyEnvPassword,
+  createSession,
   verifySessionToken,
+  revokeSessionByToken,
+  revokeSessionById,
+  purgeExpiredSessions,
   COOKIE_NAME,
   SESSION_DURATION_MS,
   type UserRole,
+  type SessionContext,
 } from "../lib/session";
+import { verifyPasswordHash, fakeVerifyDelay } from "../lib/password";
+import {
+  listUsers,
+  createUser,
+  updateUserRole,
+  updateUserActive,
+  resetUserPassword,
+  changeOwnPassword,
+  deleteUser,
+  listActiveSessions,
+  ensureAuthBootstrap,
+  UserError,
+} from "../lib/queries/users";
 
-// Extend Express request type to carry role
+// Extend Express request type to carry the authenticated session
 declare global {
   // eslint-disable-next-line @typescript-eslint/no-namespace
   namespace Express {
     interface Request {
       userRole?: UserRole;
+      session?: SessionContext;
     }
   }
 }
@@ -125,35 +143,57 @@ const loginLimiter = rateLimit({
 
 // Initialize defaults on server startup
 ensureDefaults().catch((err) => console.error("ensureDefaults error:", err));
+ensureAuthBootstrap().catch((err) => console.error("ensureAuthBootstrap error:", err));
+
+// Keep the sessions table from growing without bound.
+purgeExpiredSessions().catch(() => {});
+setInterval(() => {
+  purgeExpiredSessions().catch(() => {});
+}, 6 * 60 * 60 * 1000).unref();
 
 // Auth Middleware for API
 async function requireAuth(req: express.Request, res: express.Response, next: express.NextFunction) {
-  const token = req.cookies[COOKIE_NAME];
-  const role = await verifySessionToken(token);
-  if (!role) {
+  const session = await verifySessionToken(req.cookies[COOKIE_NAME]);
+  if (!session) {
+    res.clearCookie(COOKIE_NAME, { path: "/" });
     return res.status(401).json({ error: "Belum login." });
   }
-  req.userRole = role;
+  req.session = session;
+  req.userRole = session.role;
   next();
 }
 
 async function requireMaster(req: express.Request, res: express.Response, next: express.NextFunction) {
-  const token = req.cookies[COOKIE_NAME];
-  const role = await verifySessionToken(token);
-  if (!role) return res.status(401).json({ error: "Belum login." });
-  if (role !== "master") return res.status(403).json({ error: "Akses ditolak. Hanya master yang bisa mengubah pengaturan." });
-  req.userRole = role;
+  const session = await verifySessionToken(req.cookies[COOKIE_NAME]);
+  if (!session) {
+    res.clearCookie(COOKIE_NAME, { path: "/" });
+    return res.status(401).json({ error: "Belum login." });
+  }
+  if (session.role !== "master") {
+    return res.status(403).json({ error: "Akses ditolak. Hanya master yang bisa mengubah pengaturan." });
+  }
+  req.session = session;
+  req.userRole = session.role;
   next();
+}
+
+function clientIp(req: express.Request): string | null {
+  const forwarded = req.headers["x-forwarded-for"];
+  if (typeof forwarded === "string" && forwarded.length > 0) {
+    return forwarded.split(",")[0].trim();
+  }
+  return req.socket.remoteAddress ?? null;
 }
 
 async function logActivity(req: express.Request, action: string, detail?: string) {
   try {
+    const actor = req.session?.username ? `${req.userRole}:${req.session.username}` : req.userRole ?? "unknown";
     await prisma.activityLog.create({
       data: {
-        role: req.userRole ?? "unknown",
+        role: actor,
         action,
         detail: detail ?? null,
-        ip: (req.headers["x-forwarded-for"] as string)?.split(",")[0].trim() ?? req.socket.remoteAddress ?? null,
+        ip: clientIp(req),
       },
     });
   } catch {
@@ -171,38 +211,236 @@ function parseDateParam(val: unknown): Date | undefined {
 // 1. AUTHENTICATION
 // ==========================================
 
+const SESSION_COOKIE_OPTIONS = {
+  httpOnly: true,
+  secure: process.env.HTTPS === "true",
+  sameSite: "lax" as const,
+  path: "/",
+};
+
 app.post("/api/auth/login", loginLimiter, async (req, res) => {
-  const { password } = req.body;
-  const role = password ? verifyPassword(String(password)) : null;
-  if (!role) {
-    return res.status(401).json({ error: "Password salah." });
+  const rawUsername = String(req.body?.username ?? "").trim().toLowerCase();
+  const password = String(req.body?.password ?? "");
+  const ip = clientIp(req);
+  const userAgent = typeof req.headers["user-agent"] === "string" ? req.headers["user-agent"] : null;
+
+  // One message for every failure mode — never reveal whether a username exists.
+  const reject = () => res.status(401).json({ error: "Username atau kata sandi salah." });
+
+  if (!password) {
+    await fakeVerifyDelay(password);
+    return reject();
   }
 
-  const { token } = await createSessionToken(role);
-  res.cookie(COOKIE_NAME, token, {
-    httpOnly: true,
-    secure: process.env.HTTPS === "true",
-    sameSite: "lax",
-    maxAge: SESSION_DURATION_MS,
-    path: "/",
-  });
+  try {
+    const account = rawUsername
+      ? await prisma.user.findUnique({
+          where: { username: rawUsername },
+          select: { id: true, username: true, passwordHash: true, role: true, isActive: true },
+        })
+      : null;
 
-  // Log login (fire-and-forget, no req.userRole yet so set manually)
-  const ip = (req.headers["x-forwarded-for"] as string)?.split(",")[0].trim() ?? req.socket.remoteAddress ?? null;
-  prisma.activityLog.create({ data: { role, action: "LOGIN", ip } }).catch(() => {});
+    let resolved: { role: UserRole; username: string; userId: number | null };
 
-  return res.json({ ok: true, role });
+    if (account) {
+      const ok = await verifyPasswordHash(password, account.passwordHash);
+      if (!ok) {
+        prisma.activityLog
+          .create({ data: { role: rawUsername, action: "LOGIN_GAGAL", ip } })
+          .catch(() => {});
+        return reject();
+      }
+      if (!account.isActive) {
+        return res.status(403).json({ error: "Akun dinonaktifkan. Hubungi pemilik akun master." });
+      }
+      if (account.role !== "master" && account.role !== "admin") return reject();
+      resolved = { role: account.role, username: account.username, userId: account.id };
+    } else {
+      // Break-glass: the env-var passwords, addressed as username master/admin.
+      const envRole = verifyEnvPassword(password);
+      if (!envRole || (rawUsername !== "" && rawUsername !== envRole)) {
+        await fakeVerifyDelay(password);
+        prisma.activityLog
+          .create({ data: { role: rawUsername || "unknown", action: "LOGIN_GAGAL", ip } })
+          .catch(() => {});
+        return reject();
+      }
+      resolved = { role: envRole, username: `${envRole} (env)`, userId: null };
+    }
+
+    const { role, username, userId } = resolved;
+    const { token } = await createSession({ role, username, userId, ip, userAgent });
+    res.cookie(COOKIE_NAME, token, { ...SESSION_COOKIE_OPTIONS, maxAge: SESSION_DURATION_MS });
+
+    if (userId !== null) {
+      prisma.user
+        .update({ where: { id: userId }, data: { lastLoginAt: new Date() } })
+        .catch(() => {});
+    }
+    prisma.activityLog
+      .create({
+        data: {
+          role: `${role}:${username}`,
+          action: userId === null ? "LOGIN_ENV" : "LOGIN",
+          ip,
+        },
+      })
+      .catch(() => {});
+
+    return res.json({ ok: true, role, username });
+  } catch (err) {
+    return sendError(res, 500, err, "Gagal memproses login.");
+  }
 });
 
-app.post("/api/auth/logout", (req, res) => {
+app.post("/api/auth/logout", async (req, res) => {
+  await revokeSessionByToken(req.cookies[COOKIE_NAME]).catch(() => {});
   res.clearCookie(COOKIE_NAME, { path: "/" });
   return res.json({ ok: true });
 });
 
 app.get("/api/auth/me", async (req, res) => {
-  const token = req.cookies[COOKIE_NAME];
-  const role = await verifySessionToken(token);
-  return res.json({ authenticated: !!role, role: role ?? null });
+  const session = await verifySessionToken(req.cookies[COOKIE_NAME]);
+  if (!session) {
+    return res.json({ authenticated: false, role: null, username: null });
+  }
+  return res.json({
+    authenticated: true,
+    role: session.role,
+    username: session.username,
+    userId: session.userId,
+  });
+});
+
+app.post("/api/auth/change-password", requireAuth, async (req, res) => {
+  if (req.session!.userId === null) {
+    return res.status(400).json({
+      error: "Sesi ini memakai kata sandi environment, bukan akun. Ganti lewat file .env.",
+    });
+  }
+  try {
+    await changeOwnPassword(
+      req.session!.userId,
+      req.body?.currentPassword,
+      req.body?.newPassword,
+      req.session!.sessionId,
+    );
+    await logActivity(req, "UBAH_PASSWORD_SENDIRI");
+    return res.json({ ok: true });
+  } catch (err) {
+    if (err instanceof UserError) return res.status(err.status).json({ error: err.message });
+    return sendError(res, 500, err, "Gagal mengganti kata sandi.");
+  }
+});
+
+// ==========================================
+// 1b. ACCOUNT & SESSION MANAGEMENT (master only)
+// ==========================================
+
+app.get("/api/users", requireMaster, async (_req, res) => {
+  try {
+    return res.json(await listUsers());
+  } catch (err) {
+    return sendError(res, 500, err, "Gagal memuat daftar akun.");
+  }
+});
+
+app.post("/api/users", requireMaster, async (req, res) => {
+  try {
+    const user = await createUser({
+      username: req.body?.username,
+      password: req.body?.password,
+      role: req.body?.role,
+      displayName: req.body?.displayName,
+    });
+    await logActivity(req, "BUAT_AKUN", `${user.username} (${user.role})`);
+    return res.status(201).json(user);
+  } catch (err) {
+    if (err instanceof UserError) return res.status(err.status).json({ error: err.message });
+    return sendError(res, 500, err, "Gagal membuat akun.");
+  }
+});
+
+app.put("/api/users/:id/role", requireMaster, async (req, res) => {
+  const id = Number(req.params.id);
+  if (!Number.isInteger(id)) return res.status(400).json({ error: "ID tidak valid." });
+  try {
+    const user = await updateUserRole(id, req.body?.role);
+    await logActivity(req, "UBAH_ROLE_AKUN", `${user.username} → ${user.role}`);
+    return res.json(user);
+  } catch (err) {
+    if (err instanceof UserError) return res.status(err.status).json({ error: err.message });
+    return sendError(res, 500, err, "Gagal mengubah role.");
+  }
+});
+
+app.put("/api/users/:id/active", requireMaster, async (req, res) => {
+  const id = Number(req.params.id);
+  if (!Number.isInteger(id)) return res.status(400).json({ error: "ID tidak valid." });
+  try {
+    const user = await updateUserActive(id, req.body?.isActive);
+    await logActivity(req, user.isActive ? "AKTIFKAN_AKUN" : "NONAKTIFKAN_AKUN", user.username);
+    return res.json(user);
+  } catch (err) {
+    if (err instanceof UserError) return res.status(err.status).json({ error: err.message });
+    return sendError(res, 500, err, "Gagal mengubah status akun.");
+  }
+});
+
+app.put("/api/users/:id/password", requireMaster, async (req, res) => {
+  const id = Number(req.params.id);
+  if (!Number.isInteger(id)) return res.status(400).json({ error: "ID tidak valid." });
+  try {
+    const user = await resetUserPassword(id, req.body?.password);
+    await logActivity(req, "RESET_PASSWORD_AKUN", user.username);
+    return res.json({ ok: true });
+  } catch (err) {
+    if (err instanceof UserError) return res.status(err.status).json({ error: err.message });
+    return sendError(res, 500, err, "Gagal mereset kata sandi.");
+  }
+});
+
+app.delete("/api/users/:id", requireMaster, async (req, res) => {
+  const id = Number(req.params.id);
+  if (!Number.isInteger(id)) return res.status(400).json({ error: "ID tidak valid." });
+  if (req.session!.userId === id) {
+    return res.status(400).json({ error: "Tidak bisa menghapus akun Anda sendiri." });
+  }
+  try {
+    await deleteUser(id);
+    await logActivity(req, "HAPUS_AKUN", String(id));
+    return res.json({ ok: true });
+  } catch (err) {
+    if (err instanceof UserError) return res.status(err.status).json({ error: err.message });
+    return sendError(res, 500, err, "Gagal menghapus akun.");
+  }
+});
+
+app.get("/api/sessions", requireMaster, async (req, res) => {
+  try {
+    const sessions = await listActiveSessions();
+    return res.json(
+      sessions.map((s) => ({ ...s, isCurrent: s.id === req.session!.sessionId })),
+    );
+  } catch (err) {
+    return sendError(res, 500, err, "Gagal memuat sesi aktif.");
+  }
+});
+
+app.delete("/api/sessions/:id", requireMaster, async (req, res) => {
+  const id = Number(req.params.id);
+  if (!Number.isInteger(id)) return res.status(400).json({ error: "ID tidak valid." });
+  if (id === req.session!.sessionId) {
+    return res.status(400).json({ error: "Gunakan tombol keluar untuk mengakhiri sesi Anda sendiri." });
+  }
+  try {
+    const revoked = await revokeSessionById(id);
+    if (!revoked) return res.status(404).json({ error: "Sesi tidak ditemukan atau sudah berakhir." });
+    await logActivity(req, "KICK_SESI", String(id));
+    return res.json({ ok: true });
+  } catch (err) {
+    return sendError(res, 500, err, "Gagal mengakhiri sesi.");
+  }
 });
 
 // ==========================================

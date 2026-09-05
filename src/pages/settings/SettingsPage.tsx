@@ -69,6 +69,28 @@ interface ItemExclusion {
   pattern: string;
 }
 
+interface AccountRow {
+  id: number;
+  username: string;
+  displayName: string | null;
+  role: "admin" | "master";
+  isActive: boolean;
+  createdAt: string;
+  lastLoginAt: string | null;
+}
+
+interface SessionRow {
+  id: number;
+  username: string;
+  role: "admin" | "master";
+  ip: string | null;
+  userAgent: string | null;
+  createdAt: string;
+  lastSeenAt: string;
+  userId: number | null;
+  isCurrent: boolean;
+}
+
 export function SettingsPage() {
   const [openSections, setOpenSections] = useState<Set<string>>(new Set());
 
@@ -258,6 +280,38 @@ export function SettingsPage() {
     }
   }, []);
 
+  // ========================================================
+  // 4. STATE FOR ACCOUNTS & SESSIONS
+  // ========================================================
+  const [users, setUsers] = useState<AccountRow[]>([]);
+  const [sessions, setSessions] = useState<SessionRow[]>([]);
+  const [newUsername, setNewUsername] = useState("");
+  const [newDisplayName, setNewDisplayName] = useState("");
+  const [newPassword, setNewPassword] = useState("");
+  const [newRole, setNewRole] = useState<"admin" | "master">("admin");
+  const [userError, setUserError] = useState<string | null>(null);
+  const [userBusy, setUserBusy] = useState(false);
+  const [resetForId, setResetForId] = useState<number | null>(null);
+  const [resetPassword, setResetPassword] = useState("");
+
+  const loadUsers = useCallback(async () => {
+    try {
+      const res = await fetch("/api/users");
+      if (res.ok) setUsers(await res.json());
+    } catch {
+      // ignore
+    }
+  }, []);
+
+  const loadSessions = useCallback(async () => {
+    try {
+      const res = await fetch("/api/sessions");
+      if (res.ok) setSessions(await res.json());
+    } catch {
+      // ignore
+    }
+  }, []);
+
   useEffect(() => {
     loadTargets();
     loadAliases();
@@ -269,6 +323,8 @@ export function SettingsPage() {
     loadItemExclusions();
     loadAllOutlets();
     loadAllEmployees();
+    loadUsers();
+    loadSessions();
   }, [
     loadTargets,
     loadAliases,
@@ -280,7 +336,137 @@ export function SettingsPage() {
     loadItemExclusions,
     loadAllOutlets,
     loadAllEmployees,
+    loadUsers,
+    loadSessions,
   ]);
+
+  // Keep the active-session list fresh while the section is open, so a session
+  // that logs in or drops off shows up without a manual refresh.
+  useEffect(() => {
+    if (!openSections.has("akun-sesi")) return;
+    const id = setInterval(loadSessions, 15000);
+    return () => clearInterval(id);
+  }, [openSections, loadSessions]);
+
+  // Account Handlers
+  async function addUser() {
+    setUserError(null);
+    setUserBusy(true);
+    try {
+      const res = await fetch("/api/users", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          username: newUsername.trim(),
+          displayName: newDisplayName.trim() || undefined,
+          password: newPassword,
+          role: newRole,
+        }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        setUserError(data.error || "Gagal membuat akun.");
+        return;
+      }
+      setNewUsername("");
+      setNewDisplayName("");
+      setNewPassword("");
+      setNewRole("admin");
+      await loadUsers();
+    } catch {
+      setUserError("Terjadi kesalahan jaringan.");
+    } finally {
+      setUserBusy(false);
+    }
+  }
+
+  async function changeUserRole(user: AccountRow, role: "admin" | "master") {
+    if (user.role === role) return;
+    setUserError(null);
+    try {
+      const res = await fetch(`/api/users/${user.id}/role`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ role }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) setUserError(data.error || "Gagal mengubah role.");
+    } catch {
+      setUserError("Terjadi kesalahan jaringan.");
+    } finally {
+      await loadUsers();
+      await loadSessions();
+    }
+  }
+
+  async function toggleUserActive(user: AccountRow) {
+    setUserError(null);
+    try {
+      const res = await fetch(`/api/users/${user.id}/active`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ isActive: !user.isActive }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) setUserError(data.error || "Gagal mengubah status akun.");
+    } catch {
+      setUserError("Terjadi kesalahan jaringan.");
+    } finally {
+      await loadUsers();
+      await loadSessions();
+    }
+  }
+
+  async function submitResetPassword(userId: number) {
+    setUserError(null);
+    setUserBusy(true);
+    try {
+      const res = await fetch(`/api/users/${userId}/password`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ password: resetPassword }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        setUserError(data.error || "Gagal mereset kata sandi.");
+        return;
+      }
+      setResetForId(null);
+      setResetPassword("");
+      await loadSessions();
+    } catch {
+      setUserError("Terjadi kesalahan jaringan.");
+    } finally {
+      setUserBusy(false);
+    }
+  }
+
+  async function removeUser(user: AccountRow) {
+    setUserError(null);
+    try {
+      const res = await fetch(`/api/users/${user.id}`, { method: "DELETE" });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) setUserError(data.error || "Gagal menghapus akun.");
+    } catch {
+      setUserError("Terjadi kesalahan jaringan.");
+    } finally {
+      await loadUsers();
+      await loadSessions();
+    }
+  }
+
+  async function kickSession(sessionId: number) {
+    setUserError(null);
+    try {
+      const res = await fetch(`/api/sessions/${sessionId}`, { method: "DELETE" });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) setUserError(data.error || "Gagal mengakhiri sesi.");
+    } catch {
+      setUserError("Terjadi kesalahan jaringan.");
+    } finally {
+      await loadSessions();
+    }
+  }
 
   // Target Handlers
   async function saveTargets() {
@@ -666,6 +852,283 @@ export function SettingsPage() {
         <p className="text-xs text-muted mt-1 leading-relaxed">
           Kelola parameter nominal target penjualan, skema insentif poin staf, dan sembunyikan/tampilkan performa outlet &amp; karyawan secara terpusat.
         </p>
+      </div>
+
+      {/* ── 0. Akun & Sesi Aktif ─────────────────────────────── */}
+      <div className="rounded-xl border border-border/80 bg-surface shadow-xs overflow-hidden">
+        <button type="button" onClick={() => toggleSection("akun-sesi")}
+          className="w-full flex items-center justify-between gap-3 px-5 py-3.5 text-left hover:bg-surface-hover/50 transition-colors">
+          <div className="flex items-center gap-2.5 min-w-0">
+            <span className="w-2.5 h-2.5 rounded-full bg-rose-500 shrink-0" />
+            <span className="text-sm font-bold uppercase tracking-wider text-foreground">Akun &amp; Sesi Aktif</span>
+            <span className="text-[11px] font-mono text-muted bg-surface-subtle border border-border/60 rounded px-2 py-0.5">{users.length} akun</span>
+            {sessions.length > 0 && (
+              <span className="text-[11px] font-mono text-emerald-600 dark:text-emerald-400 bg-emerald-500/10 border border-emerald-500/20 rounded px-2 py-0.5">{sessions.length} sesi</span>
+            )}
+          </div>
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"
+            className={`shrink-0 text-muted transition-transform duration-200 ${openSections.has("akun-sesi") ? "rotate-180" : ""}`}>
+            <polyline points="6 9 12 15 18 9" />
+          </svg>
+        </button>
+        {openSections.has("akun-sesi") && (
+          <div className="px-5 pb-5 pt-4 space-y-5 border-t border-border/60">
+            {userError && (
+              <div className="rounded-lg border border-rose-500/20 bg-rose-500/10 p-2.5 text-xs font-medium text-rose-600 dark:text-rose-400">
+                {userError}
+              </div>
+            )}
+
+            {/* Tambah akun baru */}
+            <div className="rounded-xl bg-surface-subtle/60 border border-border/60 p-4 space-y-3">
+              <h3 className="text-xs font-bold text-foreground uppercase tracking-wider">Tambah Akun Baru</h3>
+              <div className="grid sm:grid-cols-2 gap-3">
+                <div>
+                  <label htmlFor="new-username" className="block text-[11px] font-semibold text-muted mb-1">Username</label>
+                  <input
+                    id="new-username"
+                    value={newUsername}
+                    onChange={(e) => setNewUsername(e.target.value)}
+                    placeholder="mis. andi"
+                    autoCapitalize="none"
+                    spellCheck={false}
+                    className="w-full rounded-lg border border-border/80 bg-surface px-3 py-1.5 text-xs text-foreground focus:outline-none focus:ring-2 focus:ring-accent/20 focus:border-accent transition-all"
+                  />
+                </div>
+                <div>
+                  <label htmlFor="new-display" className="block text-[11px] font-semibold text-muted mb-1">Nama Tampilan (opsional)</label>
+                  <input
+                    id="new-display"
+                    value={newDisplayName}
+                    onChange={(e) => setNewDisplayName(e.target.value)}
+                    placeholder="mis. Andi Pratama"
+                    className="w-full rounded-lg border border-border/80 bg-surface px-3 py-1.5 text-xs text-foreground focus:outline-none focus:ring-2 focus:ring-accent/20 focus:border-accent transition-all"
+                  />
+                </div>
+                <div>
+                  <label htmlFor="new-password" className="block text-[11px] font-semibold text-muted mb-1">Kata Sandi</label>
+                  <input
+                    id="new-password"
+                    type="password"
+                    value={newPassword}
+                    onChange={(e) => setNewPassword(e.target.value)}
+                    placeholder="Min. 10 karakter, huruf + angka"
+                    autoComplete="new-password"
+                    className="w-full rounded-lg border border-border/80 bg-surface px-3 py-1.5 text-xs text-foreground focus:outline-none focus:ring-2 focus:ring-accent/20 focus:border-accent transition-all"
+                  />
+                </div>
+                <div>
+                  <label htmlFor="new-role" className="block text-[11px] font-semibold text-muted mb-1">Role</label>
+                  <select
+                    id="new-role"
+                    value={newRole}
+                    onChange={(e) => setNewRole(e.target.value as "admin" | "master")}
+                    className="w-full rounded-lg border border-border/80 bg-surface px-3 py-1.5 text-xs text-foreground focus:outline-none focus:ring-2 focus:ring-accent/20 focus:border-accent transition-all"
+                  >
+                    <option value="admin">Admin — akses data, tanpa pengaturan</option>
+                    <option value="master">Master — akses penuh</option>
+                  </select>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={addUser}
+                disabled={userBusy || !newUsername.trim() || !newPassword}
+                className="inline-flex items-center gap-1.5 rounded-lg bg-accent text-accent-foreground px-4 py-2 text-xs font-semibold hover:bg-accent-hover disabled:opacity-50 transition-all shadow-xs"
+              >
+                {userBusy ? "Menyimpan..." : "Buat Akun"}
+              </button>
+            </div>
+
+            {/* Daftar akun */}
+            <div className="space-y-2">
+              <h3 className="text-xs font-bold text-foreground uppercase tracking-wider">Daftar Akun</h3>
+              <div className="overflow-x-auto rounded-lg border border-border/60">
+                <table className="w-full text-xs">
+                  <thead>
+                    <tr className="border-b border-border/60 bg-surface-subtle/60">
+                      <th className="px-4 py-2.5 font-semibold text-[11px] uppercase text-left text-muted">Akun</th>
+                      <th className="px-4 py-2.5 font-semibold text-[11px] uppercase text-center text-muted w-44">Role</th>
+                      <th className="px-4 py-2.5 font-semibold text-[11px] uppercase text-center text-muted w-28">Status</th>
+                      <th className="px-4 py-2.5 font-semibold text-[11px] uppercase text-center text-muted w-56">Aksi</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-border/40">
+                    {users.length === 0 && (
+                      <tr>
+                        <td colSpan={4} className="px-4 py-6 text-center text-muted">Belum ada akun tersimpan.</td>
+                      </tr>
+                    )}
+                    {users.map((u) => (
+                      <tr key={u.id} className="hover:bg-surface-hover/30 transition-colors align-middle">
+                        <td className="px-4 py-2.5">
+                          <div className="font-semibold text-foreground">{u.username}</div>
+                          {u.displayName && <div className="text-[11px] text-muted">{u.displayName}</div>}
+                          <div className="text-[11px] text-faint font-mono mt-0.5">
+                            {u.lastLoginAt ? `Login terakhir ${new Date(u.lastLoginAt).toLocaleString("id-ID")}` : "Belum pernah login"}
+                          </div>
+                        </td>
+                        <td className="px-4 py-2 text-center">
+                          <div className="inline-flex rounded-lg border border-border/70 overflow-hidden">
+                            <button
+                              type="button"
+                              onClick={() => changeUserRole(u, "admin")}
+                              className={`px-2.5 py-1 text-[11px] font-semibold transition-colors ${
+                                u.role === "admin" ? "bg-sky-500 text-white" : "bg-surface text-muted hover:bg-surface-hover"
+                              }`}
+                            >
+                              Admin
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => changeUserRole(u, "master")}
+                              className={`px-2.5 py-1 text-[11px] font-semibold transition-colors border-l border-border/70 ${
+                                u.role === "master" ? "bg-amber-500 text-white" : "bg-surface text-muted hover:bg-surface-hover"
+                              }`}
+                            >
+                              Master
+                            </button>
+                          </div>
+                        </td>
+                        <td className="px-4 py-2 text-center">
+                          <span className={`text-[10px] font-bold tracking-wider px-2 py-0.5 rounded-full border ${
+                            u.isActive
+                              ? "text-emerald-600 dark:text-emerald-400 bg-emerald-500/10 border-emerald-500/30"
+                              : "text-rose-600 dark:text-rose-400 bg-rose-500/10 border-rose-500/30"
+                          }`}>
+                            {u.isActive ? "AKTIF" : "NONAKTIF"}
+                          </span>
+                        </td>
+                        <td className="px-4 py-2">
+                          <div className="flex items-center justify-center gap-1.5 flex-wrap">
+                            <button
+                              type="button"
+                              onClick={() => { setResetForId(resetForId === u.id ? null : u.id); setResetPassword(""); }}
+                              className="rounded-md border border-border/70 bg-surface px-2 py-1 text-[11px] font-semibold text-muted hover:text-foreground hover:bg-surface-hover transition-colors"
+                            >
+                              Reset Sandi
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => toggleUserActive(u)}
+                              className="rounded-md border border-border/70 bg-surface px-2 py-1 text-[11px] font-semibold text-muted hover:text-foreground hover:bg-surface-hover transition-colors"
+                            >
+                              {u.isActive ? "Nonaktifkan" : "Aktifkan"}
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => removeUser(u)}
+                              className="rounded-md border border-rose-500/30 bg-rose-500/10 px-2 py-1 text-[11px] font-semibold text-rose-600 dark:text-rose-400 hover:bg-rose-500/20 transition-colors"
+                            >
+                              Hapus
+                            </button>
+                          </div>
+                          {resetForId === u.id && (
+                            <div className="flex items-center gap-1.5 mt-2 justify-center">
+                              <input
+                                type="password"
+                                value={resetPassword}
+                                onChange={(e) => setResetPassword(e.target.value)}
+                                placeholder="Sandi baru"
+                                autoComplete="new-password"
+                                className="rounded-md border border-border/80 bg-surface px-2 py-1 text-[11px] text-foreground w-36 focus:outline-none focus:ring-2 focus:ring-accent/20"
+                              />
+                              <button
+                                type="button"
+                                onClick={() => submitResetPassword(u.id)}
+                                disabled={userBusy || !resetPassword}
+                                className="rounded-md bg-accent text-accent-foreground px-2 py-1 text-[11px] font-semibold disabled:opacity-50"
+                              >
+                                Simpan
+                              </button>
+                            </div>
+                          )}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+              <p className="text-[11px] text-muted leading-relaxed">
+                Mengubah role, menonaktifkan akun, atau mereset kata sandi akan otomatis mengakhiri semua sesi login akun tersebut.
+              </p>
+            </div>
+
+            {/* Sesi aktif */}
+            <div className="space-y-2">
+              <div className="flex items-center justify-between gap-3">
+                <h3 className="text-xs font-bold text-foreground uppercase tracking-wider">Sesi Login Aktif</h3>
+                <button
+                  type="button"
+                  onClick={loadSessions}
+                  className="rounded-md border border-border/70 bg-surface px-2 py-1 text-[11px] font-semibold text-muted hover:text-foreground hover:bg-surface-hover transition-colors"
+                >
+                  Muat Ulang
+                </button>
+              </div>
+              <div className="overflow-x-auto rounded-lg border border-border/60">
+                <table className="w-full text-xs">
+                  <thead>
+                    <tr className="border-b border-border/60 bg-surface-subtle/60">
+                      <th className="px-4 py-2.5 font-semibold text-[11px] uppercase text-left text-muted">Pengguna</th>
+                      <th className="px-4 py-2.5 font-semibold text-[11px] uppercase text-left text-muted">IP</th>
+                      <th className="px-4 py-2.5 font-semibold text-[11px] uppercase text-left text-muted">Aktivitas Terakhir</th>
+                      <th className="px-4 py-2.5 font-semibold text-[11px] uppercase text-center text-muted w-28">Aksi</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-border/40">
+                    {sessions.length === 0 && (
+                      <tr>
+                        <td colSpan={4} className="px-4 py-6 text-center text-muted">Tidak ada sesi aktif.</td>
+                      </tr>
+                    )}
+                    {sessions.map((s) => (
+                      <tr key={s.id} className="hover:bg-surface-hover/30 transition-colors">
+                        <td className="px-4 py-2.5">
+                          <div className="flex items-center gap-2">
+                            <span className="font-semibold text-foreground">{s.username}</span>
+                            <span className={`text-[9px] font-bold tracking-wider px-1.5 py-0.5 rounded border ${
+                              s.role === "master"
+                                ? "text-amber-600 dark:text-amber-400 bg-amber-500/10 border-amber-500/30"
+                                : "text-sky-600 dark:text-sky-400 bg-sky-500/10 border-sky-500/30"
+                            }`}>
+                              {s.role.toUpperCase()}
+                            </span>
+                            {s.isCurrent && (
+                              <span className="text-[9px] font-bold tracking-wider px-1.5 py-0.5 rounded border text-emerald-600 dark:text-emerald-400 bg-emerald-500/10 border-emerald-500/30">
+                                SESI INI
+                              </span>
+                            )}
+                          </div>
+                          {s.userAgent && (
+                            <div className="text-[10px] text-faint mt-0.5 truncate max-w-xs" title={s.userAgent}>{s.userAgent}</div>
+                          )}
+                        </td>
+                        <td className="px-4 py-2.5 font-mono text-[11px] text-muted">{s.ip ?? "—"}</td>
+                        <td className="px-4 py-2.5 text-[11px] text-muted">
+                          {new Date(s.lastSeenAt).toLocaleString("id-ID")}
+                        </td>
+                        <td className="px-4 py-2 text-center">
+                          {s.isCurrent ? (
+                            <span className="text-[11px] text-faint">—</span>
+                          ) : (
+                            <button
+                              type="button"
+                              onClick={() => kickSession(s.id)}
+                              className="rounded-md border border-rose-500/30 bg-rose-500/10 px-2.5 py-1 text-[11px] font-semibold text-rose-600 dark:text-rose-400 hover:bg-rose-500/20 transition-colors"
+                            >
+                              Kick
+                            </button>
+                          )}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          </div>
+        )}
       </div>
 
       {/* ── 1. Nominal Target Harian — Bandung ───────────────────── */}

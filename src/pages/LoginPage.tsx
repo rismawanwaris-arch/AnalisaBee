@@ -5,6 +5,7 @@ import { ThemeToggle } from "../components/ThemeToggle";
 
 export function LoginPage() {
   const { authenticated, checkAuth } = useAuth();
+  const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
@@ -30,7 +31,7 @@ export function LoginPage() {
         const res = await fetch("/api/auth/login", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ password }),
+          body: JSON.stringify({ username: username.trim(), password }),
         });
         const data = await res.json();
         if (!res.ok) {
@@ -77,14 +78,34 @@ export function LoginPage() {
               Analisa<span className="text-accent">BEe</span>
             </h1>
             <p className="text-xs text-muted leading-relaxed">
-              Platform intelijen dan analisis penjualan ritel multi-outlet. Masukkan kata sandi untuk melanjutkan.
+              Platform intelijen dan analisis penjualan ritel multi-outlet. Masuk dengan akun Anda untuk melanjutkan.
             </p>
           </div>
 
           <form onSubmit={handleSubmit} className="space-y-4">
             <div>
+              <label htmlFor="username" className="block text-xs font-semibold text-foreground mb-1.5">
+                Username
+              </label>
+              <input
+                id="username"
+                name="username"
+                type="text"
+                value={username}
+                onChange={(e) => setUsername(e.target.value)}
+                placeholder="master"
+                autoFocus
+                required
+                autoComplete="username"
+                autoCapitalize="none"
+                spellCheck={false}
+                className="w-full rounded-xl border border-border/80 bg-surface-subtle px-3.5 py-2.5 text-sm text-foreground placeholder:text-muted/60 focus:outline-none focus:ring-2 focus:ring-accent/25 focus:border-accent transition-all"
+              />
+            </div>
+
+            <div>
               <label htmlFor="password" className="block text-xs font-semibold text-foreground mb-1.5">
-                Kata Sandi Aplikasi
+                Kata Sandi
               </label>
               <input
                 id="password"
@@ -93,8 +114,8 @@ export function LoginPage() {
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
                 placeholder="Masukkan password..."
-                autoFocus
                 required
+                autoComplete="current-password"
                 className="w-full rounded-xl border border-border/80 bg-surface-subtle px-3.5 py-2.5 text-sm text-foreground placeholder:text-muted/60 focus:outline-none focus:ring-2 focus:ring-accent/25 focus:border-accent transition-all"
               />
             </div>

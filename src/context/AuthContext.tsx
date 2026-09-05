@@ -1,10 +1,12 @@
-import React, { createContext, useContext, useEffect, useState } from "react";
+import React, { createContext, useCallback, useContext, useEffect, useRef, useState } from "react";
 
 export type UserRole = "admin" | "master" | null;
 
 interface AuthContextType {
   authenticated: boolean | null; // null = checking
   role: UserRole;
+  username: string | null;
+  userId: number | null;
   checkAuth: () => Promise<boolean>;
   logout: () => Promise<void>;
 }
@@ -12,15 +14,31 @@ interface AuthContextType {
 const AuthContext = createContext<AuthContextType>({
   authenticated: null,
   role: null,
+  username: null,
+  userId: null,
   checkAuth: async () => false,
   logout: async () => {},
 });
 
+// How often to re-check the session while the tab is open. A session revoked
+// by a master should drop the browser out of the app without waiting for the
+// user to happen to trigger an API call.
+const REVALIDATE_INTERVAL_MS = 60_000;
+
 export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [authenticated, setAuthenticated] = useState<boolean | null>(null);
   const [role, setRole] = useState<UserRole>(null);
+  const [username, setUsername] = useState<string | null>(null);
+  const [userId, setUserId] = useState<number | null>(null);
 
-  const checkAuth = async (retries = 3): Promise<boolean> => {
+  const clearSession = useCallback(() => {
+    setAuthenticated(false);
+    setRole(null);
+    setUsername(null);
+    setUserId(null);
+  }, []);
+
+  const checkAuth = useCallback(async (retries = 3): Promise<boolean> => {
     for (let attempt = 0; attempt <= retries; attempt++) {
       try {
         const res = await fetch("/api/auth/me");
@@ -29,11 +47,11 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           const authed = data.authenticated === true;
           setAuthenticated(authed);
           setRole(authed ? (data.role as UserRole) : null);
+          setUsername(authed ? (data.username ?? null) : null);
+          setUserId(authed ? (data.userId ?? null) : null);
           return authed;
         }
-        // 4xx = server up but auth failed — no retry needed
-        setAuthenticated(false);
-        setRole(null);
+        clearSession();
         return false;
       } catch {
         // Network error = server probably still starting up, retry
@@ -42,26 +60,63 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         }
       }
     }
-    setAuthenticated(false);
-    setRole(null);
+    clearSession();
     return false;
-  };
+  }, [clearSession]);
 
-  const logout = async () => {
+  const logout = useCallback(async () => {
     try {
       await fetch("/api/auth/logout", { method: "POST" });
     } finally {
-      setAuthenticated(false);
-      setRole(null);
+      clearSession();
     }
-  };
+  }, [clearSession]);
+
+  // Keep the latest clearSession in a ref so the fetch patch below can be
+  // installed once without going stale.
+  const clearSessionRef = useRef(clearSession);
+  clearSessionRef.current = clearSession;
+
+  // A revoked session keeps a valid-looking cookie, so the only signal the
+  // browser gets is a 401 on the next API call. Catch it in one place instead
+  // of at every call site.
+  useEffect(() => {
+    const originalFetch = window.fetch;
+    window.fetch = async (...args: Parameters<typeof window.fetch>) => {
+      const response = await originalFetch(...args);
+      if (response.status === 401) {
+        const url = typeof args[0] === "string" ? args[0] : (args[0] as Request).url ?? "";
+        // A rejected login attempt is also a 401 — that one is not a lost session.
+        if (url.includes("/api/") && !url.includes("/api/auth/login")) {
+          clearSessionRef.current();
+        }
+      }
+      return response;
+    };
+    return () => {
+      window.fetch = originalFetch;
+    };
+  }, []);
 
   useEffect(() => {
     checkAuth();
-  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [checkAuth]);
+
+  useEffect(() => {
+    if (authenticated !== true) return;
+    const id = setInterval(() => {
+      fetch("/api/auth/me")
+        .then((r) => (r.ok ? r.json() : null))
+        .then((data) => {
+          if (data && data.authenticated !== true) clearSession();
+        })
+        .catch(() => {});
+    }, REVALIDATE_INTERVAL_MS);
+    return () => clearInterval(id);
+  }, [authenticated, clearSession]);
 
   return (
-    <AuthContext.Provider value={{ authenticated, role, checkAuth, logout }}>
+    <AuthContext.Provider value={{ authenticated, role, username, userId, checkAuth, logout }}>
       {children}
     </AuthContext.Provider>
   );
