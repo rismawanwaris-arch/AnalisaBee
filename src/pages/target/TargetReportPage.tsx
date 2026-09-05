@@ -167,6 +167,7 @@ export function TargetReportPage({ branch = "BANDUNG" }: { branch?: "BANDUNG" | 
   function exportExcel() {
     if (!data || !totals) return;
     const header = [
+      "No",
       "Outlet",
       "Server (Sales)",
       "Server (Trx)",
@@ -181,7 +182,8 @@ export function TargetReportPage({ branch = "BANDUNG" }: { branch?: "BANDUNG" | 
       "Total Sales",
       "Total Qty/Trx",
     ];
-    const rows = sortedRows.map((r) => [
+    const rows = sortedRows.map((r, idx) => [
+      idx + 1,
       r.outlet,
       r.server.sales,
       r.server.qtyOrTrx,
@@ -197,6 +199,7 @@ export function TargetReportPage({ branch = "BANDUNG" }: { branch?: "BANDUNG" | 
       r.totalQtyTrx,
     ]);
     const totalRow = [
+      "",
       "TOTAL",
       totals.server.sales,
       totals.server.trx,
@@ -212,6 +215,7 @@ export function TargetReportPage({ branch = "BANDUNG" }: { branch?: "BANDUNG" | 
       totals.totalQtyTrx,
     ];
     const targetAllRow = [
+      "",
       "TARGET ALL",
       data.targets.all.SERVER,
       "",
@@ -229,6 +233,7 @@ export function TargetReportPage({ branch = "BANDUNG" }: { branch?: "BANDUNG" | 
     const capPct = (actual: number, target: number) =>
       target > 0 ? `${((actual / target) * 100).toFixed(1)}%` : "-";
     const capRow = [
+      "",
       "CAPAIAN (%)",
       capPct(totals.server.sales, data.targets.all.SERVER),
       "",
@@ -384,6 +389,12 @@ export function TargetReportPage({ branch = "BANDUNG" }: { branch?: "BANDUNG" | 
                   <tr className="bg-surface-subtle/80 text-foreground border-b border-border/80">
                     <th
                       rowSpan={2}
+                      className="px-2 py-2 text-center font-bold border-r border-border/60 w-10"
+                    >
+                      No
+                    </th>
+                    <th
+                      rowSpan={2}
                       onClick={() => toggleSort("outlet")}
                       className="px-3 py-2 text-left font-bold cursor-pointer hover:bg-surface-hover/80 select-none border-r border-border/60"
                     >
@@ -424,7 +435,7 @@ export function TargetReportPage({ branch = "BANDUNG" }: { branch?: "BANDUNG" | 
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-border/60 font-mono text-[11px]">
-                  {sortedRows.map((r) => {
+                  {sortedRows.map((r, idx) => {
                     const serverGood = passFail(r.server.sales, data.targets.perkonter.SERVER) === "good";
                     const tartunGood = passFail(r.tartun.sales, data.targets.perkonter.TARTUN) === "good";
                     const petshopGood = passFail(r.petshop.sales, data.targets.perkonter.PETSHOP) === "good";
@@ -433,6 +444,9 @@ export function TargetReportPage({ branch = "BANDUNG" }: { branch?: "BANDUNG" | 
 
                     return (
                       <tr key={r.outletId} className="hover:bg-surface-hover/70 transition-colors">
+                        <td className="px-2 py-1.5 text-center text-muted border-r border-border/60">
+                          {idx + 1}
+                        </td>
                         <td className="px-3 py-1.5 font-sans font-medium text-foreground border-r border-border/60 truncate max-w-44">
                           {r.outlet}
                         </td>
@@ -464,7 +478,7 @@ export function TargetReportPage({ branch = "BANDUNG" }: { branch?: "BANDUNG" | 
                 </tbody>
                 <tfoot className="border-t-2 border-border font-mono text-[11px] font-bold">
                   <tr className="bg-surface-subtle text-foreground">
-                    <td className="px-3 py-2 font-sans border-r border-border/60">TOTAL REALISASI</td>
+                    <td className="px-3 py-2 font-sans border-r border-border/60" colSpan={2}>TOTAL REALISASI</td>
                     <td className="px-2 py-2 text-right">{formatNumber(totals.server.sales)}</td>
                     <td className="px-2 py-2 text-right border-r border-border/60">{formatNumber(totals.server.trx)}</td>
                     <td className="px-2 py-2 text-right">{formatNumber(totals.tartun.sales)}</td>
@@ -479,7 +493,7 @@ export function TargetReportPage({ branch = "BANDUNG" }: { branch?: "BANDUNG" | 
                     <td className="px-2 py-2 text-right">{formatNumber(totals.totalQtyTrx)}</td>
                   </tr>
                   <tr className="bg-surface-subtle/50 text-muted">
-                    <td className="px-3 py-1.5 font-sans border-r border-border/60">TARGET ALL</td>
+                    <td className="px-3 py-1.5 font-sans border-r border-border/60" colSpan={2}>TARGET ALL</td>
                     <td className="px-2 py-1.5 text-right">{formatNumber(data.targets.all.SERVER)}</td>
                     <td className="px-2 py-1.5 text-right border-r border-border/60">-</td>
                     <td className="px-2 py-1.5 text-right">{formatNumber(data.targets.all.TARTUN)}</td>
@@ -493,7 +507,7 @@ export function TargetReportPage({ branch = "BANDUNG" }: { branch?: "BANDUNG" | 
                     <td className="px-2 py-1.5 text-right font-bold text-foreground" colSpan={2}>{formatNumber(totalTargetAll)}</td>
                   </tr>
                   <tr className="bg-surface-subtle/70 text-foreground">
-                    <td className="px-3 py-1.5 font-sans border-r border-border/60">CAPAIAN (%)</td>
+                    <td className="px-3 py-1.5 font-sans border-r border-border/60" colSpan={2}>CAPAIAN (%)</td>
                     <td className="px-2 py-1.5 text-right text-accent">{data.targets.all.SERVER > 0 ? `${((totals.server.sales / data.targets.all.SERVER) * 100).toFixed(1)}%` : "-"}</td>
                     <td className="px-2 py-1.5 text-right border-r border-border/60">-</td>
                     <td className="px-2 py-1.5 text-right text-accent">{data.targets.all.TARTUN > 0 ? `${((totals.tartun.sales / data.targets.all.TARTUN) * 100).toFixed(1)}%` : "-"}</td>
