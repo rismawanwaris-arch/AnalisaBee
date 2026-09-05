@@ -105,6 +105,7 @@ function DailyHistoryTable({
   const [deletingDate, setDeletingDate] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [deleteError, setDeleteError] = useState<string | null>(null);
+  const visibleRows = rows.slice(0, 10);
 
   async function confirmDelete(tanggal: string) {
     setBusy(true);
@@ -151,7 +152,7 @@ function DailyHistoryTable({
               </tr>
             </thead>
             <tbody className="divide-y divide-border/60">
-              {rows.map((r) => (
+              {visibleRows.map((r) => (
                 <tr key={r.tanggal} className="hover:bg-surface-hover/60 transition-colors">
                   <td className="px-3 py-2 font-mono font-medium text-foreground">
                     {r.tanggal}
@@ -208,6 +209,11 @@ function DailyHistoryTable({
               ))}
             </tbody>
           </table>
+          {rows.length > visibleRows.length && (
+            <div className="px-3 py-2 text-[11px] text-muted text-center border-t border-border/60 bg-surface-subtle/40">
+              Menampilkan 10 tanggal terbaru dari {rows.length}.
+            </div>
+          )}
         </div>
       )}
     </div>

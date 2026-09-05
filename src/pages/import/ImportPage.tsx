@@ -44,6 +44,7 @@ export function ImportPage() {
   const [deleteBusy, setDeleteBusy] = useState(false);
   const [deleteError, setDeleteError] = useState<string | null>(null);
   const inputRef = useRef<HTMLInputElement>(null);
+  const visibleHistory = history.slice(0, 10);
 
   const loadHistory = useCallback(async () => {
     try {
@@ -291,7 +292,7 @@ export function ImportPage() {
                   </td>
                 </tr>
               )}
-              {history.map((h) => (
+              {visibleHistory.map((h) => (
                 <tr key={h.id} className="hover:bg-surface-hover/70 transition-colors">
                   <td className="px-4 py-2.5 font-mono whitespace-nowrap text-muted">{formatDate(h.uploadedAt)}</td>
                   <td className="px-4 py-2.5 font-medium text-foreground">{h.filename}</td>
@@ -322,6 +323,11 @@ export function ImportPage() {
               ))}
             </tbody>
           </table>
+          {history.length > visibleHistory.length && (
+            <div className="px-4 py-2 text-[11px] text-muted text-center border-t border-border/60 bg-surface-subtle/40">
+              Menampilkan 10 batch terbaru dari {history.length}.
+            </div>
+          )}
         </div>
       </div>
 
