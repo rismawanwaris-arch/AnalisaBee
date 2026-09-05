@@ -72,6 +72,7 @@ export function ItemPicker({ selected, onSelect, placeholder }: ItemPickerProps)
               onSelect(null);
               setOptions([]);
             }}
+            aria-label="Hapus pilihan item"
             className="absolute right-2.5 top-1/2 -translate-y-1/2 text-muted hover:text-foreground text-xs"
           >
             ✕

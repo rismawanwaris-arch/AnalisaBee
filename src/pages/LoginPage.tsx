@@ -10,7 +10,8 @@ export function LoginPage() {
   const [loading, setLoading] = useState(false);
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
-  const from = searchParams.get("from") || "/dashboard";
+  const rawFrom = searchParams.get("from") ?? "";
+  const from = /^\/(?!\/)/.test(rawFrom) ? rawFrom : "/dashboard";
 
   if (authenticated === true) {
     return <Navigate to={from} replace />;

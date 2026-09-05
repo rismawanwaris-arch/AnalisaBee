@@ -47,10 +47,12 @@ export function DashboardPage() {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    fetch("/api/outlets")
+    const ctrl = new AbortController();
+    fetch("/api/outlets", { signal: ctrl.signal })
       .then((r) => (r.ok ? r.json() : []))
       .then((list: OutletOption[]) => setOutlets(list))
       .catch(() => {});
+    return () => ctrl.abort();
   }, []);
 
   const load = useCallback(async () => {

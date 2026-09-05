@@ -1,9 +1,9 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Link } from "react-router-dom";
 import { formatNumber, formatRupiah } from "@/lib/format";
 import { SortableTable, type Column } from "@/components/SortableTable";
 import { todayStr } from "@/lib/dateDefaults";
-import { useMonthPeriod } from "@/lib/useMonthPeriod";
+import { usePeriod } from "@/context/PeriodContext";
 
 interface ItemRow {
   itemId: number;
@@ -70,19 +70,21 @@ const COLUMNS: Column<ItemRow>[] = [
 ];
 
 export function ItemsByCategoryPage() {
-  const { currentPeriod, loaded: periodLoaded } = useMonthPeriod();
+  const { currentPeriod, loaded: periodLoaded } = usePeriod();
   const [rows, setRows] = useState<ItemRow[]>([]);
   const [loading, setLoading] = useState(true);
 
   const [from, setFrom] = useState("");
   const [to, setTo] = useState("");
 
+  const periodInitialised = useRef(false);
   useEffect(() => {
-    if (periodLoaded && !from && !to) {
+    if (periodLoaded && !periodInitialised.current) {
+      periodInitialised.current = true;
       setFrom(currentPeriod.from);
       setTo(currentPeriod.to);
     }
-  }, [periodLoaded]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [periodLoaded, currentPeriod.from, currentPeriod.to]);
   const [categorySearch, setCategorySearch] = useState("");
   const [itemSearch, setItemSearch] = useState("");
   const [groupMode, setGroupMode] = useState(false);

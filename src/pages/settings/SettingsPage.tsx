@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { formatNumber, formatRupiah } from "@/lib/format";
 
 type BusinessLine = "SERVER" | "TARTUN" | "PETSHOP" | "AKSESORIS" | "SP_VOUCHER";
@@ -218,14 +218,18 @@ export function SettingsPage() {
       if (res.ok) {
         const data = await res.json();
         setAllOutlets(data);
-        if (data.length > 0 && !aliasTo) {
-          setAliasTo(String(data[0].id));
-        }
       }
     } catch {
       // ignore
     }
-  }, [aliasTo]);
+  }, []);
+
+  // Set aliasTo default after outlets load — separate from loadAllOutlets to avoid rebuild loop
+  useEffect(() => {
+    if (allOutlets.length > 0 && !aliasTo) {
+      setAliasTo(String(allOutlets[0].id));
+    }
+  }, [allOutlets, aliasTo]);
 
   const loadAllEmployees = useCallback(async () => {
     try {
@@ -412,8 +416,9 @@ export function SettingsPage() {
     }
   }
 
-  const excludableEmployees = allEmployees.filter(
-    (e) => !excluded.some((x) => x.employeeId === e.id)
+  const excludableEmployees = useMemo(
+    () => allEmployees.filter((e) => !excluded.some((x) => x.employeeId === e.id)),
+    [allEmployees, excluded]
   );
 
   async function addItemRule() {
@@ -579,15 +584,23 @@ export function SettingsPage() {
     }
   }
 
-  const filteredOutlets = allOutlets.filter((o) =>
-    o.name.toLowerCase().includes(outletFilter.toLowerCase().trim())
+  const filteredOutlets = useMemo(
+    () => allOutlets.filter((o) => o.name.toLowerCase().includes(outletFilter.toLowerCase().trim())),
+    [allOutlets, outletFilter]
   );
-  const hiddenOutletCount = allOutlets.filter((o) => o.isHidden).length;
+  const hiddenOutletCount = useMemo(
+    () => allOutlets.filter((o) => o.isHidden).length,
+    [allOutlets]
+  );
 
-  const filteredEmployees = allEmployees.filter((e) =>
-    e.name.toLowerCase().includes(employeeFilter.toLowerCase().trim())
+  const filteredEmployees = useMemo(
+    () => allEmployees.filter((e) => e.name.toLowerCase().includes(employeeFilter.toLowerCase().trim())),
+    [allEmployees, employeeFilter]
   );
-  const hiddenEmployeeCount = allEmployees.filter((e) => e.isHidden).length;
+  const hiddenEmployeeCount = useMemo(
+    () => allEmployees.filter((e) => e.isHidden).length,
+    [allEmployees]
+  );
 
   return (
     <div className="space-y-3">

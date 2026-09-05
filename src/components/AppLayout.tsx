@@ -11,14 +11,13 @@ export function AppLayout() {
   const [status, setStatus] = useState<SystemStatus | null>(null);
 
   useEffect(() => {
-    if (authenticated) {
-      fetch("/api/status")
-        .then((r) => (r.ok ? r.json() : null))
-        .then((data) => {
-          if (data) setStatus(data);
-        })
-        .catch(() => {});
-    }
+    if (!authenticated) return;
+    const ctrl = new AbortController();
+    fetch("/api/status", { signal: ctrl.signal })
+      .then((r) => (r.ok ? r.json() : null))
+      .then((data) => { if (data) setStatus(data); })
+      .catch(() => {});
+    return () => ctrl.abort();
   }, [authenticated]);
 
   if (authenticated === null) {

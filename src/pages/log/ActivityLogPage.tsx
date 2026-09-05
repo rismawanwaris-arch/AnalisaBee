@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from "react";
+import { useEffect, useState } from "react";
 
 interface LogEntry {
   id: number;
@@ -48,27 +48,22 @@ export function ActivityLogPage() {
   const [page, setPage] = useState(0);
   const PAGE_SIZE = 50;
 
-  const loadLogs = useCallback(async () => {
+  useEffect(() => {
+    const ctrl = new AbortController();
     setLoading(true);
-    try {
-      const params = new URLSearchParams({ limit: String(PAGE_SIZE), offset: String(page * PAGE_SIZE) });
-      if (roleFilter) params.set("role", roleFilter);
-      if (fromFilter) params.set("from", fromFilter);
-      if (toFilter) params.set("to", toFilter);
-      const res = await fetch(`/api/activity-log?${params}`);
-      if (res.ok) {
-        const data = await res.json();
-        setLogs(data.logs);
-        setTotal(data.total);
-      }
-    } catch {
-      // ignore
-    } finally {
-      setLoading(false);
-    }
+    const params = new URLSearchParams({ limit: String(PAGE_SIZE), offset: String(page * PAGE_SIZE) });
+    if (roleFilter) params.set("role", roleFilter);
+    if (fromFilter) params.set("from", fromFilter);
+    if (toFilter) params.set("to", toFilter);
+    fetch(`/api/activity-log?${params}`, { signal: ctrl.signal })
+      .then((r) => (r.ok ? r.json() : null))
+      .then((data) => {
+        if (data) { setLogs(data.logs); setTotal(data.total); }
+      })
+      .catch(() => {})
+      .finally(() => setLoading(false));
+    return () => ctrl.abort();
   }, [roleFilter, fromFilter, toFilter, page]);
-
-  useEffect(() => { loadLogs(); }, [loadLogs]);
 
   const totalPages = Math.ceil(total / PAGE_SIZE);
 

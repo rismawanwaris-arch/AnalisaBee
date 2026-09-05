@@ -1,6 +1,7 @@
 import { lazy, Suspense } from "react";
 import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
 import { AuthProvider } from "./context/AuthContext";
+import { PeriodProvider } from "./context/PeriodContext";
 import { ThemeProvider } from "./context/ThemeContext";
 import { AppLayout } from "./components/AppLayout";
 import { LoginPage } from "./pages/LoginPage";
@@ -36,6 +37,7 @@ export function App() {
   return (
     <ThemeProvider>
       <AuthProvider>
+        <PeriodProvider>
         <BrowserRouter>
           <Suspense fallback={<PageLoader />}>
             <Routes>
@@ -83,6 +85,7 @@ export function App() {
             </Routes>
           </Suspense>
         </BrowserRouter>
+        </PeriodProvider>
       </AuthProvider>
     </ThemeProvider>
   );
