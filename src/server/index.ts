@@ -26,6 +26,7 @@ import {
   createUser,
   updateUserRole,
   updateUserActive,
+  updateUserCustomRole,
   resetUserPassword,
   changeOwnPassword,
   deleteUser,
@@ -33,6 +34,15 @@ import {
   ensureAuthBootstrap,
   UserError,
 } from "../lib/queries/users";
+import {
+  listCustomRoles,
+  createCustomRole,
+  updateCustomRole,
+  deleteCustomRole,
+  RoleError,
+} from "../lib/queries/roles";
+import { resolveUserPermissions, hasFeature } from "../lib/permissions";
+import { type FeatureKey } from "../lib/features";
 
 // Extend Express request type to carry the authenticated session
 declare global {
@@ -177,6 +187,28 @@ async function requireMaster(req: express.Request, res: express.Response, next: 
   next();
 }
 
+// Gates a feature-area route for custom roles. `key` can be a fixed feature
+// or a function of the request (e.g. reading `?branch=` to tell the Bandung
+// and Cimahi target report apart, since both hit the same route).
+function requireFeature(key: FeatureKey | ((req: express.Request) => FeatureKey)) {
+  return async (req: express.Request, res: express.Response, next: express.NextFunction) => {
+    const session = await verifySessionToken(req.cookies[COOKIE_NAME]);
+    if (!session) {
+      res.clearCookie(COOKIE_NAME, { path: "/" });
+      return res.status(401).json({ error: "Belum login." });
+    }
+    req.session = session;
+    req.userRole = session.role;
+
+    const perms = await resolveUserPermissions(session);
+    const featureKey = typeof key === "function" ? key(req) : key;
+    if (!hasFeature(perms, featureKey)) {
+      return res.status(403).json({ error: "Akun Anda tidak memiliki akses ke fitur ini." });
+    }
+    next();
+  };
+}
+
 function clientIp(req: express.Request): string | null {
   const forwarded = req.headers["x-forwarded-for"];
   if (typeof forwarded === "string" && forwarded.length > 0) {
@@ -304,11 +336,13 @@ app.get("/api/auth/me", async (req, res) => {
   if (!session) {
     return res.json({ authenticated: false, role: null, username: null });
   }
+  const perms = await resolveUserPermissions(session);
   return res.json({
     authenticated: true,
     role: session.role,
     username: session.username,
     userId: session.userId,
+    permissions: perms === "all" ? "all" : [...perms],
   });
 });
 
@@ -352,12 +386,26 @@ app.post("/api/users", requireMaster, async (req, res) => {
       password: req.body?.password,
       role: req.body?.role,
       displayName: req.body?.displayName,
+      roleId: req.body?.roleId,
     });
     await logActivity(req, "BUAT_AKUN", `${user.username} (${user.role})`);
     return res.status(201).json(user);
   } catch (err) {
     if (err instanceof UserError) return res.status(err.status).json({ error: err.message });
     return sendError(res, 500, err, "Gagal membuat akun.");
+  }
+});
+
+app.put("/api/users/:id/custom-role", requireMaster, async (req, res) => {
+  const id = Number(req.params.id);
+  if (!Number.isInteger(id)) return res.status(400).json({ error: "ID tidak valid." });
+  try {
+    const user = await updateUserCustomRole(id, req.body?.roleId);
+    await logActivity(req, "UBAH_PERAN_KUSTOM_AKUN", `${user.username} → ${user.customRole?.name ?? "akses penuh"}`);
+    return res.json(user);
+  } catch (err) {
+    if (err instanceof UserError) return res.status(err.status).json({ error: err.message });
+    return sendError(res, 500, err, "Gagal mengubah peran akun.");
   }
 });
 
@@ -444,9 +492,66 @@ app.delete("/api/sessions/:id", requireMaster, async (req, res) => {
 });
 
 // ==========================================
+// 1c. CUSTOM ROLES (master only)
+// ==========================================
+
+app.get("/api/roles", requireMaster, async (_req, res) => {
+  try {
+    return res.json(await listCustomRoles());
+  } catch (err) {
+    return sendError(res, 500, err, "Gagal memuat daftar peran.");
+  }
+});
+
+app.post("/api/roles", requireMaster, async (req, res) => {
+  try {
+    const role = await createCustomRole({
+      name: req.body?.name,
+      permissions: req.body?.permissions,
+    });
+    await logActivity(req, "BUAT_PERAN", role.name);
+    return res.status(201).json(role);
+  } catch (err) {
+    if (err instanceof RoleError) return res.status(err.status).json({ error: err.message });
+    return sendError(res, 500, err, "Gagal membuat peran.");
+  }
+});
+
+app.put("/api/roles/:id", requireMaster, async (req, res) => {
+  const id = Number(req.params.id);
+  if (!Number.isInteger(id)) return res.status(400).json({ error: "ID tidak valid." });
+  try {
+    const role = await updateCustomRole(id, {
+      name: req.body?.name,
+      permissions: req.body?.permissions,
+    });
+    await logActivity(req, "UBAH_PERAN", role.name);
+    return res.json(role);
+  } catch (err) {
+    if (err instanceof RoleError) return res.status(err.status).json({ error: err.message });
+    return sendError(res, 500, err, "Gagal mengubah peran.");
+  }
+});
+
+app.delete("/api/roles/:id", requireMaster, async (req, res) => {
+  const id = Number(req.params.id);
+  if (!Number.isInteger(id)) return res.status(400).json({ error: "ID tidak valid." });
+  try {
+    await deleteCustomRole(id);
+    await logActivity(req, "HAPUS_PERAN", String(id));
+    return res.json({ ok: true });
+  } catch (err) {
+    if (err instanceof RoleError) return res.status(err.status).json({ error: err.message });
+    return sendError(res, 500, err, "Gagal menghapus peran.");
+  }
+});
+
+// ==========================================
 // 2. SYSTEM STATUS & DASHBOARD
 // ==========================================
 
+// Not feature-gated: AppLayout fetches this for the sidebar widget on every
+// page, not just the Dashboard, so any authenticated account needs it.
 app.get("/api/status", requireAuth, async (req, res) => {
   try {
     const status = await getSystemStatus();
@@ -456,7 +561,7 @@ app.get("/api/status", requireAuth, async (req, res) => {
   }
 });
 
-app.get("/api/dashboard", requireAuth, async (req, res) => {
+app.get("/api/dashboard", requireFeature("dashboard"), async (req, res) => {
   try {
     const from = parseDateParam(req.query.from);
     const to = parseDateParam(req.query.to);
@@ -471,6 +576,9 @@ app.get("/api/dashboard", requireAuth, async (req, res) => {
 // 3. OUTLETS & EMPLOYEES
 // ==========================================
 
+// Not feature-gated: this is a shared outlet-name reference used as a filter
+// dropdown by several pages (Dashboard, Transactions, Jam Operasional,
+// Settings), not exclusive to the Performa Outlet page.
 app.get("/api/outlets", requireAuth, async (req, res) => {
   try {
     const includeHidden = req.query.includeHidden === "true" || req.query.includeHidden === "1";
@@ -481,7 +589,7 @@ app.get("/api/outlets", requireAuth, async (req, res) => {
   }
 });
 
-app.get("/api/outlets/summary", requireAuth, async (req, res) => {
+app.get("/api/outlets/summary", requireFeature("outlets"), async (req, res) => {
   try {
     const from = parseDateParam(req.query.from);
     const to = parseDateParam(req.query.to);
@@ -532,7 +640,7 @@ app.put("/api/outlets/:id/visibility", requireMaster, async (req, res) => {
   }
 });
 
-app.get("/api/outlets/:id", requireAuth, async (req, res) => {
+app.get("/api/outlets/:id", requireFeature("outlets"), async (req, res) => {
   try {
     const id = Number(req.params.id);
     if (Number.isNaN(id)) return res.status(400).json({ error: "ID tidak valid" });
@@ -571,7 +679,7 @@ app.put("/api/employees/:id/visibility", requireMaster, async (req, res) => {
   }
 });
 
-app.get("/api/employees/:id", requireAuth, async (req, res) => {
+app.get("/api/employees/:id", requireFeature("employees"), async (req, res) => {
   try {
     const id = Number(req.params.id);
     if (Number.isNaN(id)) return res.status(400).json({ error: "ID tidak valid" });
@@ -587,7 +695,7 @@ app.get("/api/employees/:id", requireAuth, async (req, res) => {
 // 4. ITEMS & SALES EXPLORER
 // ==========================================
 
-app.get("/api/items", requireAuth, async (req, res) => {
+app.get("/api/items", requireFeature("items"), async (req, res) => {
   try {
     const q = typeof req.query.q === "string" ? req.query.q : "";
     const limit = Number(req.query.limit) || 20;
@@ -598,7 +706,7 @@ app.get("/api/items", requireAuth, async (req, res) => {
   }
 });
 
-app.get("/api/items/by-category", requireAuth, async (req, res) => {
+app.get("/api/items/by-category", requireFeature("item_categories"), async (req, res) => {
   try {
     const from = parseDateParam(req.query.from);
     const to = parseDateParam(req.query.to);
@@ -623,7 +731,7 @@ app.get("/api/items/:id", requireAuth, async (req, res) => {
   }
 });
 
-app.get("/api/sales", requireAuth, async (req, res) => {
+app.get("/api/sales", requireFeature("transactions"), async (req, res) => {
   try {
     const params = new URLSearchParams(req.query as any);
     const filter = parseSalesFilterParams(params);
@@ -636,7 +744,7 @@ app.get("/api/sales", requireAuth, async (req, res) => {
   }
 });
 
-app.get("/api/sales/export", requireAuth, async (req, res) => {
+app.get("/api/sales/export", requireFeature("transactions"), async (req, res) => {
   try {
     const params = new URLSearchParams(req.query as any);
     const filter = parseSalesFilterParams(params);
@@ -692,7 +800,10 @@ app.get("/api/sales/export", requireAuth, async (req, res) => {
 // 5. TARGET & HOURLY REPORTS
 // ==========================================
 
-app.get("/api/target/report", requireAuth, async (req, res) => {
+const targetReportFeature = (req: express.Request): FeatureKey =>
+  req.query.branch === "CIMAHI" ? "target_cimahi" : "target_bandung";
+
+app.get("/api/target/report", requireFeature(targetReportFeature), async (req, res) => {
   try {
     const dateParam = req.query.date as string;
     const date = dateParam ? new Date(dateParam) : null;
@@ -713,7 +824,9 @@ app.get("/api/target/report", requireAuth, async (req, res) => {
   }
 });
 
-app.get("/api/target", requireAuth, async (req, res) => {
+// Master-only: this returns editable amounts and is consumed only by the
+// Settings page's target-editing forms, not the (feature-gated) report pages.
+app.get("/api/target", requireMaster, async (req, res) => {
   try {
     const branch = (req.query.branch === "CIMAHI" ? "CIMAHI" : "BANDUNG") as "BANDUNG" | "CIMAHI";
     const targets = await getTargetAmounts(branch);
@@ -768,7 +881,7 @@ app.post("/api/target", requireMaster, async (req, res) => {
   }
 });
 
-app.get("/api/hourly", requireAuth, async (req, res) => {
+app.get("/api/hourly", requireFeature("target_bandung"), async (req, res) => {
   try {
     const dateStr = req.query.date as string;
     if (!dateStr) return res.status(400).json({ error: "Parameter date wajib diisi." });
@@ -793,7 +906,7 @@ app.get("/api/hourly", requireAuth, async (req, res) => {
 // 6. POINTS & INCENTIVES
 // ==========================================
 
-app.get("/api/points/leaderboard", requireAuth, async (req, res) => {
+app.get("/api/points/leaderboard", requireFeature("points"), async (req, res) => {
   try {
     let from: Date;
     let to: Date;
@@ -820,7 +933,8 @@ app.get("/api/points/leaderboard", requireAuth, async (req, res) => {
   }
 });
 
-app.get("/api/points/settings", requireAuth, async (req, res) => {
+// Master-only: consumed only by the Settings page's cut-off day form.
+app.get("/api/points/settings", requireMaster, async (req, res) => {
   try {
     const data = await getPointPeriodSetting();
     return res.json(data);
@@ -859,7 +973,7 @@ app.post("/api/points/settings", requireMaster, async (req, res) => {
   }
 });
 
-app.get("/api/points/employee/:id", requireAuth, async (req, res) => {
+app.get("/api/points/employee/:id", requireFeature("points"), async (req, res) => {
   try {
     const id = Number(req.params.id);
     if (Number.isNaN(id)) return res.status(400).json({ error: "ID tidak valid" });
@@ -888,7 +1002,9 @@ app.get("/api/points/employee/:id", requireAuth, async (req, res) => {
   }
 });
 
-app.get("/api/points/items", requireAuth, async (req, res) => {
+// Master-only: the following point-rule/mapping GETs are consumed only by
+// the Settings page's management sections, not by the public leaderboard.
+app.get("/api/points/items", requireMaster, async (req, res) => {
   try {
     const rules = await listItemPointRules();
     return res.json(rules);
@@ -924,7 +1040,7 @@ app.delete("/api/points/items/:id", requireMaster, async (req, res) => {
   }
 });
 
-app.get("/api/points/item-exclusions", requireAuth, async (req, res) => {
+app.get("/api/points/item-exclusions", requireMaster, async (req, res) => {
   try {
     const list = await listItemPointExclusions();
     return res.json(list);
@@ -956,7 +1072,7 @@ app.delete("/api/points/item-exclusions/:id", requireMaster, async (req, res) =>
   }
 });
 
-app.get("/api/points/group-defaults", requireAuth, async (req, res) => {
+app.get("/api/points/group-defaults", requireMaster, async (req, res) => {
   try {
     const list = await listGroupPointDefaults();
     return res.json(list);
@@ -992,7 +1108,7 @@ app.delete("/api/points/group-defaults/:id", requireMaster, async (req, res) => 
   }
 });
 
-app.get("/api/points/excluded-employees", requireAuth, async (req, res) => {
+app.get("/api/points/excluded-employees", requireMaster, async (req, res) => {
   try {
     const list = await listExcludedEmployees();
     return res.json(
@@ -1036,7 +1152,7 @@ app.delete("/api/points/excluded-employees/:id", requireMaster, async (req, res)
 // 7. MAPPINGS
 // ==========================================
 
-app.get("/api/mappings/item-group", requireAuth, async (req, res) => {
+app.get("/api/mappings/item-group", requireMaster, async (req, res) => {
   try {
     const list = await prisma.itemGroupMapping.findMany({
       orderBy: [{ isDefault: "asc" }, { itemGroup: "asc" }],
@@ -1079,7 +1195,7 @@ app.delete("/api/mappings/item-group/:id", requireMaster, async (req, res) => {
   }
 });
 
-app.get("/api/mappings/outlet-alias", requireAuth, async (req, res) => {
+app.get("/api/mappings/outlet-alias", requireMaster, async (req, res) => {
   try {
     const list = await prisma.outletAlias.findMany({
       include: { outlet: { select: { name: true } } },
@@ -1134,7 +1250,7 @@ app.delete("/api/mappings/outlet-alias/:id", requireMaster, async (req, res) => 
 // 8. IMPORTS & UPLOADS
 // ==========================================
 
-app.post("/api/import/preview", requireAuth, upload.single("file"), async (req, res) => {
+app.post("/api/import/preview", requireFeature("import"), upload.single("file"), async (req, res) => {
   if (!req.file) return res.status(400).json({ error: "File wajib diupload." });
   try {
     const preview = await previewSalesFile(req.file.buffer);
@@ -1144,7 +1260,7 @@ app.post("/api/import/preview", requireAuth, upload.single("file"), async (req, 
   }
 });
 
-app.post("/api/import", requireAuth, upload.single("file"), async (req, res) => {
+app.post("/api/import", requireFeature("import"), upload.single("file"), async (req, res) => {
   if (!req.file) return res.status(400).json({ error: "File wajib diupload." });
   try {
     let forceImportHashes: string[] = [];
@@ -1165,7 +1281,7 @@ app.post("/api/import", requireAuth, upload.single("file"), async (req, res) => 
   }
 });
 
-app.get("/api/imports", requireAuth, async (req, res) => {
+app.get("/api/imports", requireFeature("import"), async (req, res) => {
   try {
     const batches = await prisma.importBatch.findMany({
       orderBy: { uploadedAt: "desc" },
@@ -1183,7 +1299,7 @@ app.get("/api/imports", requireAuth, async (req, res) => {
   }
 });
 
-app.get("/api/imports/:id", requireAuth, async (req, res) => {
+app.get("/api/imports/:id", requireFeature("import"), async (req, res) => {
   try {
     const batch = await prisma.importBatch.findUnique({
       where: { id: Number(req.params.id) },
@@ -1195,7 +1311,7 @@ app.get("/api/imports/:id", requireAuth, async (req, res) => {
   }
 });
 
-app.delete("/api/imports/:id", requireAuth, async (req, res) => {
+app.delete("/api/imports/:id", requireFeature("import"), async (req, res) => {
   try {
     await prisma.importBatch.delete({
       where: { id: Number(req.params.id) },
@@ -1206,7 +1322,7 @@ app.delete("/api/imports/:id", requireAuth, async (req, res) => {
   }
 });
 
-app.post("/api/import/tartun", requireAuth, upload.single("file"), async (req, res) => {
+app.post("/api/import/tartun", requireFeature("import"), upload.single("file"), async (req, res) => {
   if (!req.file) return res.status(400).json({ error: "File wajib diupload." });
   const dateStr = req.body.date;
   if (!dateStr) return res.status(400).json({ error: "Tanggal wajib diisi." });
@@ -1229,7 +1345,7 @@ app.post("/api/import/tartun", requireAuth, upload.single("file"), async (req, r
   }
 });
 
-app.post("/api/import/server", requireAuth, upload.single("file"), async (req, res) => {
+app.post("/api/import/server", requireFeature("import"), upload.single("file"), async (req, res) => {
   const dateStr = req.body.date;
   if (!dateStr) return res.status(400).json({ error: "Tanggal wajib diisi." });
   const date = new Date(dateStr);
@@ -1271,7 +1387,7 @@ app.post("/api/import/server", requireAuth, upload.single("file"), async (req, r
 // 9. DAILY IMPORT HISTORY (TARTUN & SERVER)
 // ==========================================
 
-app.get("/api/daily-imports/tartun", requireAuth, async (req, res) => {
+app.get("/api/daily-imports/tartun", requireFeature("import"), async (req, res) => {
   try {
     const rows = await prisma.tartunDaily.groupBy({
       by: ["tanggal"],
@@ -1294,7 +1410,7 @@ app.get("/api/daily-imports/tartun", requireAuth, async (req, res) => {
   }
 });
 
-app.delete("/api/daily-imports/tartun/:date", requireAuth, async (req, res) => {
+app.delete("/api/daily-imports/tartun/:date", requireFeature("import"), async (req, res) => {
   try {
     const date = new Date(String(req.params.date));
     if (Number.isNaN(date.getTime())) return res.status(400).json({ error: "Tanggal tidak valid." });
@@ -1307,7 +1423,7 @@ app.delete("/api/daily-imports/tartun/:date", requireAuth, async (req, res) => {
   }
 });
 
-app.get("/api/daily-imports/server", requireAuth, async (req, res) => {
+app.get("/api/daily-imports/server", requireFeature("import"), async (req, res) => {
   try {
     const rows = await prisma.serverDaily.groupBy({
       by: ["tanggal"],
@@ -1330,7 +1446,7 @@ app.get("/api/daily-imports/server", requireAuth, async (req, res) => {
   }
 });
 
-app.delete("/api/daily-imports/server/:date", requireAuth, async (req, res) => {
+app.delete("/api/daily-imports/server/:date", requireFeature("import"), async (req, res) => {
   try {
     const date = new Date(String(req.params.date));
     if (Number.isNaN(date.getTime())) return res.status(400).json({ error: "Tanggal tidak valid." });
@@ -1347,7 +1463,7 @@ app.delete("/api/daily-imports/server/:date", requireAuth, async (req, res) => {
 // 10. ACTIVITY LOG
 // ==========================================
 
-app.get("/api/activity-log", requireAuth, async (req, res) => {
+app.get("/api/activity-log", requireFeature("activity_log"), async (req, res) => {
   try {
     const limit = Math.min(Number(req.query.limit) || 100, 500);
     const offset = Number(req.query.offset) || 0;

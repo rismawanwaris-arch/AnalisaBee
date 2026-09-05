@@ -41,10 +41,17 @@ const PUBLIC_FIELDS = {
   username: true,
   displayName: true,
   role: true,
+  roleId: true,
+  customRole: { select: { id: true, name: true } },
   isActive: true,
   createdAt: true,
   lastLoginAt: true,
 } as const;
+
+async function assertRoleIdExists(roleId: number): Promise<void> {
+  const role = await prisma.customRole.findUnique({ where: { id: roleId }, select: { id: true } });
+  if (!role) throw new UserError("Peran kustom tidak ditemukan.", 404);
+}
 
 export async function listUsers() {
   return prisma.user.findMany({
@@ -80,11 +87,19 @@ export async function createUser(input: {
   password: unknown;
   role: unknown;
   displayName?: unknown;
+  roleId?: unknown;
 }) {
   const username = normalizeUsername(input.username);
   const password = assertPassword(input.password);
   const role = assertRole(input.role);
   const displayName = input.displayName ? String(input.displayName).trim().slice(0, 80) : null;
+
+  let roleId: number | null = null;
+  if (role === "admin" && input.roleId != null && input.roleId !== "") {
+    roleId = Number(input.roleId);
+    if (!Number.isInteger(roleId)) throw new UserError("Peran kustom tidak valid.");
+    await assertRoleIdExists(roleId);
+  }
 
   const existing = await prisma.user.findUnique({ where: { username }, select: { id: true } });
   if (existing) throw new UserError("Username sudah dipakai.", 409);
@@ -95,6 +110,7 @@ export async function createUser(input: {
       displayName: displayName || null,
       passwordHash: await hashPassword(password),
       role,
+      roleId,
       isActive: true,
     },
     select: PUBLIC_FIELDS,
@@ -109,11 +125,40 @@ export async function updateUserRole(userId: number, role: unknown) {
 
   const updated = await prisma.user.update({
     where: { id: userId },
-    data: { role: nextRole },
+    // A master account never carries a custom-role restriction, so promoting
+    // to master always clears roleId.
+    data: { role: nextRole, roleId: nextRole === "master" ? null : undefined },
     select: PUBLIC_FIELDS,
   });
 
   // Force a fresh login so the new privileges are the ones actually in effect.
+  await revokeAllSessionsForUser(userId);
+  return updated;
+}
+
+/** Assigns or clears the custom-role restriction on an admin-tier account.
+ *  Passing null gives the account full (legacy) admin access. */
+export async function updateUserCustomRole(userId: number, roleId: unknown) {
+  const target = await prisma.user.findUnique({ where: { id: userId }, select: { role: true } });
+  if (!target) throw new UserError("Akun tidak ditemukan.", 404);
+  if (target.role === "master") {
+    throw new UserError("Akun master tidak bisa dibatasi dengan peran kustom.");
+  }
+
+  let nextRoleId: number | null = null;
+  if (roleId != null && roleId !== "") {
+    nextRoleId = Number(roleId);
+    if (!Number.isInteger(nextRoleId)) throw new UserError("Peran kustom tidak valid.");
+    await assertRoleIdExists(nextRoleId);
+  }
+
+  const updated = await prisma.user.update({
+    where: { id: userId },
+    data: { roleId: nextRoleId },
+    select: PUBLIC_FIELDS,
+  });
+
+  // The set of features just changed — force a fresh login/reload of nav.
   await revokeAllSessionsForUser(userId);
   return updated;
 }

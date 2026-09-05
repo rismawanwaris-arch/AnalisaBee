@@ -1,12 +1,18 @@
 import React, { createContext, useCallback, useContext, useEffect, useRef, useState } from "react";
+import type { FeatureKey } from "@/lib/features";
 
 export type UserRole = "admin" | "master" | null;
+/** "all" for master (and legacy admin accounts with no custom role assigned);
+ *  an explicit list for an account restricted to a custom role. */
+export type Permissions = "all" | FeatureKey[];
 
 interface AuthContextType {
   authenticated: boolean | null; // null = checking
   role: UserRole;
   username: string | null;
   userId: number | null;
+  permissions: Permissions;
+  canAccess: (key: FeatureKey) => boolean;
   checkAuth: () => Promise<boolean>;
   logout: () => Promise<void>;
 }
@@ -16,6 +22,8 @@ const AuthContext = createContext<AuthContextType>({
   role: null,
   username: null,
   userId: null,
+  permissions: "all",
+  canAccess: () => false,
   checkAuth: async () => false,
   logout: async () => {},
 });
@@ -30,12 +38,14 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [role, setRole] = useState<UserRole>(null);
   const [username, setUsername] = useState<string | null>(null);
   const [userId, setUserId] = useState<number | null>(null);
+  const [permissions, setPermissions] = useState<Permissions>("all");
 
   const clearSession = useCallback(() => {
     setAuthenticated(false);
     setRole(null);
     setUsername(null);
     setUserId(null);
+    setPermissions("all");
   }, []);
 
   const checkAuth = useCallback(async (retries = 3): Promise<boolean> => {
@@ -49,6 +59,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           setRole(authed ? (data.role as UserRole) : null);
           setUsername(authed ? (data.username ?? null) : null);
           setUserId(authed ? (data.userId ?? null) : null);
+          setPermissions(authed ? (data.permissions ?? "all") : "all");
           return authed;
         }
         clearSession();
@@ -108,15 +119,27 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       fetch("/api/auth/me")
         .then((r) => (r.ok ? r.json() : null))
         .then((data) => {
-          if (data && data.authenticated !== true) clearSession();
+          if (!data) return;
+          if (data.authenticated !== true) {
+            clearSession();
+            return;
+          }
+          setPermissions(data.permissions ?? "all");
         })
         .catch(() => {});
     }, REVALIDATE_INTERVAL_MS);
     return () => clearInterval(id);
   }, [authenticated, clearSession]);
 
+  const canAccess = useCallback(
+    (key: FeatureKey) => role === "master" || permissions === "all" || permissions.includes(key),
+    [role, permissions],
+  );
+
   return (
-    <AuthContext.Provider value={{ authenticated, role, username, userId, checkAuth, logout }}>
+    <AuthContext.Provider
+      value={{ authenticated, role, username, userId, permissions, canAccess, checkAuth, logout }}
+    >
       {children}
     </AuthContext.Provider>
   );

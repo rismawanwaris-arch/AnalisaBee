@@ -3,21 +3,27 @@ import type { ReactNode } from "react";
 import { formatNumber } from "@/lib/format";
 import type { SystemStatus } from "@/lib/queries/systemStatus";
 import { useAuth } from "@/context/AuthContext";
+import type { FeatureKey } from "@/lib/features";
 
 interface NavItem {
   href: string;
   label: string;
   icon: ReactNode;
   masterOnly?: boolean;
+  feature?: FeatureKey;
 }
 
 export function Sidebar({ status }: { status: SystemStatus | null }) {
   const location = useLocation();
   const pathname = location.pathname;
-  const { role } = useAuth();
+  const { role, canAccess } = useAuth();
 
   function renderNavGroup(label: string, items: NavItem[]) {
-    const visible = items.filter((item) => !(item.masterOnly && role !== "master"));
+    const visible = items.filter((item) => {
+      if (item.masterOnly && role !== "master") return false;
+      if (item.feature && !canAccess(item.feature)) return false;
+      return true;
+    });
     if (visible.length === 0) return null;
     return (
       <div className="space-y-1">
@@ -107,26 +113,26 @@ export function Sidebar({ status }: { status: SystemStatus | null }) {
       <nav className="flex-1 px-3 py-3 space-y-4 overflow-y-auto">
         {/* Group: Bandung */}
         {renderNavGroup("Cabang Bandung", [
-          { href: "/dashboard", label: "Dashboard", icon: <path d="M3 13.2h7.2V3H3v10.2Zm0 7.8h7.2v-5.4H3V21Zm10.8 0H21V10.8h-7.2V21Zm0-18v5.4H21V3h-7.2Z" /> },
-          { href: "/target", label: "Target Harian", icon: <><circle cx="12" cy="12" r="9" /><circle cx="12" cy="12" r="4.5" /><circle cx="12" cy="12" r="1" fill="currentColor" /></> },
-          { href: "/points", label: "Poin Penjualan", icon: <path d="M12 2.5 14.6 9h6.4l-5.2 4 2 6.5L12 15.8 6.2 19.5l2-6.5-5.2-4h6.4Z" /> },
+          { href: "/dashboard", label: "Dashboard", feature: "dashboard", icon: <path d="M3 13.2h7.2V3H3v10.2Zm0 7.8h7.2v-5.4H3V21Zm10.8 0H21V10.8h-7.2V21Zm0-18v5.4H21V3h-7.2Z" /> },
+          { href: "/target", label: "Target Harian", feature: "target_bandung", icon: <><circle cx="12" cy="12" r="9" /><circle cx="12" cy="12" r="4.5" /><circle cx="12" cy="12" r="1" fill="currentColor" /></> },
+          { href: "/points", label: "Poin Penjualan", feature: "points", icon: <path d="M12 2.5 14.6 9h6.4l-5.2 4 2 6.5L12 15.8 6.2 19.5l2-6.5-5.2-4h6.4Z" /> },
         ])}
         {/* Group: Cimahi */}
         {renderNavGroup("Cabang Cimahi", [
-          { href: "/cimahi/target", label: "Target Harian", icon: <><circle cx="12" cy="12" r="9" /><circle cx="12" cy="12" r="4.5" /><circle cx="12" cy="12" r="1" fill="currentColor" /></> },
+          { href: "/cimahi/target", label: "Target Harian", feature: "target_cimahi", icon: <><circle cx="12" cy="12" r="9" /><circle cx="12" cy="12" r="4.5" /><circle cx="12" cy="12" r="1" fill="currentColor" /></> },
         ])}
         {/* Group: Dimensi Analisis */}
         {renderNavGroup("Dimensi Analisis", [
-          { href: "/items", label: "Item & SKU", icon: <path d="M4 7h16M4 12h16M4 17h10" /> },
-          { href: "/items/categories", label: "Kategori Item", icon: <><rect x="3" y="3" width="7" height="7" rx="1" /><rect x="14" y="3" width="7" height="7" rx="1" /><rect x="3" y="14" width="7" height="7" rx="1" /><path d="M14 17.5h7M17.5 14v7" /></> },
-          { href: "/outlets", label: "Performa Outlet", icon: <path d="M3 9.5 12 3l9 6.5M5 9v11h14V9M9 20v-6h6v6" /> },
-          { href: "/employees", label: "Pegawai & Staff", icon: <><circle cx="12" cy="8" r="3.2" /><path d="M5 20c0-3.9 3.1-7 7-7s7 3.1 7 7" /></> },
-          { href: "/transactions", label: "Daftar Transaksi", icon: <><rect x="4" y="4" width="16" height="16" rx="2" /><path d="M4 10h16M9 10v10" /></> },
+          { href: "/items", label: "Item & SKU", feature: "items", icon: <path d="M4 7h16M4 12h16M4 17h10" /> },
+          { href: "/items/categories", label: "Kategori Item", feature: "item_categories", icon: <><rect x="3" y="3" width="7" height="7" rx="1" /><rect x="14" y="3" width="7" height="7" rx="1" /><rect x="3" y="14" width="7" height="7" rx="1" /><path d="M14 17.5h7M17.5 14v7" /></> },
+          { href: "/outlets", label: "Performa Outlet", feature: "outlets", icon: <path d="M3 9.5 12 3l9 6.5M5 9v11h14V9M9 20v-6h6v6" /> },
+          { href: "/employees", label: "Pegawai & Staff", feature: "employees", icon: <><circle cx="12" cy="8" r="3.2" /><path d="M5 20c0-3.9 3.1-7 7-7s7 3.1 7 7" /></> },
+          { href: "/transactions", label: "Daftar Transaksi", feature: "transactions", icon: <><rect x="4" y="4" width="16" height="16" rx="2" /><path d="M4 10h16M9 10v10" /></> },
         ])}
         {/* Group: Manajemen */}
         {renderNavGroup("Manajemen Data & Sistem", [
-          { href: "/import", label: "Import & Batch", icon: <path d="M12 3v12m0 0-4-4m4 4 4-4M5 21h14" /> },
-          { href: "/log", label: "Log Aktivitas", icon: <><rect x="3" y="4" width="18" height="18" rx="2" /><path d="M7 8h10M7 12h10M7 16h6" /></> },
+          { href: "/import", label: "Import & Batch", feature: "import", icon: <path d="M12 3v12m0 0-4-4m4 4 4-4M5 21h14" /> },
+          { href: "/log", label: "Log Aktivitas", feature: "activity_log", icon: <><rect x="3" y="4" width="18" height="18" rx="2" /><path d="M7 8h10M7 12h10M7 16h6" /></> },
           {
             href: "/settings", label: "Pengaturan", masterOnly: true,
             icon: <><circle cx="12" cy="12" r="3" /><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z" /></>,

@@ -284,20 +284,42 @@ model ActivityLog {
 
 // An application account. Role is stored as the lowercase string "master" or
 // "admin" to match what the session token and the frontend already compare
-// against — same convention as ActivityLog.role.
+// against — same convention as ActivityLog.role. "master" is a fixed
+// superuser tier (always full access, cannot be restricted). "admin" accounts
+// get full non-master access UNLESS roleId points them at a CustomRole, which
+// narrows them to that role's checked feature list — this keeps every admin
+// account created before custom roles existed working exactly as before.
 model User {
-  id           Int       @id @default(autoincrement())
-  username     String    @unique
+  id           Int         @id @default(autoincrement())
+  username     String      @unique
   displayName  String?
   passwordHash String
-  role         String    @default("admin")
-  isActive     Boolean   @default(true)
-  createdAt    DateTime  @default(now())
-  updatedAt    DateTime  @updatedAt
+  role         String      @default("admin")
+  roleId       Int?
+  customRole   CustomRole? @relation(fields: [roleId], references: [id], onDelete: SetNull)
+  isActive     Boolean     @default(true)
+  createdAt    DateTime    @default(now())
+  updatedAt    DateTime    @updatedAt
   lastLoginAt  DateTime?
   sessions     Session[]
 
   @@map("users")
+}
+
+// A master-defined permission template (e.g. "Frontliner", "Finance") that
+// restricts an "admin"-tier account to a hand-picked subset of the sidebar
+// features in FEATURE_KEYS (src/lib/features.ts). Deleting a role clears
+// roleId on its members (onDelete: SetNull) rather than deleting the users —
+// they fall back to full admin access, same as any admin never assigned one.
+model CustomRole {
+  id          Int      @id @default(autoincrement())
+  name        String   @unique
+  permissions String[] @default([])
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  users       User[]
+
+  @@map("custom_roles")
 }
 
 // A server-side record of one logged-in session. The JWT handed to the browser

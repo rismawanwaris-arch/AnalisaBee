@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { formatNumber, formatRupiah } from "@/lib/format";
+import { FEATURE_KEYS, FEATURE_LABELS, type FeatureKey } from "@/lib/features";
 
 type BusinessLine = "SERVER" | "TARTUN" | "PETSHOP" | "AKSESORIS" | "SP_VOUCHER";
 type ReportCategory = "PETSHOP" | "AKSESORIS" | "SP_VOUCHER";
@@ -74,9 +75,20 @@ interface AccountRow {
   username: string;
   displayName: string | null;
   role: "admin" | "master";
+  roleId: number | null;
+  customRole: { id: number; name: string } | null;
   isActive: boolean;
   createdAt: string;
   lastLoginAt: string | null;
+}
+
+interface CustomRoleRow {
+  id: number;
+  name: string;
+  permissions: FeatureKey[];
+  userCount: number;
+  createdAt: string;
+  updatedAt: string;
 }
 
 interface SessionRow {
@@ -289,10 +301,21 @@ export function SettingsPage() {
   const [newDisplayName, setNewDisplayName] = useState("");
   const [newPassword, setNewPassword] = useState("");
   const [newRole, setNewRole] = useState<"admin" | "master">("admin");
+  const [newRoleId, setNewRoleId] = useState<string>("");
   const [userError, setUserError] = useState<string | null>(null);
   const [userBusy, setUserBusy] = useState(false);
   const [resetForId, setResetForId] = useState<number | null>(null);
   const [resetPassword, setResetPassword] = useState("");
+
+  // Custom roles (Manajemen Peran)
+  const [roles, setRoles] = useState<CustomRoleRow[]>([]);
+  const [roleError, setRoleError] = useState<string | null>(null);
+  const [roleBusy, setRoleBusy] = useState(false);
+  const [newRoleName, setNewRoleName] = useState("");
+  const [newRolePerms, setNewRolePerms] = useState<Set<FeatureKey>>(new Set());
+  const [editingRoleId, setEditingRoleId] = useState<number | null>(null);
+  const [editRoleName, setEditRoleName] = useState("");
+  const [editRolePerms, setEditRolePerms] = useState<Set<FeatureKey>>(new Set());
 
   const loadUsers = useCallback(async () => {
     try {
@@ -312,6 +335,15 @@ export function SettingsPage() {
     }
   }, []);
 
+  const loadRoles = useCallback(async () => {
+    try {
+      const res = await fetch("/api/roles");
+      if (res.ok) setRoles(await res.json());
+    } catch {
+      // ignore
+    }
+  }, []);
+
   useEffect(() => {
     loadTargets();
     loadAliases();
@@ -325,6 +357,7 @@ export function SettingsPage() {
     loadAllEmployees();
     loadUsers();
     loadSessions();
+    loadRoles();
   }, [
     loadTargets,
     loadAliases,
@@ -338,6 +371,7 @@ export function SettingsPage() {
     loadAllEmployees,
     loadUsers,
     loadSessions,
+    loadRoles,
   ]);
 
   // Keep the active-session list fresh while the section is open, so a session
@@ -361,6 +395,7 @@ export function SettingsPage() {
           displayName: newDisplayName.trim() || undefined,
           password: newPassword,
           role: newRole,
+          roleId: newRole === "admin" && newRoleId ? Number(newRoleId) : undefined,
         }),
       });
       const data = await res.json().catch(() => ({}));
@@ -372,6 +407,7 @@ export function SettingsPage() {
       setNewDisplayName("");
       setNewPassword("");
       setNewRole("admin");
+      setNewRoleId("");
       await loadUsers();
     } catch {
       setUserError("Terjadi kesalahan jaringan.");
@@ -391,6 +427,24 @@ export function SettingsPage() {
       });
       const data = await res.json().catch(() => ({}));
       if (!res.ok) setUserError(data.error || "Gagal mengubah role.");
+    } catch {
+      setUserError("Terjadi kesalahan jaringan.");
+    } finally {
+      await loadUsers();
+      await loadSessions();
+    }
+  }
+
+  async function changeUserCustomRole(user: AccountRow, roleId: string) {
+    setUserError(null);
+    try {
+      const res = await fetch(`/api/users/${user.id}/custom-role`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ roleId: roleId ? Number(roleId) : null }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) setUserError(data.error || "Gagal mengubah peran akun.");
     } catch {
       setUserError("Terjadi kesalahan jaringan.");
     } finally {
@@ -465,6 +519,94 @@ export function SettingsPage() {
       setUserError("Terjadi kesalahan jaringan.");
     } finally {
       await loadSessions();
+    }
+  }
+
+  // Custom Role Handlers
+  function toggleNewRolePerm(key: FeatureKey) {
+    setNewRolePerms((prev) => {
+      const next = new Set(prev);
+      if (next.has(key)) next.delete(key);
+      else next.add(key);
+      return next;
+    });
+  }
+
+  function toggleEditRolePerm(key: FeatureKey) {
+    setEditRolePerms((prev) => {
+      const next = new Set(prev);
+      if (next.has(key)) next.delete(key);
+      else next.add(key);
+      return next;
+    });
+  }
+
+  async function addRole() {
+    setRoleError(null);
+    setRoleBusy(true);
+    try {
+      const res = await fetch("/api/roles", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ name: newRoleName.trim(), permissions: [...newRolePerms] }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        setRoleError(data.error || "Gagal membuat peran.");
+        return;
+      }
+      setNewRoleName("");
+      setNewRolePerms(new Set());
+      await loadRoles();
+    } catch {
+      setRoleError("Terjadi kesalahan jaringan.");
+    } finally {
+      setRoleBusy(false);
+    }
+  }
+
+  function startEditRole(role: CustomRoleRow) {
+    setEditingRoleId(role.id);
+    setEditRoleName(role.name);
+    setEditRolePerms(new Set(role.permissions));
+    setRoleError(null);
+  }
+
+  async function saveEditRole(roleId: number) {
+    setRoleError(null);
+    setRoleBusy(true);
+    try {
+      const res = await fetch(`/api/roles/${roleId}`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ name: editRoleName.trim(), permissions: [...editRolePerms] }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        setRoleError(data.error || "Gagal menyimpan peran.");
+        return;
+      }
+      setEditingRoleId(null);
+      await loadRoles();
+      await loadUsers();
+    } catch {
+      setRoleError("Terjadi kesalahan jaringan.");
+    } finally {
+      setRoleBusy(false);
+    }
+  }
+
+  async function removeRole(role: CustomRoleRow) {
+    setRoleError(null);
+    try {
+      const res = await fetch(`/api/roles/${role.id}`, { method: "DELETE" });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) setRoleError(data.error || "Gagal menghapus peran.");
+    } catch {
+      setRoleError("Terjadi kesalahan jaringan.");
+    } finally {
+      await loadRoles();
+      await loadUsers();
     }
   }
 
@@ -922,13 +1064,29 @@ export function SettingsPage() {
                   <select
                     id="new-role"
                     value={newRole}
-                    onChange={(e) => setNewRole(e.target.value as "admin" | "master")}
+                    onChange={(e) => { setNewRole(e.target.value as "admin" | "master"); setNewRoleId(""); }}
                     className="w-full rounded-lg border border-border/80 bg-surface px-3 py-1.5 text-xs text-foreground focus:outline-none focus:ring-2 focus:ring-accent/20 focus:border-accent transition-all"
                   >
                     <option value="admin">Admin — akses data, tanpa pengaturan</option>
                     <option value="master">Master — akses penuh</option>
                   </select>
                 </div>
+                {newRole === "admin" && (
+                  <div>
+                    <label htmlFor="new-role-id" className="block text-[11px] font-semibold text-muted mb-1">Batasi dengan Peran Kustom (opsional)</label>
+                    <select
+                      id="new-role-id"
+                      value={newRoleId}
+                      onChange={(e) => setNewRoleId(e.target.value)}
+                      className="w-full rounded-lg border border-border/80 bg-surface px-3 py-1.5 text-xs text-foreground focus:outline-none focus:ring-2 focus:ring-accent/20 focus:border-accent transition-all"
+                    >
+                      <option value="">Akses penuh (tanpa pembatasan)</option>
+                      {roles.map((r) => (
+                        <option key={r.id} value={r.id}>{r.name}</option>
+                      ))}
+                    </select>
+                  </div>
+                )}
               </div>
               <button
                 type="button"
@@ -989,6 +1147,18 @@ export function SettingsPage() {
                               Master
                             </button>
                           </div>
+                          {u.role === "admin" && (
+                            <select
+                              value={u.roleId ?? ""}
+                              onChange={(e) => changeUserCustomRole(u, e.target.value)}
+                              className="mt-1.5 w-full max-w-40 mx-auto block rounded-md border border-border/70 bg-surface px-1.5 py-0.5 text-[10px] text-foreground focus:outline-none focus:ring-2 focus:ring-accent/20"
+                            >
+                              <option value="">Akses penuh</option>
+                              {roles.map((r) => (
+                                <option key={r.id} value={r.id}>{r.name}</option>
+                              ))}
+                            </select>
+                          )}
                         </td>
                         <td className="px-4 py-2 text-center">
                           <span className={`text-[10px] font-bold tracking-wider px-2 py-0.5 rounded-full border ${
@@ -1126,6 +1296,167 @@ export function SettingsPage() {
                   </tbody>
                 </table>
               </div>
+            </div>
+          </div>
+        )}
+      </div>
+
+      {/* ── 0b. Manajemen Peran ──────────────────────────────── */}
+      <div className="rounded-xl border border-border/80 bg-surface shadow-xs overflow-hidden">
+        <button type="button" onClick={() => toggleSection("manajemen-peran")}
+          className="w-full flex items-center justify-between gap-3 px-5 py-3.5 text-left hover:bg-surface-hover/50 transition-colors">
+          <div className="flex items-center gap-2.5 min-w-0">
+            <span className="w-2.5 h-2.5 rounded-full bg-teal-500 shrink-0" />
+            <span className="text-sm font-bold uppercase tracking-wider text-foreground">Manajemen Peran</span>
+            <span className="text-[11px] font-mono text-muted bg-surface-subtle border border-border/60 rounded px-2 py-0.5">{roles.length} peran</span>
+          </div>
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"
+            className={`shrink-0 text-muted transition-transform duration-200 ${openSections.has("manajemen-peran") ? "rotate-180" : ""}`}>
+            <polyline points="6 9 12 15 18 9" />
+          </svg>
+        </button>
+        {openSections.has("manajemen-peran") && (
+          <div className="px-5 pb-5 pt-4 space-y-5 border-t border-border/60">
+            <p className="text-xs text-muted leading-relaxed">
+              Buat peran kustom (mis. <strong>Frontliner</strong>, <strong>Finance</strong>) dengan akses fitur yang dipilih sendiri, lalu assign akun ke peran itu lewat bagian Akun &amp; Sesi Aktif di atas. Akun admin yang tidak diberi peran kustom tetap dapat akses penuh (kecuali Pengaturan, yang selalu eksklusif master).
+            </p>
+            {roleError && (
+              <div className="rounded-lg border border-rose-500/20 bg-rose-500/10 p-2.5 text-xs font-medium text-rose-600 dark:text-rose-400">
+                {roleError}
+              </div>
+            )}
+
+            {/* Tambah peran baru */}
+            <div className="rounded-xl bg-surface-subtle/60 border border-border/60 p-4 space-y-3">
+              <h3 className="text-xs font-bold text-foreground uppercase tracking-wider">Buat Peran Baru</h3>
+              <div>
+                <label htmlFor="new-role-name" className="block text-[11px] font-semibold text-muted mb-1">Nama Peran</label>
+                <input
+                  id="new-role-name"
+                  value={newRoleName}
+                  onChange={(e) => setNewRoleName(e.target.value)}
+                  placeholder="mis. Frontliner"
+                  className="w-full max-w-xs rounded-lg border border-border/80 bg-surface px-3 py-1.5 text-xs text-foreground focus:outline-none focus:ring-2 focus:ring-accent/20 focus:border-accent transition-all"
+                />
+              </div>
+              <div>
+                <label className="block text-[11px] font-semibold text-muted mb-1.5">Fitur yang Boleh Diakses</label>
+                <div className="grid sm:grid-cols-2 md:grid-cols-3 gap-1.5">
+                  {FEATURE_KEYS.map((key) => (
+                    <label key={key} className="flex items-center gap-2 text-xs text-foreground rounded-md border border-border/60 bg-surface px-2.5 py-1.5 cursor-pointer hover:bg-surface-hover/60 transition-colors">
+                      <input
+                        type="checkbox"
+                        checked={newRolePerms.has(key)}
+                        onChange={() => toggleNewRolePerm(key)}
+                        className="rounded border-border/80"
+                      />
+                      {FEATURE_LABELS[key]}
+                    </label>
+                  ))}
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={addRole}
+                disabled={roleBusy || !newRoleName.trim()}
+                className="inline-flex items-center gap-1.5 rounded-lg bg-accent text-accent-foreground px-4 py-2 text-xs font-semibold hover:bg-accent-hover disabled:opacity-50 transition-all shadow-xs"
+              >
+                {roleBusy ? "Menyimpan..." : "Buat Peran"}
+              </button>
+            </div>
+
+            {/* Daftar peran */}
+            <div className="space-y-2">
+              <h3 className="text-xs font-bold text-foreground uppercase tracking-wider">Daftar Peran</h3>
+              {roles.length === 0 && (
+                <div className="rounded-xl border border-dashed border-border/70 p-4 text-center text-xs text-muted">
+                  Belum ada peran kustom. Semua akun admin punya akses penuh.
+                </div>
+              )}
+              <div className="space-y-2.5">
+                {roles.map((r) => (
+                  <div key={r.id} className="rounded-xl border border-border/60 bg-surface-subtle/40 p-3.5">
+                    {editingRoleId === r.id ? (
+                      <div className="space-y-3">
+                        <input
+                          value={editRoleName}
+                          onChange={(e) => setEditRoleName(e.target.value)}
+                          className="w-full max-w-xs rounded-lg border border-border/80 bg-surface px-3 py-1.5 text-xs text-foreground focus:outline-none focus:ring-2 focus:ring-accent/20 focus:border-accent transition-all"
+                        />
+                        <div className="grid sm:grid-cols-2 md:grid-cols-3 gap-1.5">
+                          {FEATURE_KEYS.map((key) => (
+                            <label key={key} className="flex items-center gap-2 text-xs text-foreground rounded-md border border-border/60 bg-surface px-2.5 py-1.5 cursor-pointer hover:bg-surface-hover/60 transition-colors">
+                              <input
+                                type="checkbox"
+                                checked={editRolePerms.has(key)}
+                                onChange={() => toggleEditRolePerm(key)}
+                                className="rounded border-border/80"
+                              />
+                              {FEATURE_LABELS[key]}
+                            </label>
+                          ))}
+                        </div>
+                        <div className="flex items-center gap-2">
+                          <button
+                            type="button"
+                            onClick={() => saveEditRole(r.id)}
+                            disabled={roleBusy || !editRoleName.trim()}
+                            className="rounded-lg bg-accent text-accent-foreground px-3 py-1.5 text-xs font-semibold disabled:opacity-50"
+                          >
+                            {roleBusy ? "Menyimpan..." : "Simpan"}
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => setEditingRoleId(null)}
+                            className="rounded-lg border border-border/70 bg-surface px-3 py-1.5 text-xs font-semibold text-muted hover:text-foreground hover:bg-surface-hover transition-colors"
+                          >
+                            Batal
+                          </button>
+                        </div>
+                      </div>
+                    ) : (
+                      <div className="flex items-start justify-between gap-3">
+                        <div className="min-w-0">
+                          <div className="flex items-center gap-2 flex-wrap">
+                            <span className="text-sm font-bold text-foreground">{r.name}</span>
+                            <span className="text-[11px] font-mono text-muted bg-surface border border-border/60 rounded px-1.5 py-0.5">{r.userCount} akun</span>
+                          </div>
+                          <div className="flex flex-wrap gap-1 mt-1.5">
+                            {r.permissions.length === 0 ? (
+                              <span className="text-[11px] text-faint italic">Belum ada fitur dicentang</span>
+                            ) : (
+                              r.permissions.map((p) => (
+                                <span key={p} className="text-[10px] font-medium text-muted bg-surface border border-border/60 rounded px-1.5 py-0.5">
+                                  {FEATURE_LABELS[p]}
+                                </span>
+                              ))
+                            )}
+                          </div>
+                        </div>
+                        <div className="flex items-center gap-1.5 shrink-0">
+                          <button
+                            type="button"
+                            onClick={() => startEditRole(r)}
+                            className="rounded-md border border-border/70 bg-surface px-2 py-1 text-[11px] font-semibold text-muted hover:text-foreground hover:bg-surface-hover transition-colors"
+                          >
+                            Ubah
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => removeRole(r)}
+                            className="rounded-md border border-rose-500/30 bg-rose-500/10 px-2 py-1 text-[11px] font-semibold text-rose-600 dark:text-rose-400 hover:bg-rose-500/20 transition-colors"
+                          >
+                            Hapus
+                          </button>
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                ))}
+              </div>
+              <p className="text-[11px] text-muted leading-relaxed">
+                Menghapus peran tidak menghapus akun anggotanya — mereka otomatis kembali ke akses penuh (seperti admin tanpa peran).
+              </p>
             </div>
           </div>
         )}
