@@ -32,6 +32,7 @@ interface ImportHistoryItem {
 }
 
 export function ImportPage() {
+  const [branch, setBranch] = useState<"BANDUNG" | "CIMAHI">("BANDUNG");
   const [pendingFile, setPendingFile] = useState<File | null>(null);
   const [preview, setPreview] = useState<ImportPreview | null>(null);
   const [previewLoading, setPreviewLoading] = useState(false);
@@ -115,6 +116,7 @@ export function ImportPage() {
     try {
       const formData = new FormData();
       formData.append("file", pendingFile);
+      formData.append("branch", branch);
       if (forceImportHashes.length > 0) {
         formData.append("forceImportHashes", JSON.stringify(forceImportHashes));
       }
@@ -141,6 +143,30 @@ export function ImportPage() {
         <h1 className="text-lg font-bold text-foreground tracking-tight">Manajemen Import Data</h1>
         <p className="text-xs text-muted mt-0.5 leading-relaxed">
           Unggah file export transaksi penjualan (.xls / .xlsx) dari sistem POS. Sistem secara otomatis mendeteksi baris baru dan melewati baris duplikat.
+        </p>
+      </div>
+
+      {/* Branch selector */}
+      <div className="rounded-xl border border-border/80 bg-surface p-4 shadow-xs">
+        <p className="text-xs font-semibold text-foreground mb-3">Pilih Cabang untuk Import Ini</p>
+        <div className="flex gap-3">
+          {(["BANDUNG", "CIMAHI"] as const).map((b) => (
+            <button
+              key={b}
+              type="button"
+              onClick={() => setBranch(b)}
+              className={`flex-1 rounded-xl border px-4 py-3 text-sm font-semibold transition-all ${
+                branch === b
+                  ? "border-accent bg-accent/10 text-accent"
+                  : "border-border/80 bg-surface-subtle text-muted hover:text-foreground hover:bg-surface-hover"
+              }`}
+            >
+              {b === "BANDUNG" ? "Cabang Bandung" : "Cabang Cimahi"}
+            </button>
+          ))}
+        </div>
+        <p className="text-[11px] text-muted mt-2">
+          Semua outlet dari file ini akan ditandai sebagai <strong>{branch === "BANDUNG" ? "Cabang Bandung" : "Cabang Cimahi"}</strong>.
         </p>
       </div>
 

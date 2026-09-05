@@ -73,6 +73,7 @@ export async function getOutletList(includeHidden = false) {
         id: o.id,
         name: o.name,
         isHidden: o.isHidden,
+        branch: o.branch,
         qty: s?._sum.qty ?? 0,
         subtotal: Number(s?._sum.subtotal ?? 0),
         labaRugi: Number(s?._sum.labaRugi ?? 0),

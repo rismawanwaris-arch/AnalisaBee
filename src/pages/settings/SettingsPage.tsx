@@ -18,6 +18,7 @@ interface Amounts extends Record<BusinessLine, number> {}
 interface OutletItem {
   id: number;
   name: string;
+  branch?: "BANDUNG" | "CIMAHI";
   isHidden?: boolean;
   qty?: number;
   subtotal?: number;
@@ -88,6 +89,12 @@ export function SettingsPage() {
   const [targetBusy, setTargetBusy] = useState(false);
   const [targetSaved, setTargetSaved] = useState(false);
 
+  // Cimahi targets
+  const [perkonterCimahi, setPerkonterCimahi] = useState<Amounts | null>(null);
+  const [allCimahi, setAllCimahi] = useState<Amounts | null>(null);
+  const [targetBusyCimahi, setTargetBusyCimahi] = useState(false);
+  const [targetSavedCimahi, setTargetSavedCimahi] = useState(false);
+
   const [aliases, setAliases] = useState<AliasRow[]>([]);
   const [aliasFrom, setAliasFrom] = useState("");
   const [aliasTo, setAliasTo] = useState<string>("");
@@ -100,11 +107,19 @@ export function SettingsPage() {
 
   const loadTargets = useCallback(async () => {
     try {
-      const res = await fetch("/api/target");
-      if (res.ok) {
-        const data = await res.json();
+      const [resBdg, resCmh] = await Promise.all([
+        fetch("/api/target?branch=BANDUNG"),
+        fetch("/api/target?branch=CIMAHI"),
+      ]);
+      if (resBdg.ok) {
+        const data = await resBdg.json();
         setPerkonter(data.perkonter);
         setAll(data.all);
+      }
+      if (resCmh.ok) {
+        const data = await resCmh.json();
+        setPerkonterCimahi(data.perkonter);
+        setAllCimahi(data.all);
       }
     } catch {
       // ignore
@@ -277,7 +292,7 @@ export function SettingsPage() {
       ...LINES.map((c) => ({ scope: "ALL", category: c, amount: all[c] })),
     ];
     try {
-      const res = await fetch("/api/target", {
+      const res = await fetch("/api/target?branch=BANDUNG", {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(payload),
@@ -288,6 +303,29 @@ export function SettingsPage() {
       }
     } finally {
       setTargetBusy(false);
+    }
+  }
+
+  async function saveTargetsCimahi() {
+    if (!perkonterCimahi || !allCimahi) return;
+    setTargetBusyCimahi(true);
+    setTargetSavedCimahi(false);
+    const payload = [
+      ...LINES.map((c) => ({ scope: "PERKONTER", category: c, amount: perkonterCimahi[c] })),
+      ...LINES.map((c) => ({ scope: "ALL", category: c, amount: allCimahi[c] })),
+    ];
+    try {
+      const res = await fetch("/api/target?branch=CIMAHI", {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload),
+      });
+      if (res.ok) {
+        setTargetSavedCimahi(true);
+        setTimeout(() => setTargetSavedCimahi(false), 2500);
+      }
+    } finally {
+      setTargetBusyCimahi(false);
     }
   }
 
@@ -560,6 +598,24 @@ export function SettingsPage() {
     }
   }
 
+  async function setOutletBranch(outlet: OutletItem, branch: "BANDUNG" | "CIMAHI") {
+    if (outlet.branch === branch) return;
+    setAllOutlets((prev) =>
+      prev.map((o) => (o.id === outlet.id ? { ...o, branch } : o))
+    );
+    try {
+      await fetch(`/api/outlets/${outlet.id}/branch`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ branch }),
+      });
+    } catch {
+      setAllOutlets((prev) =>
+        prev.map((o) => (o.id === outlet.id ? { ...o, branch: outlet.branch } : o))
+      );
+    }
+  }
+
   async function toggleEmployeeVisibility(emp: EmployeeItem) {
     const nextHidden = !emp.isHidden;
     const key = `emp-${emp.id}`;
@@ -612,13 +668,13 @@ export function SettingsPage() {
         </p>
       </div>
 
-      {/* ── 1. Nominal Target Harian ──────────────────────────── */}
+      {/* ── 1. Nominal Target Harian — Bandung ───────────────────── */}
       <div className="rounded-xl border border-border/80 bg-surface shadow-xs overflow-hidden">
         <button type="button" onClick={() => toggleSection("nominal-target")}
           className="w-full flex items-center justify-between gap-3 px-5 py-3.5 text-left hover:bg-surface-hover/50 transition-colors">
           <div className="flex items-center gap-2.5 min-w-0">
             <span className="w-2.5 h-2.5 rounded-full bg-blue-500 shrink-0" />
-            <span className="text-sm font-bold uppercase tracking-wider text-foreground">Nominal Target Harian</span>
+            <span className="text-sm font-bold uppercase tracking-wider text-foreground">Nominal Target Harian — Bandung</span>
             <span className="text-[11px] font-mono text-muted bg-surface-subtle border border-border/60 rounded px-2 py-0.5">Target Harian</span>
           </div>
           <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"
@@ -697,6 +753,166 @@ export function SettingsPage() {
             ) : (
               <div className="text-xs text-muted py-4">Memuat data target...</div>
             )}
+          </div>
+        )}
+      </div>
+
+      {/* ── 1b. Nominal Target Harian — Cimahi ──────────────────── */}
+      <div className="rounded-xl border border-border/80 bg-surface shadow-xs overflow-hidden">
+        <button type="button" onClick={() => toggleSection("nominal-target-cimahi")}
+          className="w-full flex items-center justify-between gap-3 px-5 py-3.5 text-left hover:bg-surface-hover/50 transition-colors">
+          <div className="flex items-center gap-2.5 min-w-0">
+            <span className="w-2.5 h-2.5 rounded-full bg-purple-500 shrink-0" />
+            <span className="text-sm font-bold uppercase tracking-wider text-foreground">Nominal Target Harian — Cimahi</span>
+            <span className="text-[11px] font-mono text-muted bg-surface-subtle border border-border/60 rounded px-2 py-0.5">Target Harian</span>
+          </div>
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"
+            className={`shrink-0 text-muted transition-transform duration-200 ${openSections.has("nominal-target-cimahi") ? "rotate-180" : ""}`}>
+            <polyline points="6 9 12 15 18 9" />
+          </svg>
+        </button>
+        {openSections.has("nominal-target-cimahi") && (
+          <div className="px-5 pb-5 pt-4 space-y-4 border-t border-border/60">
+            <p className="text-xs text-muted leading-relaxed">
+              <strong>Per Konter</strong> adalah batas kelulusan per outlet Cimahi. <strong>Target ALL</strong> adalah total akumulasi seluruh outlet Cimahi untuk menghitung persentase capaian.
+            </p>
+            {perkonterCimahi && allCimahi ? (
+              <div className="space-y-4 pt-1">
+                <div className="grid sm:grid-cols-2 gap-4">
+                  <div className="space-y-3 rounded-xl bg-surface-subtle/60 border border-border/60 p-4">
+                    <h3 className="text-xs font-bold text-foreground uppercase tracking-wider">
+                      Target Per Konter (Rp / hari)
+                    </h3>
+                    {LINES.map((c) => (
+                      <div key={c} className="flex items-center justify-between gap-3">
+                        <label className="text-xs text-muted font-medium w-28">{LINE_LABELS[c]}</label>
+                        <input
+                          type="number"
+                          min={0}
+                          step={1000}
+                          value={perkonterCimahi[c]}
+                          onChange={(e) =>
+                            setPerkonterCimahi({ ...perkonterCimahi, [c]: Number(e.target.value) || 0 })
+                          }
+                          className="flex-1 max-w-44 rounded-lg border border-border/80 bg-surface px-3 py-1.5 text-xs font-mono text-foreground text-right focus:outline-none focus:ring-2 focus:ring-accent/20 focus:border-accent transition-all"
+                        />
+                      </div>
+                    ))}
+                  </div>
+                  <div className="space-y-3 rounded-xl bg-surface-subtle/60 border border-border/60 p-4">
+                    <h3 className="text-xs font-bold text-foreground uppercase tracking-wider">
+                      Target ALL Jaringan (Rp / hari)
+                    </h3>
+                    {LINES.map((c) => (
+                      <div key={c} className="flex items-center justify-between gap-3">
+                        <label className="text-xs text-muted font-medium w-28">{LINE_LABELS[c]}</label>
+                        <input
+                          type="number"
+                          min={0}
+                          step={1000}
+                          value={allCimahi[c]}
+                          onChange={(e) =>
+                            setAllCimahi({ ...allCimahi, [c]: Number(e.target.value) || 0 })
+                          }
+                          className="flex-1 max-w-44 rounded-lg border border-border/80 bg-surface px-3 py-1.5 text-xs font-mono text-foreground text-right focus:outline-none focus:ring-2 focus:ring-accent/20 focus:border-accent transition-all"
+                        />
+                      </div>
+                    ))}
+                  </div>
+                </div>
+                <div className="flex items-center gap-3 pt-2">
+                  <button
+                    type="button"
+                    onClick={saveTargetsCimahi}
+                    disabled={targetBusyCimahi}
+                    className="inline-flex items-center gap-1.5 rounded-lg bg-accent text-accent-foreground px-4 py-2 text-xs font-semibold hover:bg-accent-hover disabled:opacity-50 transition-all shadow-xs"
+                  >
+                    {targetBusyCimahi ? "Menyimpan..." : "Simpan Target Cimahi"}
+                  </button>
+                  {targetSavedCimahi && (
+                    <span className="text-xs font-semibold text-emerald-600 dark:text-emerald-400 flex items-center gap-1">
+                      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
+                        <polyline points="20 6 9 17 4 12" />
+                      </svg>
+                      Target Cimahi tersimpan
+                    </span>
+                  )}
+                </div>
+              </div>
+            ) : (
+              <div className="text-xs text-muted py-4">Memuat data target Cimahi...</div>
+            )}
+          </div>
+        )}
+      </div>
+
+      {/* ── 1c. Pemetaan Cabang Outlet ───────────────────────── */}
+      <div className="rounded-xl border border-border/80 bg-surface shadow-xs overflow-hidden">
+        <button type="button" onClick={() => toggleSection("cabang-outlet")}
+          className="w-full flex items-center justify-between gap-3 px-5 py-3.5 text-left hover:bg-surface-hover/50 transition-colors">
+          <div className="flex items-center gap-2.5 min-w-0">
+            <span className="w-2.5 h-2.5 rounded-full bg-amber-500 shrink-0" />
+            <span className="text-sm font-bold uppercase tracking-wider text-foreground">Pemetaan Cabang Outlet</span>
+            <span className="text-[11px] font-mono text-muted bg-surface-subtle border border-border/60 rounded px-2 py-0.5">Komisi & Tartun</span>
+          </div>
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"
+            className={`shrink-0 text-muted transition-transform duration-200 ${openSections.has("cabang-outlet") ? "rotate-180" : ""}`}>
+            <polyline points="6 9 12 15 18 9" />
+          </svg>
+        </button>
+        {openSections.has("cabang-outlet") && (
+          <div className="px-5 pb-5 pt-4 space-y-4 border-t border-border/60">
+            <p className="text-xs text-muted leading-relaxed">
+              Tentukan outlet mana yang termasuk <strong>Cabang Bandung</strong> dan mana yang termasuk <strong>Cabang Cimahi</strong>. Pengaturan ini digunakan untuk memisahkan data Komisi Server dan Tarik Tunai yang tidak memiliki informasi cabang di file sumbernya.
+            </p>
+            <div className="overflow-x-auto rounded-lg border border-border/60">
+              <table className="w-full text-xs">
+                <thead>
+                  <tr className="border-b border-border/60 bg-surface-subtle/60">
+                    <th className="px-4 py-2.5 font-semibold text-[11px] uppercase text-left text-muted">Nama Outlet</th>
+                    <th className="px-4 py-2.5 font-semibold text-[11px] uppercase text-center text-muted w-52">Cabang</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-border/40">
+                  {allOutlets.length === 0 && (
+                    <tr>
+                      <td colSpan={2} className="px-4 py-6 text-center text-muted">Belum ada outlet.</td>
+                    </tr>
+                  )}
+                  {allOutlets.map((outlet) => (
+                    <tr key={outlet.id} className="hover:bg-surface-hover/30 transition-colors">
+                      <td className="px-4 py-2.5 font-medium text-foreground">{outlet.name}</td>
+                      <td className="px-4 py-2 text-center">
+                        <div className="inline-flex rounded-lg border border-border/70 overflow-hidden">
+                          <button
+                            type="button"
+                            onClick={() => setOutletBranch(outlet, "BANDUNG")}
+                            className={`px-3 py-1 text-xs font-semibold transition-colors ${
+                              outlet.branch === "BANDUNG" || outlet.branch === undefined
+                                ? "bg-blue-500 text-white"
+                                : "bg-surface text-muted hover:bg-surface-hover"
+                            }`}
+                          >
+                            Bandung
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => setOutletBranch(outlet, "CIMAHI")}
+                            className={`px-3 py-1 text-xs font-semibold transition-colors border-l border-border/70 ${
+                              outlet.branch === "CIMAHI"
+                                ? "bg-purple-500 text-white"
+                                : "bg-surface text-muted hover:bg-surface-hover"
+                            }`}
+                          >
+                            Cimahi
+                          </button>
+                        </div>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
           </div>
         )}
       </div>

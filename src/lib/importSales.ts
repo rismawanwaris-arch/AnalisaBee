@@ -67,7 +67,8 @@ function buildHashesWithOccurrence(rows: ParsedSaleRow[]): Map<ParsedSaleRow, st
 export async function importSalesFile(
   filename: string,
   buffer: Buffer,
-  forceImportHashes: string[] = []
+  forceImportHashes: string[] = [],
+  branch: "BANDUNG" | "CIMAHI" = "BANDUNG"
 ): Promise<ImportSummary> {
   const { rows, errors, totalRows } = parseExcelBuffer(buffer);
 
@@ -93,6 +94,7 @@ export async function importSalesFile(
       errorRowCount: errors.length,
       periodStart,
       periodEnd,
+      branch,
     },
   });
 
@@ -108,8 +110,13 @@ export async function importSalesFile(
 
     if (outletNames.length) {
       await prisma.outlet.createMany({
-        data: outletNames.map((name) => ({ name })),
+        data: outletNames.map((name) => ({ name, branch })),
         skipDuplicates: true,
+      });
+      // Update branch for existing outlets that match this import's cabang names
+      await prisma.outlet.updateMany({
+        where: { name: { in: outletNames } },
+        data: { branch },
       });
     }
     if (employeeNames.length) {

@@ -70,7 +70,7 @@ function passFail(value: number, target: number): "good" | "bad" {
   return value >= target ? "good" : "bad";
 }
 
-export function TargetReportPage() {
+export function TargetReportPage({ branch = "BANDUNG" }: { branch?: "BANDUNG" | "CIMAHI" }) {
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
   const dateParam = searchParams.get("date") || yesterdayStr();
@@ -85,24 +85,26 @@ export function TargetReportPage() {
 
   useEffect(() => setDate(dateParam), [dateParam]);
 
+  const basePath = branch === "CIMAHI" ? "/cimahi/target" : "/target";
+
   const load = useCallback(async (d: string) => {
     setLoading(true);
     try {
-      const res = await fetch(`/api/target/report?date=${d}`);
+      const res = await fetch(`/api/target/report?date=${d}&branch=${branch}`);
       if (res.ok) setData(await res.json());
     } catch {
       // ignore
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [branch]);
 
   useEffect(() => {
     load(dateParam);
   }, [dateParam, load]);
 
   function applyDate(d: string) {
-    navigate(`/target?date=${d}`);
+    navigate(`${basePath}?date=${d}`);
   }
 
   function toggleSort(key: SortKey) {

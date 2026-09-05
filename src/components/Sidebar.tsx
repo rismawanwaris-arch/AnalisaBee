@@ -105,11 +105,15 @@ export function Sidebar({ status }: { status: SystemStatus | null }) {
 
       {/* Navigation Links with Group Headers */}
       <nav className="flex-1 px-3 py-3 space-y-4 overflow-y-auto">
-        {/* Group: Ringkasan */}
-        {renderNavGroup("Ringkasan", [
+        {/* Group: Bandung */}
+        {renderNavGroup("Cabang Bandung", [
           { href: "/dashboard", label: "Dashboard", icon: <path d="M3 13.2h7.2V3H3v10.2Zm0 7.8h7.2v-5.4H3V21Zm10.8 0H21V10.8h-7.2V21Zm0-18v5.4H21V3h-7.2Z" /> },
           { href: "/target", label: "Target Harian", icon: <><circle cx="12" cy="12" r="9" /><circle cx="12" cy="12" r="4.5" /><circle cx="12" cy="12" r="1" fill="currentColor" /></> },
           { href: "/points", label: "Poin Penjualan", icon: <path d="M12 2.5 14.6 9h6.4l-5.2 4 2 6.5L12 15.8 6.2 19.5l2-6.5-5.2-4h6.4Z" /> },
+        ])}
+        {/* Group: Cimahi */}
+        {renderNavGroup("Cabang Cimahi", [
+          { href: "/cimahi/target", label: "Target Harian", icon: <><circle cx="12" cy="12" r="9" /><circle cx="12" cy="12" r="4.5" /><circle cx="12" cy="12" r="1" fill="currentColor" /></> },
         ])}
         {/* Group: Dimensi Analisis */}
         {renderNavGroup("Dimensi Analisis", [

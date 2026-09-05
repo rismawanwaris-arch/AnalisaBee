@@ -16,6 +16,11 @@ enum ImportStatus {
   FAILED
 }
 
+enum Branch {
+  BANDUNG
+  CIMAHI
+}
+
 enum TargetScope {
   PERKONTER
   ALL
@@ -49,6 +54,7 @@ model ImportBatch {
   errorMessage    String?
   periodStart     DateTime?    @db.Date
   periodEnd       DateTime?    @db.Date
+  branch          Branch       @default(BANDUNG)
   sales           Sale[]
 
   @@map("import_batches")
@@ -58,6 +64,7 @@ model Outlet {
   id       Int           @id @default(autoincrement())
   name     String        @unique
   isHidden Boolean       @default(false)
+  branch   Branch        @default(BANDUNG)
   sales    Sale[]
   aliases  OutletAlias[]
   tartun   TartunDaily[]
@@ -73,10 +80,11 @@ model Target {
   id        Int          @id @default(autoincrement())
   scope     TargetScope
   category  BusinessLine
+  branch    Branch       @default(BANDUNG)
   amount    Decimal      @db.Decimal(14, 2)
   updatedAt DateTime     @updatedAt
 
-  @@unique([scope, category])
+  @@unique([scope, category, branch])
   @@map("targets")
 }
 

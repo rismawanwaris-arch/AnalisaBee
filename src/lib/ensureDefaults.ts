@@ -5,18 +5,29 @@ import { DEFAULT_TARGETS } from "@/lib/defaults/targets";
 import { DEFAULT_GROUP_POINTS, DEFAULT_ITEM_POINTS } from "@/lib/defaults/itemPoints";
 
 let _ensured = false;
+let _ensuredCimahi = false;
 
-/**
- * Idempotently seeds default targets, item-group mappings, outlet aliases,
- * and point rules. Safe to call repeatedly — only runs once per process
- * lifetime. Call invalidateDefaults() after a POS import so aliases for
- * newly-created outlets are seeded on the next request.
- */
 export function invalidateDefaults() {
   _ensured = false;
+  _ensuredCimahi = false;
 }
 
-export async function ensureDefaults(): Promise<void> {
+export async function ensureDefaults(branch: "BANDUNG" | "CIMAHI" = "BANDUNG"): Promise<void> {
+  if (branch === "CIMAHI") {
+    if (_ensuredCimahi) return;
+    _ensuredCimahi = true;
+    await Promise.all(
+      DEFAULT_TARGETS.map((t) =>
+        prisma.target.upsert({
+          where: { scope_category_branch: { scope: t.scope, category: t.category, branch: "CIMAHI" } },
+          update: {},
+          create: { scope: t.scope, category: t.category, branch: "CIMAHI", amount: t.amount },
+        })
+      )
+    );
+    return;
+  }
+
   if (_ensured) return;
   _ensured = true;
   try {
@@ -29,9 +40,9 @@ export async function ensureDefaults(): Promise<void> {
   await Promise.all(
     DEFAULT_TARGETS.map((t) =>
       prisma.target.upsert({
-        where: { scope_category: { scope: t.scope, category: t.category } },
+        where: { scope_category_branch: { scope: t.scope, category: t.category, branch: "BANDUNG" } },
         update: {},
-        create: { scope: t.scope, category: t.category, amount: t.amount },
+        create: { scope: t.scope, category: t.category, branch: "BANDUNG", amount: t.amount },
       })
     )
   );

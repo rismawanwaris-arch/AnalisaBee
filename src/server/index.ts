@@ -258,6 +258,25 @@ app.get("/api/outlets/summary", requireAuth, async (req, res) => {
   }
 });
 
+app.put("/api/outlets/:id/branch", requireMaster, async (req, res) => {
+  try {
+    const id = Number(req.params.id);
+    if (Number.isNaN(id)) return res.status(400).json({ error: "ID tidak valid" });
+    const { branch } = req.body;
+    if (branch !== "BANDUNG" && branch !== "CIMAHI") {
+      return res.status(400).json({ error: "branch harus BANDUNG atau CIMAHI" });
+    }
+    const updated = await prisma.outlet.update({
+      where: { id },
+      data: { branch },
+      select: { id: true, name: true, branch: true },
+    });
+    return res.json(updated);
+  } catch (err: any) {
+    return res.status(500).json({ error: err.message });
+  }
+});
+
 app.put("/api/outlets/:id/visibility", requireMaster, async (req, res) => {
   try {
     const id = Number(req.params.id);
@@ -442,9 +461,11 @@ app.get("/api/target/report", requireAuth, async (req, res) => {
     if (!date || Number.isNaN(date.getTime())) {
       return res.status(400).json({ error: "Parameter date wajib diisi (YYYY-MM-DD)." });
     }
-    const [report, targets] = await Promise.all([getDailyTargetReport(date), getTargetAmounts()]);
+    const branch = (req.query.branch === "CIMAHI" ? "CIMAHI" : "BANDUNG") as "BANDUNG" | "CIMAHI";
+    const [report, targets] = await Promise.all([getDailyTargetReport(date, branch), getTargetAmounts(branch)]);
     return res.json({
       date: dateParam,
+      branch,
       rows: report.rows,
       unmappedItemGroups: report.unmappedItemGroups,
       targets,
@@ -456,7 +477,8 @@ app.get("/api/target/report", requireAuth, async (req, res) => {
 
 app.get("/api/target", requireAuth, async (req, res) => {
   try {
-    const targets = await getTargetAmounts();
+    const branch = (req.query.branch === "CIMAHI" ? "CIMAHI" : "BANDUNG") as "BANDUNG" | "CIMAHI";
+    const targets = await getTargetAmounts(branch);
     return res.json(targets);
   } catch (err: any) {
     return res.status(500).json({ error: err.message });
@@ -465,14 +487,15 @@ app.get("/api/target", requireAuth, async (req, res) => {
 
 app.put("/api/target", requireMaster, async (req, res) => {
   try {
+    const branch = (req.query.branch === "CIMAHI" ? "CIMAHI" : "BANDUNG") as "BANDUNG" | "CIMAHI";
     const body = req.body;
     if (Array.isArray(body)) {
       await Promise.all(
-        body.map((e: any) => setTargetAmount(e.scope, e.category, Number(e.amount) || 0))
+        body.map((e: any) => setTargetAmount(e.scope, e.category, Number(e.amount) || 0, branch))
       );
     }
-    const targets = await getTargetAmounts();
-    await logActivity(req, "TARGET_UPDATE", `${Array.isArray(body) ? body.length : 1} entri diperbarui`);
+    const targets = await getTargetAmounts(branch);
+    await logActivity(req, "TARGET_UPDATE", `[${branch}] ${Array.isArray(body) ? body.length : 1} entri diperbarui`);
     return res.json(targets);
   } catch (err: any) {
     return res.status(500).json({ error: err.message });
@@ -894,10 +917,10 @@ app.post("/api/import", requireAuth, upload.single("file"), async (req, res) => 
       }
       forceImportHashes = parsed.filter((h): h is string => typeof h === "string");
     }
-    const summary = await importSalesFile(req.file.originalname, req.file.buffer, forceImportHashes);
-    // Refresh outlet alias seeding so newly-imported outlets get their aliases
+    const branch = (req.body.branch === "CIMAHI" ? "CIMAHI" : "BANDUNG") as "BANDUNG" | "CIMAHI";
+    const summary = await importSalesFile(req.file.originalname, req.file.buffer, forceImportHashes, branch);
     invalidateDefaults();
-    await logActivity(req, "IMPORT_SALES", `${req.file.originalname} — ${summary.insertedCount} baris diimpor`);
+    await logActivity(req, "IMPORT_SALES", `[${branch}] ${req.file.originalname} — ${summary.insertedCount} baris diimpor`);
     return res.json(summary);
   } catch (err: any) {
     return res.status(422).json({ error: err.message || "Gagal mengimpor file." });

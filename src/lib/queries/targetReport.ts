@@ -23,12 +23,12 @@ export type TargetAmounts = Record<BusinessLine, number>;
 
 const BUSINESS_LINES: BusinessLine[] = ["SERVER", "TARTUN", "PETSHOP", "AKSESORIS", "SP_VOUCHER"];
 
-export async function getTargetAmounts(): Promise<{
+export async function getTargetAmounts(branch: "BANDUNG" | "CIMAHI" = "BANDUNG"): Promise<{
   perkonter: TargetAmounts;
   all: TargetAmounts;
 }> {
-  await ensureDefaults();
-  const rows = await prisma.target.findMany();
+  await ensureDefaults(branch);
+  const rows = await prisma.target.findMany({ where: { branch } });
   const perkonter = {} as TargetAmounts;
   const all = {} as TargetAmounts;
   for (const line of BUSINESS_LINES) {
@@ -44,12 +44,13 @@ export async function getTargetAmounts(): Promise<{
 export async function setTargetAmount(
   scope: "PERKONTER" | "ALL",
   category: BusinessLine,
-  amount: number
+  amount: number,
+  branch: "BANDUNG" | "CIMAHI" = "BANDUNG"
 ) {
   await prisma.target.upsert({
-    where: { scope_category: { scope, category } },
+    where: { scope_category_branch: { scope, category, branch } },
     update: { amount },
-    create: { scope, category, amount },
+    create: { scope, category, branch, amount },
   });
 }
 
@@ -57,14 +58,14 @@ function emptyFigure(): CategoryFigure {
   return { sales: 0, qtyOrTrx: 0 };
 }
 
-export async function getDailyTargetReport(date: Date): Promise<{
+export async function getDailyTargetReport(date: Date, branch: "BANDUNG" | "CIMAHI" = "BANDUNG"): Promise<{
   rows: TargetReportRow[];
   unmappedItemGroups: string[];
 }> {
-  await ensureDefaults();
+  await ensureDefaults(branch);
 
   const [outlets, tartunRows, serverRows, saleRows, groupMappings] = await Promise.all([
-    prisma.outlet.findMany({ orderBy: { name: "asc" } }),
+    prisma.outlet.findMany({ where: { branch }, orderBy: { name: "asc" } }),
     prisma.tartunDaily.findMany({ where: { tanggal: date } }),
     prisma.serverDaily.findMany({ where: { tanggal: date } }),
     prisma.sale.findMany({

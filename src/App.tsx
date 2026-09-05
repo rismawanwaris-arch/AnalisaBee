@@ -23,6 +23,7 @@ const TransactionsPage = lazy(() => import("./pages/transactions/TransactionsPag
 const ImportPage = lazy(() => import("./pages/import/ImportPage").then((m) => ({ default: m.ImportPage })));
 const SettingsPage = lazy(() => import("./pages/settings/SettingsPage").then((m) => ({ default: m.SettingsPage })));
 const ActivityLogPage = lazy(() => import("./pages/log/ActivityLogPage").then((m) => ({ default: m.ActivityLogPage })));
+const CimahiLayout = lazy(() => import("./pages/cimahi/CimahiLayout").then((m) => ({ default: m.CimahiLayout })));
 
 function PageLoader() {
   return (
@@ -72,6 +73,12 @@ export function App() {
                 <Route path="/employees/:id" element={<EmployeeDetailPage />} />
                 <Route path="/transactions" element={<TransactionsPage />} />
                 <Route path="/import" element={<ImportPage />} />
+
+                {/* Cimahi Branch */}
+                <Route path="/cimahi" element={<CimahiLayout />}>
+                  <Route index element={<Navigate to="/cimahi/target" replace />} />
+                  <Route path="target" element={<TargetReportPage branch="CIMAHI" />} />
+                </Route>
 
                 {/* Activity Log */}
                 <Route path="/log" element={<ActivityLogPage />} />
