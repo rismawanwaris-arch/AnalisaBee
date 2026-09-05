@@ -158,6 +158,12 @@ export function TargetReportPage({ branch = "BANDUNG" }: { branch?: "BANDUNG" | 
     return initial;
   }, [data]);
 
+  const totalTargetAll = useMemo(() => {
+    if (!data) return 0;
+    const t = data.targets.all;
+    return t.SERVER + t.TARTUN + t.PETSHOP + t.AKSESORIS + t.SP_VOUCHER;
+  }, [data]);
+
   function exportExcel() {
     if (!data || !totals) return;
     const header = [
@@ -217,7 +223,7 @@ export function TargetReportPage({ branch = "BANDUNG" }: { branch?: "BANDUNG" | 
       "",
       data.targets.all.SP_VOUCHER,
       "",
-      "",
+      totalTargetAll,
       "",
     ];
     const capPct = (actual: number, target: number) =>
@@ -234,7 +240,7 @@ export function TargetReportPage({ branch = "BANDUNG" }: { branch?: "BANDUNG" | 
       "",
       capPct(totals.spVoucher.sales, data.targets.all.SP_VOUCHER),
       "",
-      "",
+      capPct(totals.totalSales, totalTargetAll),
       "",
     ];
 
@@ -484,7 +490,7 @@ export function TargetReportPage({ branch = "BANDUNG" }: { branch?: "BANDUNG" | 
                     <td className="px-2 py-1.5 text-right border-r border-border/60">-</td>
                     <td className="px-2 py-1.5 text-right">{formatNumber(data.targets.all.SP_VOUCHER)}</td>
                     <td className="px-2 py-1.5 text-right border-r border-border/60">-</td>
-                    <td className="px-2 py-1.5 text-right" colSpan={2}>-</td>
+                    <td className="px-2 py-1.5 text-right font-bold text-foreground" colSpan={2}>{formatNumber(totalTargetAll)}</td>
                   </tr>
                   <tr className="bg-surface-subtle/70 text-foreground">
                     <td className="px-3 py-1.5 font-sans border-r border-border/60">CAPAIAN (%)</td>
@@ -498,7 +504,7 @@ export function TargetReportPage({ branch = "BANDUNG" }: { branch?: "BANDUNG" | 
                     <td className="px-2 py-1.5 text-right border-r border-border/60">-</td>
                     <td className="px-2 py-1.5 text-right text-accent">{data.targets.all.SP_VOUCHER > 0 ? `${((totals.spVoucher.sales / data.targets.all.SP_VOUCHER) * 100).toFixed(1)}%` : "-"}</td>
                     <td className="px-2 py-1.5 text-right border-r border-border/60">-</td>
-                    <td className="px-2 py-1.5 text-right text-accent" colSpan={2}>-</td>
+                    <td className="px-2 py-1.5 text-right font-bold text-accent" colSpan={2}>{totalTargetAll > 0 ? `${((totals.totalSales / totalTargetAll) * 100).toFixed(1)}%` : "-"}</td>
                   </tr>
                 </tfoot>
               </table>
