@@ -1,10 +1,10 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Link } from "react-router-dom";
 import { formatNumber, formatRupiah } from "@/lib/format";
 import { SortableTable, type Column } from "@/components/SortableTable";
 import { ItemPicker, type ItemOption } from "@/components/ItemPicker";
 import { todayStr } from "@/lib/dateDefaults";
-import { useMonthPeriod } from "@/lib/useMonthPeriod";
+import { usePeriod } from "@/context/PeriodContext";
 
 interface OutletRow {
   id: number;
@@ -68,7 +68,7 @@ const columns: Column<OutletRow>[] = [
 ];
 
 export function OutletsPage() {
-  const { currentPeriod, periodStartDay, loaded: periodLoaded } = useMonthPeriod();
+  const { currentPeriod, periodStartDay, loaded: periodLoaded } = usePeriod();
   const [outlets, setOutlets] = useState<OutletRow[]>([]);
   const [employees, setEmployees] = useState<EmployeeOption[]>([]);
   const [loading, setLoading] = useState(true);
@@ -77,12 +77,14 @@ export function OutletsPage() {
   const [from, setFrom] = useState("");
   const [to, setTo] = useState("");
 
+  const periodInitialised = useRef(false);
   useEffect(() => {
-    if (periodLoaded && !from && !to) {
+    if (periodLoaded && !periodInitialised.current) {
+      periodInitialised.current = true;
       setFrom(currentPeriod.from);
       setTo(currentPeriod.to);
     }
-  }, [periodLoaded]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [periodLoaded, currentPeriod.from, currentPeriod.to]);
   const [outletSearch, setOutletSearch] = useState("");
   const [selectedItem, setSelectedItem] = useState<ItemOption | null>(null);
   const [employeeId, setEmployeeId] = useState("");
@@ -90,12 +92,14 @@ export function OutletsPage() {
   const [subtotalMax, setSubtotalMax] = useState("");
 
   useEffect(() => {
-    fetch("/api/employees")
+    const ctrl = new AbortController();
+    fetch("/api/employees", { signal: ctrl.signal })
       .then((r) => (r.ok ? r.json() : []))
       .then((list: EmployeeOption[]) =>
         setEmployees([...list].sort((a, b) => a.name.localeCompare(b.name)))
       )
       .catch(() => {});
+    return () => ctrl.abort();
   }, []);
 
   const loadData = useCallback(async () => {
@@ -121,12 +125,12 @@ export function OutletsPage() {
     loadData();
   }, [loadData]);
 
-  const SHORTCUTS = [
+  const SHORTCUTS = useMemo(() => [
     { label: "Hari Ini", from: todayStr(), to: todayStr() },
     { label: "Minggu Ini", from: startOfWeekStr(), to: todayStr() },
     { label: "Bulan Ini", from: currentPeriod.from, to: currentPeriod.to },
     { label: "Semua", from: "", to: "" },
-  ];
+  ], [currentPeriod.from, currentPeriod.to]);
 
   function applyShortcut(s: { label: string; from: string; to: string }) {
     setFrom(s.from);
