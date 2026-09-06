@@ -1,4 +1,4 @@
-import { Fragment, useCallback, useEffect, useState } from "react";
+import { Fragment, useCallback, useEffect, useRef, useState } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
 import { formatNumber, formatDate } from "@/lib/format";
 
@@ -28,9 +28,23 @@ function todayStr(): string {
   const d = new Date();
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
 }
-function currentMonthStr(): string {
+// A period labeled "month M" runs from periodStartDay of M through
+// periodStartDay-1 of M+1 (see computeMonthPeriod on the server). So if
+// today falls before periodStartDay, the period actually running right now
+// started last month, not this one — e.g. periodStartDay=29 and today the
+// 6th means the running period is still "last month" (29th – 28th).
+function currentPeriodMonthStr(periodStartDay: number): string {
   const d = new Date();
-  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`;
+  let year = d.getFullYear();
+  let month = d.getMonth() + 1; // 1-12
+  if (d.getDate() < periodStartDay) {
+    month -= 1;
+    if (month === 0) {
+      month = 12;
+      year -= 1;
+    }
+  }
+  return `${year}-${String(month).padStart(2, "0")}`;
 }
 
 const MODE_LABEL: Record<Mode, string> = { day: "Per Hari", month: "Per Bulan", range: "Per Rentang" };
@@ -39,9 +53,14 @@ export function PointsLeaderboardPage() {
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
 
+  // Default to 1 (plain calendar month) until the real cut-off day loads —
+  // matches prior behavior for the common case and self-corrects below once
+  // periodStartDay is known.
+  const [periodStartDay, setPeriodStartDay] = useState(1);
+
   const urlMode = (searchParams.get("mode") as Mode) || "month";
   const urlDay = searchParams.get("day") || todayStr();
-  const urlMonth = searchParams.get("month") || currentMonthStr();
+  const urlMonth = searchParams.get("month") || currentPeriodMonthStr(periodStartDay);
   const urlFrom = searchParams.get("from") || todayStr();
   const urlTo = searchParams.get("to") || todayStr();
 
@@ -50,6 +69,23 @@ export function PointsLeaderboardPage() {
   const [month, setMonth] = useState(urlMonth);
   const [from, setFrom] = useState(urlFrom);
   const [to, setTo] = useState(urlTo);
+
+  useEffect(() => {
+    fetch("/api/points/settings")
+      .then((r) => (r.ok ? r.json() : null))
+      .then((data) => {
+        if (data?.periodStartDay) setPeriodStartDay(data.periodStartDay);
+      })
+      .catch(() => {});
+  }, []);
+
+  // Once the real cut-off day is known, correct the "Pilih Bulan" field if
+  // the user hasn't explicitly picked a month (via typing or a shared URL).
+  useEffect(() => {
+    if (searchParams.get("month")) return;
+    setMonth(currentPeriodMonthStr(periodStartDay));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [periodStartDay]);
 
   const [data, setData] = useState<LeaderboardResponse | null>(null);
   const [loading, setLoading] = useState(true);
@@ -73,15 +109,25 @@ export function PointsLeaderboardPage() {
     return params;
   }, [urlMode, urlDay, urlFrom, urlTo, urlMonth]);
 
+  // The default "month" query changes right after mount once periodStartDay
+  // loads (see currentPeriodMonthStr above), firing a second request close
+  // behind the first. Without this guard, whichever of the two resolves last
+  // wins — sometimes the stale one — so only apply the most recently *fired*
+  // request's result.
+  const loadSeq = useRef(0);
   const load = useCallback(async () => {
+    const seq = ++loadSeq.current;
     setLoading(true);
     try {
       const res = await fetch(`/api/points/leaderboard?${queryParams().toString()}`);
-      if (res.ok) setData(await res.json());
+      if (res.ok) {
+        const json = await res.json();
+        if (seq === loadSeq.current) setData(json);
+      }
     } catch {
       // ignore
     } finally {
-      setLoading(false);
+      if (seq === loadSeq.current) setLoading(false);
     }
   }, [queryParams]);
 

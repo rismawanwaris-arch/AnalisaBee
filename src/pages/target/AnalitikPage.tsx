@@ -56,7 +56,7 @@ const tooltipStyle = {
   boxShadow: "0 10px 15px -3px rgba(0, 0, 0, 0.1)",
 };
 
-export function AnalitikPage() {
+export function AnalitikPage({ branch = "BANDUNG" }: { branch?: "BANDUNG" | "CIMAHI" }) {
   const [date, setDate] = useState(yesterdayStr());
   const [data, setData] = useState<ReportResponse | null>(null);
   const [loading, setLoading] = useState(true);
@@ -64,7 +64,7 @@ export function AnalitikPage() {
   const load = useCallback(async (d: string) => {
     setLoading(true);
     try {
-      const res = await fetch(`/api/target/report?date=${d}`);
+      const res = await fetch(`/api/target/report?date=${d}&branch=${branch}`);
       if (res.ok) {
         setData(await res.json());
       }
@@ -73,12 +73,12 @@ export function AnalitikPage() {
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [branch]);
 
   useEffect(() => {
     load(date);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  }, [branch]);
 
   if (loading && !data) {
     return (

@@ -881,7 +881,7 @@ app.post("/api/target", requireMaster, async (req, res) => {
   }
 });
 
-app.get("/api/hourly", requireFeature("target_bandung"), async (req, res) => {
+app.get("/api/hourly", requireFeature(targetReportFeature), async (req, res) => {
   try {
     const dateStr = req.query.date as string;
     if (!dateStr) return res.status(400).json({ error: "Parameter date wajib diisi." });
@@ -895,7 +895,8 @@ app.get("/api/hourly", requireFeature("target_bandung"), async (req, res) => {
       ? (req.query.granularity as Granularity)
       : "EXACT";
     const outletId = req.query.outletId ? Number(req.query.outletId) : undefined;
-    const report = await getHourlyAnalytics(date, outletId, granularity);
+    const branch = req.query.branch === "CIMAHI" ? "CIMAHI" : "BANDUNG";
+    const report = await getHourlyAnalytics(date, outletId, granularity, branch);
     return res.json(report);
   } catch (err: any) {
     return res.status(500).json({ error: err.message });
@@ -933,8 +934,9 @@ app.get("/api/points/leaderboard", requireFeature("points"), async (req, res) =>
   }
 });
 
-// Master-only: consumed only by the Settings page's cut-off day form.
-app.get("/api/points/settings", requireMaster, async (req, res) => {
+// Feature-gated (not master-only): the leaderboard page also needs this to
+// compute which calendar month the currently-running period belongs to.
+app.get("/api/points/settings", requireFeature("points"), async (req, res) => {
   try {
     const data = await getPointPeriodSetting();
     return res.json(data);

@@ -16,6 +16,7 @@ const OPERATING_HOURS = [6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20,
 interface OutletOption {
   id: number;
   name: string;
+  branch?: "BANDUNG" | "CIMAHI";
 }
 interface AuditRow {
   outletId: number;
@@ -37,7 +38,7 @@ interface HourlyResponse {
   heatmap: HeatmapRow[];
 }
 
-export function JamOperasionalPage() {
+export function JamOperasionalPage({ branch = "BANDUNG" }: { branch?: "BANDUNG" | "CIMAHI" }) {
   const [date, setDate] = useState(yesterdayStr());
   const [outletId, setOutletId] = useState("");
   const [granularity, setGranularity] = useState<"EXACT" | "15MIN" | "30MIN" | "1HOUR">("EXACT");
@@ -48,13 +49,18 @@ export function JamOperasionalPage() {
   useEffect(() => {
     fetch("/api/outlets")
       .then((r) => (r.ok ? r.json() : []))
-      .then((list: OutletOption[]) => setOutlets(list))
+      .then((list: OutletOption[]) => setOutlets(list.filter((o) => (o.branch ?? "BANDUNG") === branch)))
       .catch(() => {});
-  }, []);
+  }, [branch]);
+
+  // Switching branch invalidates a previously selected outlet from the other branch.
+  useEffect(() => {
+    setOutletId("");
+  }, [branch]);
 
   const load = useCallback(async () => {
     setLoading(true);
-    const params = new URLSearchParams({ date, granularity });
+    const params = new URLSearchParams({ date, granularity, branch });
     if (outletId) params.set("outletId", outletId);
     try {
       const res = await fetch(`/api/hourly?${params.toString()}`);
@@ -64,7 +70,7 @@ export function JamOperasionalPage() {
     } finally {
       setLoading(false);
     }
-  }, [date, outletId, granularity]);
+  }, [date, outletId, granularity, branch]);
 
   useEffect(() => {
     load();

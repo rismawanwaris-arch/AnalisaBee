@@ -34,12 +34,13 @@ function bucketKey(hour: number, minute: number, granularity: Granularity): stri
 export async function getHourlyAnalytics(
   date: Date,
   outletId: number | undefined,
-  granularity: Granularity
+  granularity: Granularity,
+  branch: "BANDUNG" | "CIMAHI" = "BANDUNG"
 ) {
   const [outlets, sales] = await Promise.all([
-    prisma.outlet.findMany({ orderBy: { name: "asc" } }),
+    prisma.outlet.findMany({ where: { branch }, orderBy: { name: "asc" } }),
     prisma.sale.findMany({
-      where: { tanggal: date },
+      where: { tanggal: date, outlet: { branch } },
       select: { outletId: true, jamBuat: true },
     }),
   ]);

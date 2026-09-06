@@ -2,6 +2,8 @@ import { Link, useLocation, Outlet } from "react-router-dom";
 
 const TABS = [
   { href: "/cimahi/target", label: "Laporan Harian", exact: true },
+  { href: "/cimahi/target/analitik", label: "Analitik Eksekutif" },
+  { href: "/cimahi/target/jam-operasional", label: "Jam Operasional" },
 ];
 
 export function CimahiLayout() {

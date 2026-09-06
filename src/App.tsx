@@ -78,6 +78,8 @@ export function App() {
                 <Route path="/cimahi" element={<CimahiLayout />}>
                   <Route index element={<Navigate to="/cimahi/target" replace />} />
                   <Route path="target" element={<TargetReportPage branch="CIMAHI" />} />
+                  <Route path="target/analitik" element={<AnalitikPage branch="CIMAHI" />} />
+                  <Route path="target/jam-operasional" element={<JamOperasionalPage branch="CIMAHI" />} />
                 </Route>
 
                 {/* Activity Log */}
