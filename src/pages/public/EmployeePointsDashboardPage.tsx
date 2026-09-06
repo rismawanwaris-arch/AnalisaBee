@@ -179,9 +179,15 @@ export function EmployeePointsDashboardPage() {
             ))}
           </select>
           {data && (
-            <span className="text-[11px] font-mono text-muted bg-surface-subtle border border-border/60 rounded px-2 py-1">
-              Target: {formatNumber(data.pointTarget)} poin
-            </span>
+            data.pointTarget > 0 ? (
+              <span className="text-[11px] font-mono text-muted bg-surface-subtle border border-border/60 rounded px-2 py-1">
+                Target: {formatNumber(data.pointTarget)} poin
+              </span>
+            ) : (
+              <span className="text-[11px] font-mono text-amber-600 dark:text-amber-400 bg-amber-500/10 border border-amber-500/30 rounded px-2 py-1">
+                Target belum diatur
+              </span>
+            )
           )}
         </div>
 
@@ -234,18 +240,29 @@ export function EmployeePointsDashboardPage() {
                         </div>
                         <div className="text-right shrink-0">
                           <span className="text-sm font-mono font-bold text-foreground">{formatNumber(row.totalPoints)}</span>
-                          <span className="text-[11px] text-muted"> / {formatNumber(data.pointTarget)} poin</span>
-                          <span className={`ml-2 text-[11px] font-bold ${hit ? "text-emerald-600 dark:text-emerald-400" : "text-muted"}`}>
-                            {row.achievementPct.toFixed(0)}%
-                          </span>
+                          {data.pointTarget > 0 ? (
+                            <>
+                              <span className="text-[11px] text-muted"> / {formatNumber(data.pointTarget)} poin</span>
+                              <span className={`ml-2 text-[11px] font-bold ${hit ? "text-emerald-600 dark:text-emerald-400" : "text-muted"}`}>
+                                {row.achievementPct.toFixed(0)}%
+                              </span>
+                            </>
+                          ) : (
+                            <span className="text-[11px] text-muted"> poin</span>
+                          )}
                         </div>
                       </div>
-                      <div className="h-2 rounded-full bg-surface-subtle overflow-hidden">
-                        <div
-                          className={`h-full rounded-full transition-all ${hit ? "bg-emerald-500" : "bg-accent"}`}
-                          style={{ width: `${pct}%` }}
-                        />
-                      </div>
+                      {/* Without a target there's nothing to show progress against — a
+                          0%-filled bar next to a real point count reads as "achieved
+                          nothing", which is misleading, so the bar itself is skipped. */}
+                      {data.pointTarget > 0 && (
+                        <div className="h-2 rounded-full bg-surface-subtle overflow-hidden">
+                          <div
+                            className={`h-full rounded-full transition-all ${hit ? "bg-emerald-500" : "bg-accent"}`}
+                            style={{ width: `${pct}%` }}
+                          />
+                        </div>
+                      )}
                       {row.categoryBreakdown.length > 0 && (
                         <div className="flex flex-wrap gap-1.5 pt-0.5">
                           {row.categoryBreakdown.map((c) => (
