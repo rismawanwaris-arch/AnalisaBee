@@ -193,6 +193,7 @@ export function SettingsPage() {
   const [groupRuleError, setGroupRuleError] = useState<string | null>(null);
 
   const [periodStartDay, setPeriodStartDay] = useState("1");
+  const [pointTarget, setPointTarget] = useState("0");
   const [periodBusy, setPeriodBusy] = useState(false);
   const [periodSaved, setPeriodSaved] = useState(false);
 
@@ -229,6 +230,7 @@ export function SettingsPage() {
       if (res.ok) {
         const d = await res.json();
         setPeriodStartDay(String(d.periodStartDay));
+        setPointTarget(String(d.pointTarget ?? 0));
       }
     } catch {
       // ignore
@@ -810,13 +812,14 @@ export function SettingsPage() {
   // Points Handlers
   async function savePeriodSetting() {
     const day = Number(periodStartDay);
+    const target = Number(pointTarget);
     setPeriodBusy(true);
     setPeriodSaved(false);
     try {
       const res = await fetch("/api/points/settings", {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ periodStartDay: day }),
+        body: JSON.stringify({ periodStartDay: day, pointTarget: target }),
       });
       if (res.ok) {
         setPeriodSaved(true);
@@ -2128,8 +2131,9 @@ export function SettingsPage() {
           className="w-full flex items-center justify-between gap-3 px-5 py-3.5 text-left hover:bg-surface-hover/50 transition-colors">
           <div className="flex items-center gap-2.5 min-w-0">
             <span className="w-2.5 h-2.5 rounded-full bg-amber-500 shrink-0" />
-            <span className="text-sm font-bold uppercase tracking-wider text-foreground">Siklus Cut-off Periode Bulanan</span>
+            <span className="text-sm font-bold uppercase tracking-wider text-foreground">Siklus &amp; Target Poin</span>
             <span className="text-[11px] font-mono text-muted bg-surface-subtle border border-border/60 rounded px-2 py-0.5">Tanggal {periodStartDay}</span>
+            <span className="text-[11px] font-mono text-muted bg-surface-subtle border border-border/60 rounded px-2 py-0.5">Target {pointTarget}</span>
           </div>
           <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"
             className={`shrink-0 text-muted transition-transform duration-200 ${openSections.has("siklus-periode") ? "rotate-180" : ""}`}>
@@ -2155,23 +2159,49 @@ export function SettingsPage() {
                   className="w-28 rounded-lg border border-border/80 bg-surface-subtle px-3 py-1.5 text-xs font-mono text-foreground focus:outline-none focus:ring-2 focus:ring-accent/20 focus:border-accent transition-all"
                 />
               </div>
+              <div>
+                <label className="block text-[11px] font-semibold uppercase tracking-wider text-muted mb-1">
+                  Target Poin Global (per Pegawai)
+                </label>
+                <input
+                  type="number"
+                  min={0}
+                  value={pointTarget}
+                  onChange={(e) => setPointTarget(e.target.value)}
+                  className="w-36 rounded-lg border border-border/80 bg-surface-subtle px-3 py-1.5 text-xs font-mono text-foreground focus:outline-none focus:ring-2 focus:ring-accent/20 focus:border-accent transition-all"
+                />
+              </div>
               <button
                 type="button"
                 onClick={savePeriodSetting}
                 disabled={periodBusy}
                 className="inline-flex items-center gap-1.5 rounded-lg bg-accent text-accent-foreground px-4 py-2 text-xs font-semibold hover:bg-accent-hover disabled:opacity-50 transition-all shadow-xs"
               >
-                {periodBusy ? "Menyimpan..." : "Simpan Siklus"}
+                {periodBusy ? "Menyimpan..." : "Simpan"}
               </button>
               {periodSaved && (
                 <span className="text-xs font-semibold text-emerald-600 dark:text-emerald-400 flex items-center gap-1">
                   <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
                     <polyline points="20 6 9 17 4 12" />
                   </svg>
-                  Siklus tersimpan
+                  Tersimpan
                 </span>
               )}
             </div>
+            <p className="text-xs pt-2 border-t border-border/60">
+              <a
+                href="/papan-poin"
+                target="_blank"
+                rel="noopener noreferrer"
+                className="inline-flex items-center gap-1.5 text-accent hover:underline font-semibold"
+              >
+                Buka Papan Poin Karyawan
+                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
+                  <path d="M7 17L17 7M7 7h10v10" />
+                </svg>
+              </a>
+              <span className="text-muted"> — halaman publik tanpa login, cocok dipasang di tablet/TV outlet.</span>
+            </p>
           </div>
         )}
       </div>

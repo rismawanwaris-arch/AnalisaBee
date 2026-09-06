@@ -70,7 +70,7 @@ export async function includeEmployee(id: number) {
   await prisma.pointsExclusion.delete({ where: { id } });
 }
 
-async function getExcludedEmployeeIds(): Promise<number[]> {
+export async function getExcludedEmployeeIds(): Promise<number[]> {
   const rows = await prisma.pointsExclusion.findMany({ select: { employeeId: true } });
   return rows.map((r) => r.employeeId);
 }
@@ -143,7 +143,7 @@ export function computeItemPoints(
 }
 
 /** Resolves point values only for the given itemIds — avoids loading all items. */
-async function resolveItemPointsForIds(itemIds: number[]): Promise<Map<number, number>> {
+export async function resolveItemPointsForIds(itemIds: number[]): Promise<Map<number, number>> {
   const [items, rules, groupDefaults, exclusions] = await Promise.all([
     prisma.item.findMany({
       where: { id: { in: itemIds } },
@@ -156,20 +156,20 @@ async function resolveItemPointsForIds(itemIds: number[]): Promise<Map<number, n
   return computeItemPoints(items, rules, groupDefaults, exclusions);
 }
 
-export async function getPointPeriodSetting(): Promise<{ periodStartDay: number }> {
+export async function getPointPeriodSetting(): Promise<{ periodStartDay: number; pointTarget: number }> {
   const setting = await prisma.pointSettings.upsert({
     where: { id: 1 },
     update: {},
-    create: { id: 1, periodStartDay: 1 },
+    create: { id: 1, periodStartDay: 1, pointTarget: 0 },
   });
-  return { periodStartDay: setting.periodStartDay };
+  return { periodStartDay: setting.periodStartDay, pointTarget: setting.pointTarget };
 }
 
-export async function setPointPeriodSetting(periodStartDay: number): Promise<void> {
+export async function setPointPeriodSetting(periodStartDay: number, pointTarget?: number): Promise<void> {
   await prisma.pointSettings.upsert({
     where: { id: 1 },
-    update: { periodStartDay },
-    create: { id: 1, periodStartDay },
+    update: { periodStartDay, ...(pointTarget !== undefined ? { pointTarget } : {}) },
+    create: { id: 1, periodStartDay, pointTarget: pointTarget ?? 0 },
   });
 }
 
@@ -187,6 +187,43 @@ export function computeMonthPeriod(
   const from = new Date(Date.UTC(year, month - 1, periodStartDay));
   const to = new Date(Date.UTC(year, month, periodStartDay - 1));
   return { from, to };
+}
+
+/** Monday–Sunday week containing `dateStr` (YYYY-MM-DD), inclusive. */
+export function computeWeekPeriod(dateStr: string): { from: Date; to: Date } {
+  const [y, m, d] = dateStr.split("-").map(Number);
+  const date = new Date(Date.UTC(y, m - 1, d));
+  const dayOfWeek = date.getUTCDay(); // 0=Sunday..6=Saturday
+  const diffToMonday = dayOfWeek === 0 ? -6 : 1 - dayOfWeek;
+  const from = new Date(date);
+  from.setUTCDate(date.getUTCDate() + diffToMonday);
+  const to = new Date(from);
+  to.setUTCDate(from.getUTCDate() + 6);
+  return { from, to };
+}
+
+// Category buckets shown on the public points dashboard, matched by
+// case-insensitive substring against Item.name. Order matters — checked
+// top to bottom, first match wins — since some keywords are substrings of
+// others (e.g. "Car Charger" contains "Charger", so the more specific rule
+// must come first). Informed by the default point rules in
+// src/lib/defaults/itemPoints.ts.
+const CATEGORY_RULES: { category: string; keywords: string[] }[] = [
+  { category: "Car Holder/Charger", keywords: ["CAR HOLDER", "CAR CHARGER"] },
+  { category: "TWS", keywords: ["TWS"] },
+  { category: "Power Bank", keywords: ["POWER BANK", "POWERBANK"] },
+  { category: "Speaker", keywords: ["SPEAKER"] },
+  { category: "Handsfree", keywords: ["HANDSFREE", "HF "] },
+  { category: "Kabel Data", keywords: ["KABEL"] },
+  { category: "Charger", keywords: ["CHARGER", "BATOK"] },
+];
+
+export function classifyItemCategory(itemName: string): string {
+  const upper = itemName.toUpperCase();
+  for (const rule of CATEGORY_RULES) {
+    if (rule.keywords.some((kw) => upper.includes(kw))) return rule.category;
+  }
+  return "Lainnya";
 }
 
 export async function getLeaderboard(
@@ -285,4 +322,146 @@ export async function getEmployeePointBreakdown(
       }] satisfies ItemPointBreakdownRow[];
     })
     .sort((a, b) => b.totalPoints - a.totalPoints);
+}
+
+export interface CategoryPointRow {
+  category: string;
+  points: number;
+  qty: number;
+}
+
+export interface PublicPointsRow {
+  employeeId: number;
+  employeeName: string;
+  outlet: string | null;
+  totalPoints: number;
+  pointItemsQty: number;
+  achievementPct: number;
+  categoryBreakdown: CategoryPointRow[];
+}
+
+export interface PublicPointsDashboard {
+  rows: PublicPointsRow[];
+  from: string;
+  to: string;
+  pointTarget: number;
+  outlets: { id: number; name: string }[];
+}
+
+/** Powers the public, no-login "Papan Poin Karyawan" dashboard. Unlike
+ *  getLeaderboard (internal, network-wide only), this includes every active
+ *  employee — even ones with 0 points this period — and can scope points to
+ *  one outlet. An employee's displayed "outlet" is always their busiest one
+ *  network-wide for the period (stable, not affected by the outlet filter);
+ *  when an outlet filter is active, the roster itself narrows to employees
+ *  who actually sold something there in this period, since a wallboard for
+ *  one outlet showing every network-wide employee at 0 would be noise. */
+export async function getPublicPointsDashboard(
+  from: Date,
+  to: Date,
+  outletId?: number
+): Promise<PublicPointsDashboard> {
+  await ensureDefaults();
+
+  const excludedIds = await getExcludedEmployeeIds();
+  const excludeClause = excludedIds.length > 0 ? { employeeId: { notIn: excludedIds } } : {};
+
+  const [roster, salesAgg, outletAgg, outlets, { pointTarget }] = await Promise.all([
+    prisma.employee.findMany({
+      where: { isHidden: false, ...(excludedIds.length > 0 ? { id: { notIn: excludedIds } } : {}) },
+      select: { id: true, name: true },
+    }),
+    prisma.sale.groupBy({
+      by: ["itemId", "employeeId"],
+      where: { tanggal: { gte: from, lte: to }, ...excludeClause, ...(outletId ? { outletId } : {}) },
+      _sum: { qty: true },
+    }),
+    // Deliberately NOT filtered by outletId — this is what makes an
+    // employee's displayed outlet stable across different outlet-board views.
+    prisma.sale.groupBy({
+      by: ["employeeId", "outletId"],
+      where: { tanggal: { gte: from, lte: to }, ...excludeClause },
+      _count: { _all: true },
+    }),
+    prisma.outlet.findMany({ where: { isHidden: false }, select: { id: true, name: true }, orderBy: { name: "asc" } }),
+    getPointPeriodSetting(),
+  ]);
+
+  const itemIds = [...new Set(salesAgg.map((s) => s.itemId))];
+  const [pointsByItem, items] = await Promise.all([
+    resolveItemPointsForIds(itemIds),
+    prisma.item.findMany({ where: { id: { in: itemIds } }, select: { id: true, name: true } }),
+  ]);
+  const itemById = new Map(items.map((i) => [i.id, i]));
+  const outletNameById = new Map(outlets.map((o) => [o.id, o.name]));
+
+  // Per employee: outletId -> transaction count this period (unfiltered).
+  const outletCountsByEmployee = new Map<number, Map<number, number>>();
+  for (const row of outletAgg) {
+    const counts = outletCountsByEmployee.get(row.employeeId) ?? new Map<number, number>();
+    counts.set(row.outletId, row._count._all);
+    outletCountsByEmployee.set(row.employeeId, counts);
+  }
+  function homeOutletName(employeeId: number): string | null {
+    const counts = outletCountsByEmployee.get(employeeId);
+    if (!counts || counts.size === 0) return null;
+    let bestId: number | null = null;
+    let bestCount = -1;
+    for (const [oId, count] of counts) {
+      if (count > bestCount) {
+        bestCount = count;
+        bestId = oId;
+      }
+    }
+    return bestId !== null ? (outletNameById.get(bestId) ?? null) : null;
+  }
+
+  // Points + category aggregation per employee.
+  const statsByEmployee = new Map<
+    number,
+    { totalPoints: number; pointItemsQty: number; categories: Map<string, CategoryPointRow> }
+  >();
+  for (const s of salesAgg) {
+    const pointsPerUnit = pointsByItem.get(s.itemId) ?? 0;
+    if (pointsPerUnit === 0) continue;
+    const qty = s._sum.qty ?? 0;
+    const earned = pointsPerUnit * qty;
+    const category = classifyItemCategory(itemById.get(s.itemId)?.name ?? "");
+
+    let stat = statsByEmployee.get(s.employeeId);
+    if (!stat) {
+      stat = { totalPoints: 0, pointItemsQty: 0, categories: new Map() };
+      statsByEmployee.set(s.employeeId, stat);
+    }
+    stat.totalPoints += earned;
+    stat.pointItemsQty += qty;
+    const catRow = stat.categories.get(category) ?? { category, points: 0, qty: 0 };
+    catRow.points += earned;
+    catRow.qty += qty;
+    stat.categories.set(category, catRow);
+  }
+
+  // When viewing one outlet's board, only show employees who actually
+  // transacted there this period — otherwise every network-wide employee
+  // would clutter that outlet's wallboard sitting at 0.
+  const relevantRoster = outletId
+    ? roster.filter((emp) => (outletCountsByEmployee.get(emp.id)?.get(outletId) ?? 0) > 0)
+    : roster;
+
+  const rows: PublicPointsRow[] = relevantRoster.map((emp) => {
+    const stat = statsByEmployee.get(emp.id);
+    const totalPoints = stat?.totalPoints ?? 0;
+    return {
+      employeeId: emp.id,
+      employeeName: emp.name,
+      outlet: homeOutletName(emp.id),
+      totalPoints,
+      pointItemsQty: stat?.pointItemsQty ?? 0,
+      achievementPct: pointTarget > 0 ? (totalPoints / pointTarget) * 100 : 0,
+      categoryBreakdown: stat ? [...stat.categories.values()].sort((a, b) => b.points - a.points) : [],
+    };
+  });
+  rows.sort((a, b) => b.totalPoints - a.totalPoints);
+
+  return { rows, from: from.toISOString(), to: to.toISOString(), pointTarget, outlets };
 }

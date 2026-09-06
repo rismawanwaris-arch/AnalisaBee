@@ -25,6 +25,9 @@ const ImportPage = lazy(() => import("./pages/import/ImportPage").then((m) => ({
 const SettingsPage = lazy(() => import("./pages/settings/SettingsPage").then((m) => ({ default: m.SettingsPage })));
 const ActivityLogPage = lazy(() => import("./pages/log/ActivityLogPage").then((m) => ({ default: m.ActivityLogPage })));
 const CimahiLayout = lazy(() => import("./pages/cimahi/CimahiLayout").then((m) => ({ default: m.CimahiLayout })));
+const EmployeePointsDashboardPage = lazy(() =>
+  import("./pages/public/EmployeePointsDashboardPage").then((m) => ({ default: m.EmployeePointsDashboardPage }))
+);
 
 function PageLoader() {
   return (
@@ -45,6 +48,11 @@ export function App() {
             <Routes>
               {/* Public Login Route */}
               <Route path="/login" element={<LoginPage />} />
+
+              {/* Public, no-login employee points wallboard — see AGENTS.md-adjacent
+                  discussion: Employee and User are unrelated models, so this page
+                  intentionally lives outside <AppLayout /> and its auth guard. */}
+              <Route path="/papan-poin" element={<EmployeePointsDashboardPage />} />
 
               {/* Protected Application Routes */}
               <Route element={<AppLayout />}>

@@ -101,9 +101,12 @@ import {
   listExcludedEmployees,
   excludeEmployee,
   includeEmployee,
+  computeWeekPeriod,
+  getPublicPointsDashboard,
 } from "../lib/queries/points";
 import { previewSalesFile, importSalesFile } from "../lib/importSales";
 import { invalidateDefaults } from "../lib/ensureDefaults";
+import { todayStr } from "../lib/dateDefaults";
 import { parseTartunBuffer, parseServerBuffer, parseServerText } from "../lib/parseTartunServer";
 import { importDailyMetric } from "../lib/importTartunServer";
 import type { BusinessLine, ReportCategory } from "@/generated/prisma/client";
@@ -176,6 +179,16 @@ const loginLimiter = rateLimit({
   standardHeaders: true,
   legacyHeaders: false,
   message: { error: "Terlalu banyak percobaan login. Coba lagi dalam 15 menit." },
+});
+
+// Rate limiter for the public (no-login) points dashboard — generous enough
+// for a tablet auto-refreshing every ~30-60s, tight enough to stop abuse.
+const publicPointsLimiter = rateLimit({
+  windowMs: 60 * 1000,
+  max: 60,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { error: "Terlalu banyak permintaan, coba lagi sesaat lagi." },
 });
 
 // Initialize defaults on server startup
@@ -1129,13 +1142,20 @@ app.get("/api/points/settings", requireFeature("points"), async (req, res) => {
 
 app.put("/api/points/settings", requireMaster, async (req, res) => {
   try {
-    const { periodStartDay } = req.body;
+    const { periodStartDay, pointTarget } = req.body;
     const day = Number(periodStartDay);
     if (!Number.isInteger(day) || day < 1 || day > 31) {
       return res.status(400).json({ error: "Tanggal harus 1-31." });
     }
-    await setPointPeriodSetting(day);
-    await logActivity(req, "PERIOD_UPDATE", `Tanggal mulai siklus → ${day}`);
+    let target: number | undefined;
+    if (pointTarget !== undefined) {
+      target = Number(pointTarget);
+      if (!Number.isInteger(target) || target < 0) {
+        return res.status(400).json({ error: "Target poin harus bilangan bulat >= 0." });
+      }
+    }
+    await setPointPeriodSetting(day, target);
+    await logActivity(req, "PERIOD_UPDATE", `Tanggal mulai siklus → ${day}${target !== undefined ? `, target poin → ${target}` : ""}`);
     return res.json({ ok: true });
   } catch (err: any) {
     return res.status(500).json({ error: err.message });
@@ -1144,13 +1164,20 @@ app.put("/api/points/settings", requireMaster, async (req, res) => {
 
 app.post("/api/points/settings", requireMaster, async (req, res) => {
   try {
-    const { periodStartDay } = req.body;
+    const { periodStartDay, pointTarget } = req.body;
     const day = Number(periodStartDay);
     if (!Number.isInteger(day) || day < 1 || day > 31) {
       return res.status(400).json({ error: "Tanggal harus 1-31." });
     }
-    await setPointPeriodSetting(day);
-    await logActivity(req, "PERIOD_UPDATE", `Tanggal mulai siklus → ${day}`);
+    let target: number | undefined;
+    if (pointTarget !== undefined) {
+      target = Number(pointTarget);
+      if (!Number.isInteger(target) || target < 0) {
+        return res.status(400).json({ error: "Target poin harus bilangan bulat >= 0." });
+      }
+    }
+    await setPointPeriodSetting(day, target);
+    await logActivity(req, "PERIOD_UPDATE", `Tanggal mulai siklus → ${day}${target !== undefined ? `, target poin → ${target}` : ""}`);
     return res.json({ ok: true });
   } catch (err: any) {
     return res.status(500).json({ error: err.message });
@@ -1329,6 +1356,45 @@ app.delete("/api/points/excluded-employees/:id", requireMaster, async (req, res)
     return res.json({ ok: true });
   } catch (err: any) {
     return res.status(500).json({ error: err.message });
+  }
+});
+
+// ==========================================
+// 6b. PUBLIC POINTS DASHBOARD (NO AUTH BY DESIGN)
+// ==========================================
+// Intentionally unauthenticated — a shared leaderboard meant to be opened on
+// a tablet/TV at each outlet with no login. Reachable only inside the
+// private Tailscale network the app itself is deployed on. Never add
+// requireAuth/requireFeature/requireMaster here, and never let this route
+// return anything beyond points/ranking data (no revenue, no profit).
+app.get("/api/public/points/dashboard", publicPointsLimiter, async (req, res) => {
+  try {
+    const period = req.query.period === "day" || req.query.period === "week" ? req.query.period : "month";
+    const dateParam = typeof req.query.date === "string" ? req.query.date : null;
+    const dateStr = dateParam && !Number.isNaN(new Date(dateParam).getTime()) ? dateParam : todayStr();
+    const outletIdParam = req.query.outletId ? Number(req.query.outletId) : undefined;
+    const outletId = outletIdParam && Number.isInteger(outletIdParam) ? outletIdParam : undefined;
+
+    let from: Date;
+    let to: Date;
+    if (period === "day") {
+      from = new Date(dateStr);
+      to = new Date(dateStr);
+    } else if (period === "week") {
+      ({ from, to } = computeWeekPeriod(dateStr));
+    } else {
+      const [y, m] = dateStr.split("-").map(Number);
+      const { periodStartDay } = await getPointPeriodSetting();
+      const monthNum = m || new Date().getMonth() + 1;
+      const yearNum = y || new Date().getFullYear();
+      ({ from, to } = computeMonthPeriod(yearNum, monthNum, periodStartDay));
+    }
+
+    const data = await getPublicPointsDashboard(from, to, outletId);
+    return res.json(data);
+  } catch {
+    // Never leak internal error details on a public, unauthenticated route.
+    return res.status(500).json({ error: "Terjadi kesalahan server." });
   }
 });
 

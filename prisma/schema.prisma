@@ -206,6 +206,7 @@ model ItemGroupPointDefault {
 model PointSettings {
   id             Int @id @default(1)
   periodStartDay Int @default(1)
+  pointTarget    Int @default(0)
 
   @@map("point_settings")
 }
