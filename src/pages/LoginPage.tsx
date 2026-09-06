@@ -146,6 +146,20 @@ export function LoginPage() {
               )}
             </button>
           </form>
+
+          {/* Karyawan tanpa akun login bisa langsung cek papan poin di sini —
+              halaman publik ini tidak butuh Username/Kata Sandi di atas. */}
+          <a
+            href="/papan-poin"
+            target="_blank"
+            rel="noopener noreferrer"
+            className="flex items-center justify-center gap-1.5 rounded-xl border border-border/80 bg-surface-subtle px-3.5 py-2.5 text-xs font-semibold text-foreground hover:bg-surface-hover/60 hover:border-accent/40 transition-all"
+          >
+            🏆 Lihat Papan Poin Karyawan
+            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
+              <path d="M7 17L17 7M7 7h10v10" />
+            </svg>
+          </a>
         </div>
 
         {/* Footer info */}
