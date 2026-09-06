@@ -34,6 +34,37 @@ const SOURCE_BADGE: Record<Source, string> = {
 
 type SortKey = "tanggal" | "outletName" | "jumlah" | "keterangan" | "source";
 
+// Hoisted out of DataExplorerPage: defining a component inline in a parent's
+// render body gives it a fresh function identity every render, so React
+// treats each <SortHeader> as a brand-new component type and remounts every
+// header cell on every keystroke in the column filters above the table.
+function SortHeader({
+  label,
+  sortField,
+  sortKey,
+  sortDir,
+  onToggle,
+}: {
+  label: string;
+  sortField: SortKey;
+  sortKey: SortKey;
+  sortDir: "asc" | "desc";
+  onToggle: (key: SortKey) => void;
+}) {
+  const active = sortKey === sortField;
+  return (
+    <th
+      onClick={() => onToggle(sortField)}
+      className="px-3 py-2.5 text-left font-semibold text-[11px] uppercase text-muted cursor-pointer select-none hover:text-foreground transition-colors"
+    >
+      <span className="inline-flex items-center gap-1">
+        {label}
+        <span className={active ? "text-accent" : "text-faint"}>{active ? (sortDir === "asc" ? "▲" : "▼") : "↕"}</span>
+      </span>
+    </th>
+  );
+}
+
 export function DataExplorerPage() {
   const { role } = useAuth();
   const isMaster = role === "master";
@@ -231,21 +262,6 @@ export function DataExplorerPage() {
     }
   }
 
-  function SortHeader({ label, sortField }: { label: string; sortField: SortKey }) {
-    const active = sortKey === sortField;
-    return (
-      <th
-        onClick={() => toggleSort(sortField)}
-        className="px-3 py-2.5 text-left font-semibold text-[11px] uppercase text-muted cursor-pointer select-none hover:text-foreground transition-colors"
-      >
-        <span className="inline-flex items-center gap-1">
-          {label}
-          <span className={active ? "text-accent" : "text-faint"}>{active ? (sortDir === "asc" ? "▲" : "▼") : "↕"}</span>
-        </span>
-      </th>
-    );
-  }
-
   return (
     <div className="space-y-4">
       <div>
@@ -371,11 +387,11 @@ export function DataExplorerPage() {
                     />
                   </th>
                 )}
-                <SortHeader label="Tanggal & Jam" sortField="tanggal" />
-                <SortHeader label="Nama Outlet" sortField="outletName" />
-                <SortHeader label="Jenis Transaksi" sortField="source" />
-                <SortHeader label="Jumlah" sortField="jumlah" />
-                <SortHeader label="Keterangan" sortField="keterangan" />
+                <SortHeader label="Tanggal & Jam" sortField="tanggal" sortKey={sortKey} sortDir={sortDir} onToggle={toggleSort} />
+                <SortHeader label="Nama Outlet" sortField="outletName" sortKey={sortKey} sortDir={sortDir} onToggle={toggleSort} />
+                <SortHeader label="Jenis Transaksi" sortField="source" sortKey={sortKey} sortDir={sortDir} onToggle={toggleSort} />
+                <SortHeader label="Jumlah" sortField="jumlah" sortKey={sortKey} sortDir={sortDir} onToggle={toggleSort} />
+                <SortHeader label="Keterangan" sortField="keterangan" sortKey={sortKey} sortDir={sortDir} onToggle={toggleSort} />
                 <th className="px-3 py-2.5 text-center font-semibold text-[11px] uppercase text-muted">Detail</th>
                 {isMaster && <th className="px-3 py-2.5 text-center font-semibold text-[11px] uppercase text-muted">Aksi</th>}
               </tr>

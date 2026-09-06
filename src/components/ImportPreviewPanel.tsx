@@ -116,7 +116,8 @@ export function ImportPreviewPanel({
   function toggleRow(rowNumber: number) {
     setExpandedRows((prev) => {
       const next = new Set(prev);
-      next.has(rowNumber) ? next.delete(rowNumber) : next.add(rowNumber);
+      if (next.has(rowNumber)) next.delete(rowNumber);
+      else next.add(rowNumber);
       return next;
     });
   }
@@ -124,7 +125,8 @@ export function ImportPreviewPanel({
   function toggleForce(hash: string) {
     setForcedHashes((prev) => {
       const next = new Set(prev);
-      next.has(hash) ? next.delete(hash) : next.add(hash);
+      if (next.has(hash)) next.delete(hash);
+      else next.add(hash);
       return next;
     });
   }

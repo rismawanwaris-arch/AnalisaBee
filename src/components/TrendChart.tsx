@@ -9,7 +9,7 @@ import {
   XAxis,
   YAxis,
 } from "recharts";
-import { formatCompactRupiah, formatDate, formatNumber, formatRupiah } from "@/lib/format";
+import { formatCompactRupiah, formatDate, formatRupiah } from "@/lib/format";
 
 interface TrendPoint {
   tanggal: string;

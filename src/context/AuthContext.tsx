@@ -84,9 +84,13 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   }, [clearSession]);
 
   // Keep the latest clearSession in a ref so the fetch patch below can be
-  // installed once without going stale.
+  // installed once without going stale. Assigned in an effect, not inline
+  // during render — mutating a ref while rendering is unsafe under Strict
+  // Mode's double-invoke and React Compiler's render-purity assumptions.
   const clearSessionRef = useRef(clearSession);
-  clearSessionRef.current = clearSession;
+  useEffect(() => {
+    clearSessionRef.current = clearSession;
+  }, [clearSession]);
 
   // A revoked session keeps a valid-looking cookie, so the only signal the
   // browser gets is a 401 on the next API call. Catch it in one place instead

@@ -68,7 +68,7 @@ const columns: Column<OutletRow>[] = [
 ];
 
 export function OutletsPage() {
-  const { currentPeriod, periodStartDay, loaded: periodLoaded } = usePeriod();
+  const { currentPeriod, loaded: periodLoaded } = usePeriod();
   const [outlets, setOutlets] = useState<OutletRow[]>([]);
   const [employees, setEmployees] = useState<EmployeeOption[]>([]);
   const [loading, setLoading] = useState(true);

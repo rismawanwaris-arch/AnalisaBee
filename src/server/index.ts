@@ -75,7 +75,7 @@ import { getDashboardSummary } from "../lib/queries/dashboard";
 import { getOutletList, getOutletDetail, getOutletSummary } from "../lib/queries/outlets";
 import { getEmployeeList, getEmployeeDetail } from "../lib/queries/employees";
 import { searchItems, getItemDetail, getItemsByCategory } from "../lib/queries/items";
-import { getSalesList, getSalesForExport, type SalesFilters } from "../lib/queries/sales";
+import { getSalesList, getSalesForExport } from "../lib/queries/sales";
 import { parseSalesFilterParams } from "../lib/parseSalesFilterParams";
 import {
   getDailyTargetReport,

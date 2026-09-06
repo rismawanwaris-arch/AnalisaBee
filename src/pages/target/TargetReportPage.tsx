@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
 import * as XLSX from "xlsx";
-import { formatNumber, formatRupiah } from "@/lib/format";
+import { formatNumber } from "@/lib/format";
 import { yesterdayStr } from "@/lib/dateDefaults";
 
 interface Figure {

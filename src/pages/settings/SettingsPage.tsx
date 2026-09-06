@@ -16,7 +16,7 @@ const LINE_LABELS: Record<BusinessLine, string> = {
 const LINES: BusinessLine[] = ["SERVER", "TARTUN", "PETSHOP", "AKSESORIS", "SP_VOUCHER"];
 const CATEGORIES: ReportCategory[] = ["PETSHOP", "AKSESORIS", "SP_VOUCHER"];
 
-interface Amounts extends Record<BusinessLine, number> {}
+type Amounts = Record<BusinessLine, number>;
 interface OutletItem {
   id: number;
   name: string;

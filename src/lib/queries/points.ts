@@ -262,7 +262,6 @@ export async function getLeaderboard(
   await ensureDefaults();
 
   const excludedIds = await getExcludedEmployeeIds();
-  const excludedSet = new Set(excludedIds);
 
   // Aggregate at DB level — avoids pulling every sale row into memory
   const salesAgg = await prisma.sale.groupBy({
