@@ -259,7 +259,7 @@ export function TargetReportPage({ branch = "BANDUNG" }: { branch?: "BANDUNG" | 
     if (!tableWrapRef.current) return;
     setJpegBusy(true);
     try {
-      const html2canvas = (await import("html2canvas")).default;
+      const html2canvas = (await import("html2canvas-pro")).default;
       const canvas = await html2canvas(tableWrapRef.current, {
         scale: 2,
         backgroundColor: "#ffffff",
