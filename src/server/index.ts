@@ -48,6 +48,13 @@ import {
   restoreSettingsBackup,
   BackupError,
 } from "../lib/backup";
+import {
+  getUnifiedTransactions,
+  deleteUnifiedTransaction,
+  sourceLabel,
+  type TransactionSource,
+} from "../lib/queries/dataExplorer";
+import { csvField } from "../lib/csvSafe";
 import { resolveUserPermissions, hasFeature } from "../lib/permissions";
 import { type FeatureKey } from "../lib/features";
 
@@ -850,18 +857,18 @@ app.get("/api/sales/export", requireFeature("transactions"), async (req, res) =>
       headers.join(","),
       ...rows.map((r) =>
         [
-          `"${r.noTransaksi}"`,
-          `"${r.tanggal.slice(0, 10)}"`,
-          `"${r.jamBuat}"`,
-          `"${r.outletName.replace(/"/g, '""')}"`,
-          `"${r.itemCode.replace(/"/g, '""')}"`,
-          `"${r.itemName.replace(/"/g, '""')}"`,
+          csvField(r.noTransaksi),
+          csvField(r.tanggal.slice(0, 10)),
+          csvField(r.jamBuat),
+          csvField(r.outletName),
+          csvField(r.itemCode),
+          csvField(r.itemName),
           r.qty,
-          `"${r.unit}"`,
+          csvField(r.unit),
           r.hargaJual,
           r.subtotal,
           r.labaRugi,
-          `"${r.employeeName.replace(/"/g, '""')}"`,
+          csvField(r.employeeName),
         ].join(",")
       ),
     ];
@@ -874,6 +881,71 @@ app.get("/api/sales/export", requireFeature("transactions"), async (req, res) =>
     return res.send(csvRows.join("\n"));
   } catch (err: any) {
     return res.status(500).json({ error: err.message });
+  }
+});
+
+// ==========================================
+// 4b. DATA EXPLORER (gabungan Penjualan / Tarik Tunai / Komisi Server)
+// ==========================================
+
+function parseDataExplorerFilters(req: express.Request) {
+  return {
+    from: parseDateParam(req.query.from),
+    to: parseDateParam(req.query.to),
+  };
+}
+
+app.get("/api/data-explorer", requireFeature("data_explorer"), async (req, res) => {
+  try {
+    const rows = await getUnifiedTransactions(parseDataExplorerFilters(req));
+    return res.json(rows);
+  } catch (err) {
+    return sendError(res, 500, err, "Gagal memuat data.");
+  }
+});
+
+app.get("/api/data-explorer/export", requireFeature("data_explorer"), async (req, res) => {
+  try {
+    const rows = await getUnifiedTransactions(parseDataExplorerFilters(req));
+    const headers = ["Tanggal", "Jam", "Outlet", "Jenis Transaksi", "Jumlah", "Keterangan"];
+    const csvRows = [
+      headers.join(","),
+      ...rows.map((r) =>
+        [
+          csvField(r.tanggal),
+          csvField(r.jam ?? ""),
+          csvField(r.outletName),
+          csvField(sourceLabel(r.source)),
+          r.jumlah,
+          csvField(r.keterangan),
+        ].join(","),
+      ),
+    ];
+    res.setHeader("Content-Type", "text/csv; charset=utf-8");
+    res.setHeader(
+      "Content-Disposition",
+      `attachment; filename="analisa-data-${new Date().toISOString().slice(0, 10)}.csv"`,
+    );
+    return res.send(csvRows.join("\n"));
+  } catch (err) {
+    return sendError(res, 500, err, "Gagal membuat ekspor.");
+  }
+});
+
+app.delete("/api/data-explorer/:source/:id", requireMaster, async (req, res) => {
+  const source = String(req.params.source).toUpperCase();
+  const id = Number(req.params.id);
+  if (source !== "SALE" && source !== "TARTUN" && source !== "SERVER") {
+    return res.status(400).json({ error: "Jenis data tidak valid." });
+  }
+  if (!Number.isInteger(id)) return res.status(400).json({ error: "ID tidak valid." });
+  try {
+    await deleteUnifiedTransaction(source as TransactionSource, id);
+    await logActivity(req, "HAPUS_DATA_EXPLORER", `${sourceLabel(source as TransactionSource)} #${id}`);
+    return res.json({ ok: true });
+  } catch (err: any) {
+    if (err?.code === "P2025") return res.status(404).json({ error: "Data tidak ditemukan (sudah terhapus?)." });
+    return sendError(res, 500, err, "Gagal menghapus data.");
   }
 });
 

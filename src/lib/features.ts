@@ -15,6 +15,7 @@ export const FEATURE_KEYS = [
   "transactions",
   "import",
   "activity_log",
+  "data_explorer",
 ] as const;
 
 export type FeatureKey = (typeof FEATURE_KEYS)[number];
@@ -31,6 +32,7 @@ export const FEATURE_LABELS: Record<FeatureKey, string> = {
   transactions: "Daftar Transaksi",
   import: "Import & Batch",
   activity_log: "Log Aktivitas",
+  data_explorer: "Analisa Data",
 };
 
 export function isFeatureKey(value: unknown): value is FeatureKey {

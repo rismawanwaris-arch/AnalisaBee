@@ -17,6 +17,7 @@ const PATH_FEATURES: [string, FeatureKey][] = [
   ["/outlets", "outlets"],
   ["/employees", "employees"],
   ["/transactions", "transactions"],
+  ["/analisa-data", "data_explorer"],
   ["/import", "import"],
   ["/log", "activity_log"],
   ["/dashboard", "dashboard"],
@@ -34,6 +35,7 @@ const FEATURE_PATHS: Record<FeatureKey, string> = {
   transactions: "/transactions",
   import: "/import",
   activity_log: "/log",
+  data_explorer: "/analisa-data",
 };
 
 function featureForPath(pathname: string): FeatureKey | null {
