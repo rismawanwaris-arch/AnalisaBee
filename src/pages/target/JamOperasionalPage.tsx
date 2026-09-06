@@ -85,8 +85,9 @@ export function JamOperasionalPage({ branch = "BANDUNG" }: { branch?: "BANDUNG" 
     <div className="space-y-4">
       <div className="rounded-xl border border-border/80 bg-surface p-3.5 flex flex-wrap items-center gap-3 shadow-xs">
         <div className="flex items-center gap-2">
-          <label className="text-xs font-semibold text-muted">Tanggal:</label>
+          <label htmlFor="jam-operasional-date" className="text-xs font-semibold text-muted">Tanggal:</label>
           <input
+            id="jam-operasional-date"
             type="date"
             value={date}
             onChange={(e) => setDate(e.target.value)}
@@ -94,8 +95,9 @@ export function JamOperasionalPage({ branch = "BANDUNG" }: { branch?: "BANDUNG" 
           />
         </div>
         <div className="flex items-center gap-2">
-          <label className="text-xs font-semibold text-muted">Resolusi:</label>
+          <label htmlFor="jam-operasional-granularity" className="text-xs font-semibold text-muted">Resolusi:</label>
           <select
+            id="jam-operasional-granularity"
             value={granularity}
             onChange={(e) => setGranularity(e.target.value as typeof granularity)}
             className="rounded-lg border border-border/80 bg-surface-subtle px-3 py-1.5 text-xs text-foreground focus:outline-none focus:ring-2 focus:ring-accent/20 focus:border-accent transition-all"
@@ -107,8 +109,9 @@ export function JamOperasionalPage({ branch = "BANDUNG" }: { branch?: "BANDUNG" 
           </select>
         </div>
         <div className="flex items-center gap-2">
-          <label className="text-xs font-semibold text-muted">Outlet:</label>
+          <label htmlFor="jam-operasional-outlet" className="text-xs font-semibold text-muted">Outlet:</label>
           <select
+            id="jam-operasional-outlet"
             value={outletId}
             onChange={(e) => setOutletId(e.target.value)}
             className="rounded-lg border border-border/80 bg-surface-subtle px-3 py-1.5 text-xs text-foreground min-w-44 focus:outline-none focus:ring-2 focus:ring-accent/20 focus:border-accent transition-all"

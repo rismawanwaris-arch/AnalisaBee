@@ -56,10 +56,11 @@ export function TartunServerImport() {
       </div>
 
       <div>
-        <label className="block text-[11px] font-semibold uppercase tracking-wider text-muted mb-1.5">
+        <label htmlFor="tartun-server-date" className="block text-[11px] font-semibold uppercase tracking-wider text-muted mb-1.5">
           Tanggal Data
         </label>
         <input
+          id="tartun-server-date"
           type="date"
           value={date}
           onChange={(e) => setDate(e.target.value)}

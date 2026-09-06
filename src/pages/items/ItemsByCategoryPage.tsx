@@ -153,8 +153,9 @@ export function ItemsByCategoryPage() {
       <div className="rounded-xl border border-border/80 bg-surface p-4 shadow-xs space-y-3">
         <div className="flex flex-wrap items-end gap-3">
           <div className="flex flex-col gap-1">
-            <label className="text-[10px] font-semibold uppercase tracking-wider text-muted">Tanggal Mulai</label>
+            <label htmlFor="items-by-category-from" className="text-[10px] font-semibold uppercase tracking-wider text-muted">Tanggal Mulai</label>
             <input
+              id="items-by-category-from"
               type="date"
               value={from}
               onChange={(e) => setFrom(e.target.value)}
@@ -162,8 +163,9 @@ export function ItemsByCategoryPage() {
             />
           </div>
           <div className="flex flex-col gap-1">
-            <label className="text-[10px] font-semibold uppercase tracking-wider text-muted">Tanggal Selesai</label>
+            <label htmlFor="items-by-category-to" className="text-[10px] font-semibold uppercase tracking-wider text-muted">Tanggal Selesai</label>
             <input
+              id="items-by-category-to"
               type="date"
               value={to}
               onChange={(e) => setTo(e.target.value)}
@@ -190,8 +192,9 @@ export function ItemsByCategoryPage() {
 
         <div className="flex flex-wrap gap-3 items-end">
           <div className="flex flex-col gap-1 flex-1" style={{ minWidth: "160px", maxWidth: "240px" }}>
-            <label className="text-[10px] font-semibold uppercase tracking-wider text-muted">Filter Kategori</label>
+            <label htmlFor="items-by-category-search" className="text-[10px] font-semibold uppercase tracking-wider text-muted">Filter Kategori</label>
             <input
+              id="items-by-category-search"
               type="text"
               value={categorySearch}
               onChange={(e) => setCategorySearch(e.target.value)}
@@ -200,8 +203,9 @@ export function ItemsByCategoryPage() {
             />
           </div>
           <div className="flex flex-col gap-1 flex-1" style={{ minWidth: "160px", maxWidth: "280px" }}>
-            <label className="text-[10px] font-semibold uppercase tracking-wider text-muted">Cari Item</label>
+            <label htmlFor="items-by-category-item-search" className="text-[10px] font-semibold uppercase tracking-wider text-muted">Cari Item</label>
             <input
+              id="items-by-category-item-search"
               type="text"
               value={itemSearch}
               onChange={(e) => setItemSearch(e.target.value)}
@@ -210,7 +214,9 @@ export function ItemsByCategoryPage() {
             />
           </div>
           <div className="flex flex-col gap-1 pb-0.5">
-            <label className="text-[10px] font-semibold uppercase tracking-wider text-muted invisible">Mode</label>
+            {/* Not a real <label> — the button below isn't a form control, this is
+                just an invisible spacer to align its row with the fields beside it. */}
+            <span aria-hidden="true" className="text-[10px] font-semibold uppercase tracking-wider text-muted invisible">Mode</span>
             <button
               type="button"
               onClick={() => setGroupMode((g) => !g)}

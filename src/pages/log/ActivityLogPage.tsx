@@ -80,8 +80,9 @@ export function ActivityLogPage() {
       <div className="rounded-xl border border-border/80 bg-surface p-4 shadow-xs">
         <div className="flex flex-wrap items-end gap-3">
           <div className="flex flex-col gap-1">
-            <label className="text-[10px] font-semibold uppercase tracking-wider text-muted">Role</label>
+            <label htmlFor="activity-log-role" className="text-[10px] font-semibold uppercase tracking-wider text-muted">Role</label>
             <select
+              id="activity-log-role"
               value={roleFilter}
               onChange={(e) => { setRoleFilter(e.target.value); setPage(0); }}
               className="rounded-lg border border-border/80 bg-surface-subtle px-3 py-1.5 text-xs text-foreground focus:outline-none focus:ring-2 focus:ring-accent/20 focus:border-accent transition-all"
@@ -92,8 +93,9 @@ export function ActivityLogPage() {
             </select>
           </div>
           <div className="flex flex-col gap-1">
-            <label className="text-[10px] font-semibold uppercase tracking-wider text-muted">Dari Tanggal</label>
+            <label htmlFor="activity-log-from" className="text-[10px] font-semibold uppercase tracking-wider text-muted">Dari Tanggal</label>
             <input
+              id="activity-log-from"
               type="date"
               value={fromFilter}
               onChange={(e) => { setFromFilter(e.target.value); setPage(0); }}
@@ -101,8 +103,9 @@ export function ActivityLogPage() {
             />
           </div>
           <div className="flex flex-col gap-1">
-            <label className="text-[10px] font-semibold uppercase tracking-wider text-muted">Sampai Tanggal</label>
+            <label htmlFor="activity-log-to" className="text-[10px] font-semibold uppercase tracking-wider text-muted">Sampai Tanggal</label>
             <input
+              id="activity-log-to"
               type="date"
               value={toFilter}
               onChange={(e) => { setToFilter(e.target.value); setPage(0); }}

@@ -278,8 +278,9 @@ export function TargetReportPage({ branch = "BANDUNG" }: { branch?: "BANDUNG" | 
       {/* Control Bar */}
       <div className="rounded-xl border border-border/80 bg-surface p-3.5 shadow-xs flex flex-wrap items-center justify-between gap-3 no-print">
         <div className="flex items-center gap-3">
-          <label className="text-xs font-semibold text-muted">Tanggal:</label>
+          <label htmlFor="target-report-date" className="text-xs font-semibold text-muted">Tanggal:</label>
           <input
+            id="target-report-date"
             type="date"
             value={date}
             onChange={(e) => setDate(e.target.value)}

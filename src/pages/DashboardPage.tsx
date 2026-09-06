@@ -157,10 +157,11 @@ export function DashboardPage() {
       {/* Control Filter Bar */}
       <div className="rounded-xl border border-border/80 bg-surface p-3.5 shadow-xs flex flex-wrap items-end gap-3">
         <div>
-          <label className="block text-[11px] font-semibold uppercase tracking-wider text-muted mb-1">
+          <label htmlFor="dashboard-from" className="block text-[11px] font-semibold uppercase tracking-wider text-muted mb-1">
             Dari Tanggal
           </label>
           <input
+            id="dashboard-from"
             type="date"
             value={from}
             onChange={(e) => setFrom(e.target.value)}
@@ -168,10 +169,11 @@ export function DashboardPage() {
           />
         </div>
         <div>
-          <label className="block text-[11px] font-semibold uppercase tracking-wider text-muted mb-1">
+          <label htmlFor="dashboard-to" className="block text-[11px] font-semibold uppercase tracking-wider text-muted mb-1">
             Sampai Tanggal
           </label>
           <input
+            id="dashboard-to"
             type="date"
             value={to}
             onChange={(e) => setTo(e.target.value)}
@@ -179,10 +181,11 @@ export function DashboardPage() {
           />
         </div>
         <div>
-          <label className="block text-[11px] font-semibold uppercase tracking-wider text-muted mb-1">
+          <label htmlFor="dashboard-outlet" className="block text-[11px] font-semibold uppercase tracking-wider text-muted mb-1">
             Filter Outlet
           </label>
           <select
+            id="dashboard-outlet"
             value={outletId}
             onChange={(e) => setOutletId(e.target.value)}
             className="rounded-lg border border-border/80 bg-surface-subtle px-3 py-1.5 text-xs font-medium text-foreground min-w-44 focus:outline-none focus:ring-2 focus:ring-accent/20 focus:border-accent transition-all"

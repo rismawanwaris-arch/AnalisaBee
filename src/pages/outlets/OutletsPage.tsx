@@ -168,8 +168,9 @@ export function OutletsPage() {
         {/* Row 1: dates + shortcuts */}
         <div className="flex flex-wrap items-end gap-3">
           <div className="flex flex-col gap-1 min-w-0">
-            <label className="text-[10px] font-semibold uppercase tracking-wider text-muted">Tanggal Mulai</label>
+            <label htmlFor="outlets-from" className="text-[10px] font-semibold uppercase tracking-wider text-muted">Tanggal Mulai</label>
             <input
+              id="outlets-from"
               type="date"
               value={from}
               onChange={(e) => setFrom(e.target.value)}
@@ -177,8 +178,9 @@ export function OutletsPage() {
             />
           </div>
           <div className="flex flex-col gap-1 min-w-0">
-            <label className="text-[10px] font-semibold uppercase tracking-wider text-muted">Tanggal Selesai</label>
+            <label htmlFor="outlets-to" className="text-[10px] font-semibold uppercase tracking-wider text-muted">Tanggal Selesai</label>
             <input
+              id="outlets-to"
               type="date"
               value={to}
               onChange={(e) => setTo(e.target.value)}
@@ -215,8 +217,9 @@ export function OutletsPage() {
         <div className="flex flex-wrap gap-3 items-end">
           {/* Outlet search */}
           <div className="flex flex-col gap-1 min-w-0 flex-1" style={{ minWidth: "160px", maxWidth: "220px" }}>
-            <label className="text-[10px] font-semibold uppercase tracking-wider text-muted">Cari Outlet</label>
+            <label htmlFor="outlets-search" className="text-[10px] font-semibold uppercase tracking-wider text-muted">Cari Outlet</label>
             <input
+              id="outlets-search"
               type="text"
               value={outletSearch}
               onChange={(e) => setOutletSearch(e.target.value)}
@@ -227,8 +230,9 @@ export function OutletsPage() {
 
           {/* Item picker */}
           <div className="flex flex-col gap-1 min-w-0 flex-1" style={{ minWidth: "200px", maxWidth: "300px" }}>
-            <label className="text-[10px] font-semibold uppercase tracking-wider text-muted">Filter Item</label>
+            <label htmlFor="outlets-item-filter" className="text-[10px] font-semibold uppercase tracking-wider text-muted">Filter Item</label>
             <ItemPicker
+              inputId="outlets-item-filter"
               selected={selectedItem}
               onSelect={setSelectedItem}
               placeholder="Ketik nama atau kode item..."
@@ -237,8 +241,9 @@ export function OutletsPage() {
 
           {/* Employee */}
           <div className="flex flex-col gap-1 min-w-0" style={{ minWidth: "160px", maxWidth: "220px" }}>
-            <label className="text-[10px] font-semibold uppercase tracking-wider text-muted">Karyawan</label>
+            <label htmlFor="outlets-employee" className="text-[10px] font-semibold uppercase tracking-wider text-muted">Karyawan</label>
             <select
+              id="outlets-employee"
               value={employeeId}
               onChange={(e) => setEmployeeId(e.target.value)}
               className="rounded-lg border border-border/80 bg-surface-subtle px-3 py-1.5 text-xs text-foreground focus:outline-none focus:ring-2 focus:ring-accent/20 focus:border-accent transition-all"
@@ -252,8 +257,9 @@ export function OutletsPage() {
 
           {/* Amount range */}
           <div className="flex flex-col gap-1 min-w-0">
-            <label className="text-[10px] font-semibold uppercase tracking-wider text-muted">Omzet Min (Rp)</label>
+            <label htmlFor="outlets-omzet-min" className="text-[10px] font-semibold uppercase tracking-wider text-muted">Omzet Min (Rp)</label>
             <input
+              id="outlets-omzet-min"
               type="number"
               value={subtotalMin}
               onChange={(e) => setSubtotalMin(e.target.value)}
@@ -262,8 +268,9 @@ export function OutletsPage() {
             />
           </div>
           <div className="flex flex-col gap-1 min-w-0">
-            <label className="text-[10px] font-semibold uppercase tracking-wider text-muted">Omzet Max (Rp)</label>
+            <label htmlFor="outlets-omzet-max" className="text-[10px] font-semibold uppercase tracking-wider text-muted">Omzet Max (Rp)</label>
             <input
+              id="outlets-omzet-max"
               type="number"
               value={subtotalMax}
               onChange={(e) => setSubtotalMax(e.target.value)}

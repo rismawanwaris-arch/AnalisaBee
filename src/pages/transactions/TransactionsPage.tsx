@@ -195,10 +195,11 @@ export function TransactionsPage() {
       <div className="rounded-xl border border-border/80 bg-surface p-4 space-y-3.5 shadow-xs">
         <div className="flex flex-wrap items-end gap-3">
           <div>
-            <label className="block text-[11px] font-semibold uppercase tracking-wider text-muted mb-1">
+            <label htmlFor="transactions-from" className="block text-[11px] font-semibold uppercase tracking-wider text-muted mb-1">
               Dari Tanggal
             </label>
             <input
+              id="transactions-from"
               type="date"
               value={from}
               onChange={(e) => setFrom(e.target.value)}
@@ -206,10 +207,11 @@ export function TransactionsPage() {
             />
           </div>
           <div>
-            <label className="block text-[11px] font-semibold uppercase tracking-wider text-muted mb-1">
+            <label htmlFor="transactions-to" className="block text-[11px] font-semibold uppercase tracking-wider text-muted mb-1">
               Sampai Tanggal
             </label>
             <input
+              id="transactions-to"
               type="date"
               value={to}
               onChange={(e) => setTo(e.target.value)}
@@ -217,10 +219,11 @@ export function TransactionsPage() {
             />
           </div>
           <div className="w-44">
-            <label className="block text-[11px] font-semibold uppercase tracking-wider text-muted mb-1">
+            <label htmlFor="transactions-no" className="block text-[11px] font-semibold uppercase tracking-wider text-muted mb-1">
               No Transaksi
             </label>
             <input
+              id="transactions-no"
               type="text"
               value={range.noTransaksi}
               onChange={(e) => setRangeField("noTransaksi", e.target.value)}
@@ -229,16 +232,17 @@ export function TransactionsPage() {
             />
           </div>
           <div className="w-60">
-            <label className="block text-[11px] font-semibold uppercase tracking-wider text-muted mb-1">
+            <label htmlFor="transactions-item-filter" className="block text-[11px] font-semibold uppercase tracking-wider text-muted mb-1">
               Filter Item
             </label>
-            <ItemPicker selected={selectedItem} onSelect={setSelectedItem} placeholder="Semua item..." />
+            <ItemPicker inputId="transactions-item-filter" selected={selectedItem} onSelect={setSelectedItem} placeholder="Semua item..." />
           </div>
           <div>
-            <label className="block text-[11px] font-semibold uppercase tracking-wider text-muted mb-1">
+            <label htmlFor="transactions-outlet" className="block text-[11px] font-semibold uppercase tracking-wider text-muted mb-1">
               Filter Outlet
             </label>
             <select
+              id="transactions-outlet"
               value={outletId}
               onChange={(e) => setOutletId(e.target.value)}
               className="rounded-lg border border-border/80 bg-surface-subtle px-3 py-1.5 text-xs text-foreground min-w-40 focus:outline-none focus:ring-2 focus:ring-accent/20 focus:border-accent transition-all"
@@ -252,10 +256,11 @@ export function TransactionsPage() {
             </select>
           </div>
           <div>
-            <label className="block text-[11px] font-semibold uppercase tracking-wider text-muted mb-1">
+            <label htmlFor="transactions-employee" className="block text-[11px] font-semibold uppercase tracking-wider text-muted mb-1">
               Filter Pegawai
             </label>
             <select
+              id="transactions-employee"
               value={range.employeeId}
               onChange={(e) => setRangeField("employeeId", e.target.value)}
               className="rounded-lg border border-border/80 bg-surface-subtle px-3 py-1.5 text-xs text-foreground min-w-40 focus:outline-none focus:ring-2 focus:ring-accent/20 focus:border-accent transition-all"

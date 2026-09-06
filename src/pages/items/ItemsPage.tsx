@@ -211,10 +211,11 @@ export function ItemsPage() {
             </div>
             <div className="flex flex-wrap items-end gap-2.5">
               <div>
-                <label className="block text-[11px] font-semibold uppercase tracking-wider text-muted mb-1">
+                <label htmlFor="items-detail-from" className="block text-[11px] font-semibold uppercase tracking-wider text-muted mb-1">
                   Dari Tanggal
                 </label>
                 <input
+                  id="items-detail-from"
                   type="date"
                   value={from}
                   onChange={(e) => setFrom(e.target.value)}
@@ -222,10 +223,11 @@ export function ItemsPage() {
                 />
               </div>
               <div>
-                <label className="block text-[11px] font-semibold uppercase tracking-wider text-muted mb-1">
+                <label htmlFor="items-detail-to" className="block text-[11px] font-semibold uppercase tracking-wider text-muted mb-1">
                   Sampai Tanggal
                 </label>
                 <input
+                  id="items-detail-to"
                   type="date"
                   value={to}
                   onChange={(e) => setTo(e.target.value)}

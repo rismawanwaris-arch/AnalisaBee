@@ -259,8 +259,9 @@ function DateBar({
   return (
     <div className="rounded-xl border border-border/80 bg-surface p-3.5 flex flex-wrap items-center justify-between gap-3 shadow-xs">
       <div className="flex items-center gap-3">
-        <label className="text-xs font-semibold text-muted">Tanggal Analisis:</label>
+        <label htmlFor="analitik-date" className="text-xs font-semibold text-muted">Tanggal Analisis:</label>
         <input
+          id="analitik-date"
           type="date"
           value={date}
           onChange={(e) => setDate(e.target.value)}

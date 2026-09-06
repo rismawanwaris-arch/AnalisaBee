@@ -1433,7 +1433,9 @@ export function SettingsPage() {
                 />
               </div>
               <div>
-                <label className="block text-[11px] font-semibold text-muted mb-1.5">Fitur yang Boleh Diakses</label>
+                {/* Heading for a group of checkboxes below, not a single field — a
+                    <label> needs one associated control, so this is a <span>. */}
+                <span className="block text-[11px] font-semibold text-muted mb-1.5">Fitur yang Boleh Diakses</span>
                 <div className="grid sm:grid-cols-2 md:grid-cols-3 gap-1.5">
                   {FEATURE_KEYS.map((key) => (
                     <label key={key} className="flex items-center gap-2 text-xs text-foreground rounded-md border border-border/60 bg-surface px-2.5 py-1.5 cursor-pointer hover:bg-surface-hover/60 transition-colors">
@@ -1948,10 +1950,11 @@ export function SettingsPage() {
             </p>
             <div className="flex flex-wrap items-end gap-3 pt-1">
               <div className="flex-1 min-w-56">
-                <label className="block text-[11px] font-semibold uppercase tracking-wider text-muted mb-1">
+                <label htmlFor="mapping-group-from" className="block text-[11px] font-semibold uppercase tracking-wider text-muted mb-1">
                   Item Group POS
                 </label>
                 <input
+                  id="mapping-group-from"
                   type="text"
                   value={groupFrom}
                   onChange={(e) => setGroupFrom(e.target.value)}
@@ -1960,10 +1963,11 @@ export function SettingsPage() {
                 />
               </div>
               <div className="w-48">
-                <label className="block text-[11px] font-semibold uppercase tracking-wider text-muted mb-1">
+                <label htmlFor="mapping-group-to" className="block text-[11px] font-semibold uppercase tracking-wider text-muted mb-1">
                   Kategori Laporan
                 </label>
                 <select
+                  id="mapping-group-to"
                   value={groupTo}
                   onChange={(e) => setGroupTo(e.target.value as ReportCategory)}
                   className="w-full rounded-lg border border-border/80 bg-surface-subtle px-3 py-1.5 text-xs text-foreground focus:outline-none focus:ring-2 focus:ring-accent/20 focus:border-accent transition-all"
@@ -2051,10 +2055,11 @@ export function SettingsPage() {
             </p>
             <div className="flex flex-wrap items-end gap-3 pt-1">
               <div className="flex-1 min-w-56">
-                <label className="block text-[11px] font-semibold uppercase tracking-wider text-muted mb-1">
+                <label htmlFor="mapping-alias-from" className="block text-[11px] font-semibold uppercase tracking-wider text-muted mb-1">
                   Nama Mentah di File (Alias)
                 </label>
                 <input
+                  id="mapping-alias-from"
                   type="text"
                   value={aliasFrom}
                   onChange={(e) => setAliasFrom(e.target.value)}
@@ -2063,10 +2068,11 @@ export function SettingsPage() {
                 />
               </div>
               <div className="w-48">
-                <label className="block text-[11px] font-semibold uppercase tracking-wider text-muted mb-1">
+                <label htmlFor="mapping-alias-to" className="block text-[11px] font-semibold uppercase tracking-wider text-muted mb-1">
                   Outlet Tujuan
                 </label>
                 <select
+                  id="mapping-alias-to"
                   value={aliasTo}
                   onChange={(e) => setAliasTo(e.target.value)}
                   className="w-full rounded-lg border border-border/80 bg-surface-subtle px-3 py-1.5 text-xs text-foreground focus:outline-none focus:ring-2 focus:ring-accent/20 focus:border-accent transition-all"
@@ -2160,10 +2166,11 @@ export function SettingsPage() {
             </p>
             <div className="flex flex-wrap items-end gap-3 pt-1">
               <div>
-                <label className="block text-[11px] font-semibold uppercase tracking-wider text-muted mb-1">
+                <label htmlFor="settings-period-start-day" className="block text-[11px] font-semibold uppercase tracking-wider text-muted mb-1">
                   Tanggal Mulai Siklus
                 </label>
                 <input
+                  id="settings-period-start-day"
                   type="number"
                   min={1}
                   max={31}
@@ -2173,10 +2180,11 @@ export function SettingsPage() {
                 />
               </div>
               <div>
-                <label className="block text-[11px] font-semibold uppercase tracking-wider text-muted mb-1">
+                <label htmlFor="settings-point-target-daily" className="block text-[11px] font-semibold uppercase tracking-wider text-muted mb-1">
                   Target Poin Harian
                 </label>
                 <input
+                  id="settings-point-target-daily"
                   type="number"
                   min={0}
                   value={pointTargetDaily}
@@ -2185,10 +2193,11 @@ export function SettingsPage() {
                 />
               </div>
               <div>
-                <label className="block text-[11px] font-semibold uppercase tracking-wider text-muted mb-1">
+                <label htmlFor="settings-point-target-weekly" className="block text-[11px] font-semibold uppercase tracking-wider text-muted mb-1">
                   Target Poin Mingguan
                 </label>
                 <input
+                  id="settings-point-target-weekly"
                   type="number"
                   min={0}
                   value={pointTargetWeekly}
@@ -2197,10 +2206,11 @@ export function SettingsPage() {
                 />
               </div>
               <div>
-                <label className="block text-[11px] font-semibold uppercase tracking-wider text-muted mb-1">
+                <label htmlFor="settings-point-target-monthly" className="block text-[11px] font-semibold uppercase tracking-wider text-muted mb-1">
                   Target Poin Bulanan
                 </label>
                 <input
+                  id="settings-point-target-monthly"
                   type="number"
                   min={0}
                   value={pointTargetMonthly}
@@ -2264,10 +2274,11 @@ export function SettingsPage() {
             </p>
             <div className="flex flex-wrap items-end gap-3 pt-1">
               <div className="flex-1 min-w-56">
-                <label className="block text-[11px] font-semibold uppercase tracking-wider text-muted mb-1">
+                <label htmlFor="settings-exclude-employee" className="block text-[11px] font-semibold uppercase tracking-wider text-muted mb-1">
                   Pilih Pegawai
                 </label>
                 <select
+                  id="settings-exclude-employee"
                   value={excludeEmployeeId}
                   onChange={(e) => setExcludeEmployeeId(e.target.value)}
                   className="w-full rounded-lg border border-border/80 bg-surface-subtle px-3 py-1.5 text-xs text-foreground focus:outline-none focus:ring-2 focus:ring-accent/20 focus:border-accent transition-all"
@@ -2281,10 +2292,11 @@ export function SettingsPage() {
                 </select>
               </div>
               <div className="flex-1 min-w-56">
-                <label className="block text-[11px] font-semibold uppercase tracking-wider text-muted mb-1">
+                <label htmlFor="settings-exclude-reason" className="block text-[11px] font-semibold uppercase tracking-wider text-muted mb-1">
                   Alasan Pengecualian (opsional)
                 </label>
                 <input
+                  id="settings-exclude-reason"
                   type="text"
                   value={excludeReason}
                   onChange={(e) => setExcludeReason(e.target.value)}
@@ -2361,10 +2373,11 @@ export function SettingsPage() {
             </p>
             <div className="flex flex-wrap items-end gap-3 pt-1">
               <div className="flex-1 min-w-56">
-                <label className="block text-[11px] font-semibold uppercase tracking-wider text-muted mb-1">
+                <label htmlFor="settings-item-pattern" className="block text-[11px] font-semibold uppercase tracking-wider text-muted mb-1">
                   Nama / Pola Item
                 </label>
                 <input
+                  id="settings-item-pattern"
                   type="text"
                   value={patternInput}
                   onChange={(e) => setPatternInput(e.target.value)}
@@ -2373,10 +2386,11 @@ export function SettingsPage() {
                 />
               </div>
               <div className="w-32">
-                <label className="block text-[11px] font-semibold uppercase tracking-wider text-muted mb-1">
+                <label htmlFor="settings-item-points" className="block text-[11px] font-semibold uppercase tracking-wider text-muted mb-1">
                   Poin / pcs
                 </label>
                 <input
+                  id="settings-item-points"
                   type="number"
                   value={pointsInput}
                   min={0}
@@ -2461,10 +2475,11 @@ export function SettingsPage() {
             </p>
             <div className="flex flex-wrap items-end gap-3 pt-1">
               <div className="flex-1 min-w-56">
-                <label className="block text-[11px] font-semibold uppercase tracking-wider text-muted mb-1">
+                <label htmlFor="settings-item-exclusion" className="block text-[11px] font-semibold uppercase tracking-wider text-muted mb-1">
                   Nama / Pola Item
                 </label>
                 <input
+                  id="settings-item-exclusion"
                   type="text"
                   value={itemExclusionInput}
                   onChange={(e) => setItemExclusionInput(e.target.value)}
@@ -2539,10 +2554,11 @@ export function SettingsPage() {
             </p>
             <div className="flex flex-wrap items-end gap-3 pt-1">
               <div className="flex-1 min-w-56">
-                <label className="block text-[11px] font-semibold uppercase tracking-wider text-muted mb-1">
+                <label htmlFor="settings-group-default-input" className="block text-[11px] font-semibold uppercase tracking-wider text-muted mb-1">
                   Item Group POS
                 </label>
                 <input
+                  id="settings-group-default-input"
                   type="text"
                   value={groupInput}
                   onChange={(e) => setGroupInput(e.target.value)}
@@ -2551,10 +2567,11 @@ export function SettingsPage() {
                 />
               </div>
               <div className="w-32">
-                <label className="block text-[11px] font-semibold uppercase tracking-wider text-muted mb-1">
+                <label htmlFor="settings-group-default-points" className="block text-[11px] font-semibold uppercase tracking-wider text-muted mb-1">
                   Poin / pcs
                 </label>
                 <input
+                  id="settings-group-default-points"
                   type="number"
                   value={groupPointsInput}
                   min={0}

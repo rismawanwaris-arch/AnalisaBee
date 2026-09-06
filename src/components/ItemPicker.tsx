@@ -12,9 +12,11 @@ interface ItemPickerProps {
   selected: ItemOption | null;
   onSelect: (item: ItemOption | null) => void;
   placeholder?: string;
+  /** Forwarded to the internal text input, so a <label htmlFor> can target it. */
+  inputId?: string;
 }
 
-export function ItemPicker({ selected, onSelect, placeholder }: ItemPickerProps) {
+export function ItemPicker({ selected, onSelect, placeholder, inputId }: ItemPickerProps) {
   const [query, setQuery] = useState(selected ? `${selected.name} (${selected.code})` : "");
   const [options, setOptions] = useState<ItemOption[]>([]);
   const [open, setOpen] = useState(false);
@@ -51,6 +53,7 @@ export function ItemPicker({ selected, onSelect, placeholder }: ItemPickerProps)
     <div ref={boxRef} className="relative">
       <div className="relative">
         <input
+          id={inputId}
           type="text"
           value={query}
           onChange={(e) => {

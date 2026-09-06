@@ -275,8 +275,9 @@ export function DataExplorerPage() {
       <div className="rounded-xl border border-border/80 bg-surface p-3.5 flex flex-wrap items-center justify-between gap-3 shadow-xs">
         <div className="flex flex-wrap items-center gap-3">
           <div className="flex items-center gap-2">
-            <label className="text-xs font-semibold text-muted">Dari:</label>
+            <label htmlFor="analisa-data-from" className="text-xs font-semibold text-muted">Dari:</label>
             <input
+              id="analisa-data-from"
               type="date"
               value={from}
               disabled={allTime}
@@ -285,8 +286,9 @@ export function DataExplorerPage() {
             />
           </div>
           <div className="flex items-center gap-2">
-            <label className="text-xs font-semibold text-muted">Sampai:</label>
+            <label htmlFor="analisa-data-to" className="text-xs font-semibold text-muted">Sampai:</label>
             <input
+              id="analisa-data-to"
               type="date"
               value={to}
               disabled={allTime}

@@ -191,10 +191,11 @@ export function PointsLeaderboardPage() {
         <div className="flex flex-wrap items-end gap-3 pt-1">
           {mode === "day" && (
             <div>
-              <label className="block text-[11px] font-semibold uppercase tracking-wider text-muted mb-1">
+              <label htmlFor="points-leaderboard-day" className="block text-[11px] font-semibold uppercase tracking-wider text-muted mb-1">
                 Pilih Tanggal
               </label>
               <input
+                id="points-leaderboard-day"
                 type="date"
                 value={day}
                 onChange={(e) => setDay(e.target.value)}
@@ -204,10 +205,11 @@ export function PointsLeaderboardPage() {
           )}
           {mode === "month" && (
             <div>
-              <label className="block text-[11px] font-semibold uppercase tracking-wider text-muted mb-1">
+              <label htmlFor="points-leaderboard-month" className="block text-[11px] font-semibold uppercase tracking-wider text-muted mb-1">
                 Pilih Bulan
               </label>
               <input
+                id="points-leaderboard-month"
                 type="month"
                 value={month}
                 onChange={(e) => setMonth(e.target.value)}
@@ -218,10 +220,11 @@ export function PointsLeaderboardPage() {
           {mode === "range" && (
             <>
               <div>
-                <label className="block text-[11px] font-semibold uppercase tracking-wider text-muted mb-1">
+                <label htmlFor="points-leaderboard-from" className="block text-[11px] font-semibold uppercase tracking-wider text-muted mb-1">
                   Dari Tanggal
                 </label>
                 <input
+                  id="points-leaderboard-from"
                   type="date"
                   value={from}
                   onChange={(e) => setFrom(e.target.value)}
@@ -229,10 +232,11 @@ export function PointsLeaderboardPage() {
                 />
               </div>
               <div>
-                <label className="block text-[11px] font-semibold uppercase tracking-wider text-muted mb-1">
+                <label htmlFor="points-leaderboard-to" className="block text-[11px] font-semibold uppercase tracking-wider text-muted mb-1">
                   Sampai Tanggal
                 </label>
                 <input
+                  id="points-leaderboard-to"
                   type="date"
                   value={to}
                   onChange={(e) => setTo(e.target.value)}
