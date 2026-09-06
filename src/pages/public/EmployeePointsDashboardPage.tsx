@@ -28,6 +28,15 @@ interface PublicPointsDashboard {
   outlets: { id: number; name: string }[];
 }
 
+interface ItemPointBreakdownRow {
+  itemId: number;
+  itemName: string;
+  itemGroup: string | null;
+  qty: number;
+  pointsPerUnit: number;
+  totalPoints: number;
+}
+
 function currentMonthStr(): string {
   const d = new Date();
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`;
@@ -53,16 +62,24 @@ export function EmployeePointsDashboardPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
+  const [expandedId, setExpandedId] = useState<number | null>(null);
+  const [breakdown, setBreakdown] = useState<ItemPointBreakdownRow[] | null>(null);
+  const [breakdownLoading, setBreakdownLoading] = useState(false);
+
   const loadSeq = useRef(0);
   const hasLoadedOnce = useRef(false);
+
+  const queryParams = useCallback(() => {
+    const params = new URLSearchParams({ period: mode, date: mode === "month" ? month : day });
+    if (outletId) params.set("outletId", outletId);
+    return params;
+  }, [mode, day, month, outletId]);
 
   const load = useCallback(async () => {
     const seq = ++loadSeq.current;
     if (!hasLoadedOnce.current) setLoading(true); // only spin on the very first load, not on background auto-refresh
     try {
-      const params = new URLSearchParams({ period: mode, date: mode === "month" ? month : day });
-      if (outletId) params.set("outletId", outletId);
-      const res = await fetch(`/api/public/points/dashboard?${params.toString()}`);
+      const res = await fetch(`/api/public/points/dashboard?${queryParams().toString()}`);
       if (seq !== loadSeq.current) return;
       if (!res.ok) {
         const body = await res.json().catch(() => ({}));
@@ -79,10 +96,12 @@ export function EmployeePointsDashboardPage() {
         hasLoadedOnce.current = true;
       }
     }
-  }, [mode, day, month, outletId]);
+  }, [queryParams]);
 
   useEffect(() => {
     load();
+    setExpandedId(null);
+    setBreakdown(null);
   }, [load]);
 
   // Unattended auto-refresh so a tablet/TV stays current without anyone touching it.
@@ -90,6 +109,25 @@ export function EmployeePointsDashboardPage() {
     const id = setInterval(load, 60_000);
     return () => clearInterval(id);
   }, [load]);
+
+  async function toggleExpand(employeeId: number) {
+    if (expandedId === employeeId) {
+      setExpandedId(null);
+      setBreakdown(null);
+      return;
+    }
+    setExpandedId(employeeId);
+    setBreakdown(null);
+    setBreakdownLoading(true);
+    try {
+      const res = await fetch(`/api/public/points/employee/${employeeId}?${queryParams().toString()}`);
+      if (res.ok) setBreakdown(await res.json());
+    } catch {
+      // ignore — the row just won't expand with detail
+    } finally {
+      setBreakdownLoading(false);
+    }
+  }
 
   return (
     <div className="min-h-screen bg-background px-4 py-6 md:px-8 md:py-8">
@@ -167,51 +205,94 @@ export function EmployeePointsDashboardPage() {
             {data.rows.map((row, idx) => {
               const pct = Math.min(100, Math.max(0, row.achievementPct));
               const hit = row.achievementPct >= 100 && data.pointTarget > 0;
+              const expanded = expandedId === row.employeeId;
               return (
-                <div
-                  key={row.employeeId}
-                  className="rounded-xl border border-border/80 bg-surface p-4 shadow-xs flex items-center gap-4"
-                >
-                  <div
-                    className={`w-9 h-9 shrink-0 rounded-full border grid place-items-center text-xs font-bold ${
-                      idx < 3 ? RANK_BADGE[idx] : "bg-surface-subtle text-muted border-border/70"
-                    }`}
+                <div key={row.employeeId} className="rounded-xl border border-border/80 bg-surface shadow-xs overflow-hidden">
+                  <button
+                    type="button"
+                    onClick={() => toggleExpand(row.employeeId)}
+                    className="w-full p-4 flex items-center gap-4 text-left hover:bg-surface-hover/40 transition-colors"
                   >
-                    {idx + 1}
-                  </div>
-                  <div className="min-w-0 flex-1 space-y-1.5">
-                    <div className="flex items-baseline justify-between gap-3 flex-wrap">
-                      <div className="min-w-0">
-                        <span className="text-sm font-bold text-foreground truncate">{row.employeeName}</span>
-                        {row.outlet && <span className="ml-2 text-[11px] text-muted">{row.outlet}</span>}
-                      </div>
-                      <div className="text-right shrink-0">
-                        <span className="text-sm font-mono font-bold text-foreground">{formatNumber(row.totalPoints)}</span>
-                        <span className="text-[11px] text-muted"> / {formatNumber(data.pointTarget)} poin</span>
-                        <span className={`ml-2 text-[11px] font-bold ${hit ? "text-emerald-600 dark:text-emerald-400" : "text-muted"}`}>
-                          {row.achievementPct.toFixed(0)}%
-                        </span>
-                      </div>
+                    <div
+                      className={`w-9 h-9 shrink-0 rounded-full border grid place-items-center text-xs font-bold ${
+                        idx < 3 ? RANK_BADGE[idx] : "bg-surface-subtle text-muted border-border/70"
+                      }`}
+                    >
+                      {idx + 1}
                     </div>
-                    <div className="h-2 rounded-full bg-surface-subtle overflow-hidden">
-                      <div
-                        className={`h-full rounded-full transition-all ${hit ? "bg-emerald-500" : "bg-accent"}`}
-                        style={{ width: `${pct}%` }}
-                      />
-                    </div>
-                    {row.categoryBreakdown.length > 0 && (
-                      <div className="flex flex-wrap gap-1.5 pt-0.5">
-                        {row.categoryBreakdown.map((c) => (
-                          <span
-                            key={c.category}
-                            className="text-[10px] font-medium text-muted bg-surface-subtle border border-border/60 rounded px-1.5 py-0.5"
+                    <div className="min-w-0 flex-1 space-y-1.5">
+                      <div className="flex items-baseline justify-between gap-3 flex-wrap">
+                        <div className="min-w-0 flex items-center gap-1.5">
+                          <span className="text-sm font-bold text-foreground truncate">{row.employeeName}</span>
+                          {row.outlet && <span className="text-[11px] text-muted">{row.outlet}</span>}
+                          <svg
+                            width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"
+                            className={`text-muted transition-transform shrink-0 ${expanded ? "rotate-180" : ""}`}
                           >
-                            {c.category} +{formatNumber(c.points)}
+                            <polyline points="6 9 12 15 18 9" />
+                          </svg>
+                        </div>
+                        <div className="text-right shrink-0">
+                          <span className="text-sm font-mono font-bold text-foreground">{formatNumber(row.totalPoints)}</span>
+                          <span className="text-[11px] text-muted"> / {formatNumber(data.pointTarget)} poin</span>
+                          <span className={`ml-2 text-[11px] font-bold ${hit ? "text-emerald-600 dark:text-emerald-400" : "text-muted"}`}>
+                            {row.achievementPct.toFixed(0)}%
                           </span>
-                        ))}
+                        </div>
                       </div>
-                    )}
-                  </div>
+                      <div className="h-2 rounded-full bg-surface-subtle overflow-hidden">
+                        <div
+                          className={`h-full rounded-full transition-all ${hit ? "bg-emerald-500" : "bg-accent"}`}
+                          style={{ width: `${pct}%` }}
+                        />
+                      </div>
+                      {row.categoryBreakdown.length > 0 && (
+                        <div className="flex flex-wrap gap-1.5 pt-0.5">
+                          {row.categoryBreakdown.map((c) => (
+                            <span
+                              key={c.category}
+                              className="text-[10px] font-medium text-muted bg-surface-subtle border border-border/60 rounded px-1.5 py-0.5"
+                            >
+                              {c.category} +{formatNumber(c.points)}
+                            </span>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                  </button>
+
+                  {expanded && (
+                    <div className="border-t border-border/60 bg-surface-subtle/40">
+                      {breakdownLoading ? (
+                        <div className="px-4 py-4 text-center text-[11px] text-muted">Memuat detail...</div>
+                      ) : breakdown && breakdown.length > 0 ? (
+                        <div className="overflow-x-auto">
+                          <table className="w-full text-xs">
+                            <thead>
+                              <tr className="border-b border-border/60 text-left">
+                                <th className="px-4 py-2 font-semibold text-[10px] uppercase text-muted">Nama Item</th>
+                                <th className="px-4 py-2 text-right font-semibold text-[10px] uppercase text-muted">Qty</th>
+                                <th className="px-4 py-2 text-right font-semibold text-[10px] uppercase text-muted">Poin / Pcs</th>
+                                <th className="px-4 py-2 text-right font-semibold text-[10px] uppercase text-muted">Subtotal Poin</th>
+                              </tr>
+                            </thead>
+                            <tbody className="divide-y divide-border/40">
+                              {breakdown.map((item) => (
+                                <tr key={item.itemId}>
+                                  <td className="px-4 py-2 text-foreground">{item.itemName}</td>
+                                  <td className="px-4 py-2 text-right font-mono text-muted">{formatNumber(item.qty)}</td>
+                                  <td className="px-4 py-2 text-right font-mono text-muted">+{formatNumber(item.pointsPerUnit)}</td>
+                                  <td className="px-4 py-2 text-right font-mono font-bold text-accent">{formatNumber(item.totalPoints)}</td>
+                                </tr>
+                              ))}
+                            </tbody>
+                          </table>
+                        </div>
+                      ) : (
+                        <div className="px-4 py-4 text-center text-[11px] text-muted">Tidak ada rincian item untuk periode ini.</div>
+                      )}
+                    </div>
+                  )}
                 </div>
               );
             })}

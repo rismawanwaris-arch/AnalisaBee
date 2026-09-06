@@ -1367,33 +1367,49 @@ app.delete("/api/points/excluded-employees/:id", requireMaster, async (req, res)
 // private Tailscale network the app itself is deployed on. Never add
 // requireAuth/requireFeature/requireMaster here, and never let this route
 // return anything beyond points/ranking data (no revenue, no profit).
+
+async function resolvePublicPointsPeriod(req: express.Request): Promise<{ from: Date; to: Date }> {
+  const period = req.query.period === "day" || req.query.period === "week" ? req.query.period : "month";
+  const dateParam = typeof req.query.date === "string" ? req.query.date : null;
+  const dateStr = dateParam && !Number.isNaN(new Date(dateParam).getTime()) ? dateParam : todayStr();
+
+  if (period === "day") {
+    return { from: new Date(dateStr), to: new Date(dateStr) };
+  }
+  if (period === "week") {
+    return computeWeekPeriod(dateStr);
+  }
+  const [y, m] = dateStr.split("-").map(Number);
+  const { periodStartDay } = await getPointPeriodSetting();
+  const monthNum = m || new Date().getMonth() + 1;
+  const yearNum = y || new Date().getFullYear();
+  return computeMonthPeriod(yearNum, monthNum, periodStartDay);
+}
+
+function parsePublicOutletId(req: express.Request): number | undefined {
+  const raw = req.query.outletId ? Number(req.query.outletId) : undefined;
+  return raw && Number.isInteger(raw) ? raw : undefined;
+}
+
 app.get("/api/public/points/dashboard", publicPointsLimiter, async (req, res) => {
   try {
-    const period = req.query.period === "day" || req.query.period === "week" ? req.query.period : "month";
-    const dateParam = typeof req.query.date === "string" ? req.query.date : null;
-    const dateStr = dateParam && !Number.isNaN(new Date(dateParam).getTime()) ? dateParam : todayStr();
-    const outletIdParam = req.query.outletId ? Number(req.query.outletId) : undefined;
-    const outletId = outletIdParam && Number.isInteger(outletIdParam) ? outletIdParam : undefined;
-
-    let from: Date;
-    let to: Date;
-    if (period === "day") {
-      from = new Date(dateStr);
-      to = new Date(dateStr);
-    } else if (period === "week") {
-      ({ from, to } = computeWeekPeriod(dateStr));
-    } else {
-      const [y, m] = dateStr.split("-").map(Number);
-      const { periodStartDay } = await getPointPeriodSetting();
-      const monthNum = m || new Date().getMonth() + 1;
-      const yearNum = y || new Date().getFullYear();
-      ({ from, to } = computeMonthPeriod(yearNum, monthNum, periodStartDay));
-    }
-
-    const data = await getPublicPointsDashboard(from, to, outletId);
+    const { from, to } = await resolvePublicPointsPeriod(req);
+    const data = await getPublicPointsDashboard(from, to, parsePublicOutletId(req));
     return res.json(data);
   } catch {
     // Never leak internal error details on a public, unauthenticated route.
+    return res.status(500).json({ error: "Terjadi kesalahan server." });
+  }
+});
+
+app.get("/api/public/points/employee/:id", publicPointsLimiter, async (req, res) => {
+  const employeeId = Number(req.params.id);
+  if (!Number.isInteger(employeeId)) return res.status(400).json({ error: "ID tidak valid." });
+  try {
+    const { from, to } = await resolvePublicPointsPeriod(req);
+    const breakdown = await getEmployeePointBreakdown(employeeId, from, to, parsePublicOutletId(req));
+    return res.json(breakdown);
+  } catch {
     return res.status(500).json({ error: "Terjadi kesalahan server." });
   }
 });

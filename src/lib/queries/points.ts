@@ -284,14 +284,15 @@ export async function getLeaderboard(
 export async function getEmployeePointBreakdown(
   employeeId: number,
   from: Date,
-  to: Date
+  to: Date,
+  outletId?: number
 ): Promise<ItemPointBreakdownRow[]> {
   await ensureDefaults();
 
   // Aggregate at DB level — group by item, not individual sale rows
   const salesAgg = await prisma.sale.groupBy({
     by: ["itemId"],
-    where: { employeeId, tanggal: { gte: from, lte: to } },
+    where: { employeeId, tanggal: { gte: from, lte: to }, ...(outletId ? { outletId } : {}) },
     _sum: { qty: true },
   });
 
