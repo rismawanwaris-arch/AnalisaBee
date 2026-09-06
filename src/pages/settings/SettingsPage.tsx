@@ -1,6 +1,7 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { formatNumber, formatRupiah } from "@/lib/format";
 import { FEATURE_KEYS, FEATURE_LABELS, type FeatureKey } from "@/lib/features";
+import { ConfirmDeleteModal } from "@/components/ConfirmDeleteModal";
 
 type BusinessLine = "SERVER" | "TARTUN" | "PETSHOP" | "AKSESORIS" | "SP_VOUCHER";
 type ReportCategory = "PETSHOP" | "AKSESORIS" | "SP_VOUCHER";
@@ -317,6 +318,15 @@ export function SettingsPage() {
   const [editRoleName, setEditRoleName] = useState("");
   const [editRolePerms, setEditRolePerms] = useState<Set<FeatureKey>>(new Set());
 
+  // Backup & Restore
+  const [backupBusy, setBackupBusy] = useState<"data" | "settings" | null>(null);
+  const [restoreBusy, setRestoreBusy] = useState(false);
+  const [backupError, setBackupError] = useState<string | null>(null);
+  const [restoreNotice, setRestoreNotice] = useState<string | null>(null);
+  const [restoreTarget, setRestoreTarget] = useState<{ scope: "data" | "settings"; file: File } | null>(null);
+  const dataFileInputRef = useRef<HTMLInputElement>(null);
+  const settingsFileInputRef = useRef<HTMLInputElement>(null);
+
   const loadUsers = useCallback(async () => {
     try {
       const res = await fetch("/api/users");
@@ -607,6 +617,78 @@ export function SettingsPage() {
     } finally {
       await loadRoles();
       await loadUsers();
+    }
+  }
+
+  // Backup & Restore Handlers
+  async function downloadBackup(scope: "data" | "settings") {
+    setBackupError(null);
+    setBackupBusy(scope);
+    try {
+      const res = await fetch(`/api/backup/${scope}`);
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}));
+        setBackupError(data.error || "Gagal membuat backup.");
+        return;
+      }
+      const blob = await res.blob();
+      const disposition = res.headers.get("Content-Disposition") ?? "";
+      const match = disposition.match(/filename="([^"]+)"/);
+      const filename = match?.[1] ?? `analisabee-${scope}-${new Date().toISOString().slice(0, 10)}.json`;
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement("a");
+      link.href = url;
+      link.download = filename;
+      link.click();
+      URL.revokeObjectURL(url);
+    } catch {
+      setBackupError("Terjadi kesalahan jaringan.");
+    } finally {
+      setBackupBusy(null);
+    }
+  }
+
+  function pickRestoreFile(scope: "data" | "settings", file: File | undefined) {
+    if (!file) return;
+    setBackupError(null);
+    setRestoreTarget({ scope, file });
+  }
+
+  async function confirmRestore() {
+    if (!restoreTarget) return;
+    setRestoreBusy(true);
+    setBackupError(null);
+    setRestoreNotice(null);
+    try {
+      const formData = new FormData();
+      formData.append("file", restoreTarget.file);
+      const res = await fetch(`/api/backup/${restoreTarget.scope}/restore`, {
+        method: "POST",
+        body: formData,
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        setBackupError(data.error || "Gagal memulihkan backup.");
+        return;
+      }
+      if (data.skippedAliases || data.skippedPointsExclusions) {
+        setRestoreNotice(
+          `Restore berhasil. ${data.skippedAliases ?? 0} alias outlet dan ${data.skippedPointsExclusions ?? 0} pengecualian poin dilewati karena outlet/pegawai rujukannya tidak ada di backup ini.`,
+        );
+      }
+      setRestoreTarget(null);
+      if (dataFileInputRef.current) dataFileInputRef.current.value = "";
+      if (settingsFileInputRef.current) settingsFileInputRef.current.value = "";
+      // The restored scope can touch almost every section on this page.
+      await Promise.all([
+        loadTargets(), loadAliases(), loadGroups(), loadItemRules(), loadGroupRules(),
+        loadPeriodSetting(), loadExcluded(), loadItemExclusions(), loadAllOutlets(),
+        loadAllEmployees(), loadUsers(), loadRoles(),
+      ]);
+    } catch {
+      setBackupError("Terjadi kesalahan jaringan.");
+    } finally {
+      setRestoreBusy(false);
     }
   }
 
@@ -1461,6 +1543,129 @@ export function SettingsPage() {
           </div>
         )}
       </div>
+
+      {/* ── 0c. Backup & Restore ─────────────────────────────── */}
+      <div className="rounded-xl border border-border/80 bg-surface shadow-xs overflow-hidden">
+        <button type="button" onClick={() => toggleSection("backup-restore")}
+          className="w-full flex items-center justify-between gap-3 px-5 py-3.5 text-left hover:bg-surface-hover/50 transition-colors">
+          <div className="flex items-center gap-2.5 min-w-0">
+            <span className="w-2.5 h-2.5 rounded-full bg-cyan-500 shrink-0" />
+            <span className="text-sm font-bold uppercase tracking-wider text-foreground">Backup &amp; Restore</span>
+          </div>
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"
+            className={`shrink-0 text-muted transition-transform duration-200 ${openSections.has("backup-restore") ? "rotate-180" : ""}`}>
+            <polyline points="6 9 12 15 18 9" />
+          </svg>
+        </button>
+        {openSections.has("backup-restore") && (
+          <div className="px-5 pb-5 pt-4 space-y-5 border-t border-border/60">
+            <p className="text-xs text-muted leading-relaxed">
+              Backup tersimpan sebagai file <code className="font-mono bg-surface-subtle border border-border/60 rounded px-1">.json</code>. <strong>Memulihkan (restore) akan menimpa seluruh data pada cakupan terkait</strong> — pastikan file yang diunggah benar sebelum konfirmasi. Akun pengguna &amp; log aktivitas tidak termasuk dalam backup ini.
+            </p>
+            {backupError && (
+              <div className="rounded-lg border border-rose-500/20 bg-rose-500/10 p-2.5 text-xs font-medium text-rose-600 dark:text-rose-400">
+                {backupError}
+              </div>
+            )}
+            {restoreNotice && (
+              <div className="rounded-lg border border-amber-500/20 bg-amber-500/10 p-2.5 text-xs font-medium text-amber-700 dark:text-amber-400">
+                {restoreNotice}
+              </div>
+            )}
+
+            <div className="grid sm:grid-cols-2 gap-4">
+              <div className="rounded-xl bg-surface-subtle/60 border border-border/60 p-4 space-y-3">
+                <div>
+                  <h3 className="text-xs font-bold text-foreground uppercase tracking-wider">Data Import</h3>
+                  <p className="text-[11px] text-muted mt-1 leading-relaxed">
+                    Outlet, pegawai, item, riwayat batch import, seluruh baris penjualan, tarik tunai &amp; komisi server.
+                  </p>
+                </div>
+                <div className="flex flex-wrap items-center gap-2">
+                  <button
+                    type="button"
+                    onClick={() => downloadBackup("data")}
+                    disabled={backupBusy !== null}
+                    className="inline-flex items-center gap-1.5 rounded-lg bg-accent text-accent-foreground px-3.5 py-1.5 text-xs font-semibold hover:bg-accent-hover disabled:opacity-50 transition-all shadow-xs"
+                  >
+                    {backupBusy === "data" ? "Membuat backup..." : "Unduh Backup"}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => dataFileInputRef.current?.click()}
+                    className="inline-flex items-center gap-1.5 rounded-lg border border-border/70 bg-surface px-3.5 py-1.5 text-xs font-semibold text-foreground hover:bg-surface-hover transition-all"
+                  >
+                    Pulihkan dari File...
+                  </button>
+                  <input
+                    ref={dataFileInputRef}
+                    type="file"
+                    accept="application/json"
+                    className="hidden"
+                    onChange={(e) => pickRestoreFile("data", e.target.files?.[0])}
+                  />
+                </div>
+              </div>
+
+              <div className="rounded-xl bg-surface-subtle/60 border border-border/60 p-4 space-y-3">
+                <div>
+                  <h3 className="text-xs font-bold text-foreground uppercase tracking-wider">Pengaturan</h3>
+                  <p className="text-[11px] text-muted mt-1 leading-relaxed">
+                    Target harian, pemetaan alias &amp; kategori item, aturan poin, siklus cut-off, dan peran kustom.
+                  </p>
+                </div>
+                <div className="flex flex-wrap items-center gap-2">
+                  <button
+                    type="button"
+                    onClick={() => downloadBackup("settings")}
+                    disabled={backupBusy !== null}
+                    className="inline-flex items-center gap-1.5 rounded-lg bg-accent text-accent-foreground px-3.5 py-1.5 text-xs font-semibold hover:bg-accent-hover disabled:opacity-50 transition-all shadow-xs"
+                  >
+                    {backupBusy === "settings" ? "Membuat backup..." : "Unduh Backup"}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => settingsFileInputRef.current?.click()}
+                    className="inline-flex items-center gap-1.5 rounded-lg border border-border/70 bg-surface px-3.5 py-1.5 text-xs font-semibold text-foreground hover:bg-surface-hover transition-all"
+                  >
+                    Pulihkan dari File...
+                  </button>
+                  <input
+                    ref={settingsFileInputRef}
+                    type="file"
+                    accept="application/json"
+                    className="hidden"
+                    onChange={(e) => pickRestoreFile("settings", e.target.files?.[0])}
+                  />
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
+      </div>
+
+      <ConfirmDeleteModal
+        open={restoreTarget !== null}
+        title={restoreTarget?.scope === "data" ? "Timpa semua Data Import?" : "Timpa semua Pengaturan?"}
+        description={
+          <>
+            File <strong className="text-foreground">{restoreTarget?.file.name}</strong> akan menggantikan{" "}
+            {restoreTarget?.scope === "data"
+              ? "seluruh outlet, pegawai, item, riwayat import, dan baris penjualan yang ada saat ini."
+              : "seluruh target, pemetaan, aturan poin, dan peran kustom yang ada saat ini."}{" "}
+            Tindakan ini tidak bisa dibatalkan.
+          </>
+        }
+        confirmText="TIMPA DATA"
+        confirmLabel="Pulihkan & Timpa"
+        busy={restoreBusy}
+        onCancel={() => {
+          setRestoreTarget(null);
+          if (dataFileInputRef.current) dataFileInputRef.current.value = "";
+          if (settingsFileInputRef.current) settingsFileInputRef.current.value = "";
+        }}
+        onConfirm={confirmRestore}
+      />
 
       {/* ── 1. Nominal Target Harian — Bandung ───────────────────── */}
       <div className="rounded-xl border border-border/80 bg-surface shadow-xs overflow-hidden">
