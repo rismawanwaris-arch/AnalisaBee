@@ -3,7 +3,7 @@ import { StatCard } from "@/components/StatCard";
 import { ConfirmDeleteModal } from "@/components/ConfirmDeleteModal";
 import { useAuth } from "@/context/AuthContext";
 import { formatNumber, formatRupiah } from "@/lib/format";
-import { todayStr } from "@/lib/dateDefaults";
+import { todayStr, yesterdayStr } from "@/lib/dateDefaults";
 
 type Source = "SALE" | "TARTUN" | "SERVER";
 
@@ -34,17 +34,11 @@ const SOURCE_BADGE: Record<Source, string> = {
 
 type SortKey = "tanggal" | "outletName" | "jumlah" | "keterangan" | "source";
 
-function daysAgoStr(n: number): string {
-  const d = new Date();
-  d.setDate(d.getDate() - n);
-  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
-}
-
 export function DataExplorerPage() {
   const { role } = useAuth();
   const isMaster = role === "master";
 
-  const [from, setFrom] = useState(daysAgoStr(30));
+  const [from, setFrom] = useState(yesterdayStr());
   const [to, setTo] = useState(todayStr());
   const [allTime, setAllTime] = useState(false);
   const [rows, setRows] = useState<UnifiedRow[]>([]);
