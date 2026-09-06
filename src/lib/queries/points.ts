@@ -156,20 +156,49 @@ export async function resolveItemPointsForIds(itemIds: number[]): Promise<Map<nu
   return computeItemPoints(items, rules, groupDefaults, exclusions);
 }
 
-export async function getPointPeriodSetting(): Promise<{ periodStartDay: number; pointTarget: number }> {
+export interface PointPeriodSetting {
+  periodStartDay: number;
+  pointTargetDaily: number;
+  pointTargetWeekly: number;
+  pointTargetMonthly: number;
+}
+
+export async function getPointPeriodSetting(): Promise<PointPeriodSetting> {
   const setting = await prisma.pointSettings.upsert({
     where: { id: 1 },
     update: {},
-    create: { id: 1, periodStartDay: 1, pointTarget: 0 },
+    create: { id: 1, periodStartDay: 1, pointTargetDaily: 0, pointTargetWeekly: 0, pointTargetMonthly: 0 },
   });
-  return { periodStartDay: setting.periodStartDay, pointTarget: setting.pointTarget };
+  return {
+    periodStartDay: setting.periodStartDay,
+    pointTargetDaily: setting.pointTargetDaily,
+    pointTargetWeekly: setting.pointTargetWeekly,
+    pointTargetMonthly: setting.pointTargetMonthly,
+  };
 }
 
-export async function setPointPeriodSetting(periodStartDay: number, pointTarget?: number): Promise<void> {
+export interface PointTargetUpdate {
+  daily?: number;
+  weekly?: number;
+  monthly?: number;
+}
+
+export async function setPointPeriodSetting(periodStartDay: number, targets?: PointTargetUpdate): Promise<void> {
   await prisma.pointSettings.upsert({
     where: { id: 1 },
-    update: { periodStartDay, ...(pointTarget !== undefined ? { pointTarget } : {}) },
-    create: { id: 1, periodStartDay, pointTarget: pointTarget ?? 0 },
+    update: {
+      periodStartDay,
+      ...(targets?.daily !== undefined ? { pointTargetDaily: targets.daily } : {}),
+      ...(targets?.weekly !== undefined ? { pointTargetWeekly: targets.weekly } : {}),
+      ...(targets?.monthly !== undefined ? { pointTargetMonthly: targets.monthly } : {}),
+    },
+    create: {
+      id: 1,
+      periodStartDay,
+      pointTargetDaily: targets?.daily ?? 0,
+      pointTargetWeekly: targets?.weekly ?? 0,
+      pointTargetMonthly: targets?.monthly ?? 0,
+    },
   });
 }
 
@@ -360,14 +389,15 @@ export interface PublicPointsDashboard {
 export async function getPublicPointsDashboard(
   from: Date,
   to: Date,
-  outletId?: number
+  outletId: number | undefined,
+  pointTarget: number
 ): Promise<PublicPointsDashboard> {
   await ensureDefaults();
 
   const excludedIds = await getExcludedEmployeeIds();
   const excludeClause = excludedIds.length > 0 ? { employeeId: { notIn: excludedIds } } : {};
 
-  const [roster, salesAgg, outletAgg, outlets, { pointTarget }] = await Promise.all([
+  const [roster, salesAgg, outletAgg, outlets] = await Promise.all([
     prisma.employee.findMany({
       where: { isHidden: false, ...(excludedIds.length > 0 ? { id: { notIn: excludedIds } } : {}) },
       select: { id: true, name: true },
@@ -385,7 +415,6 @@ export async function getPublicPointsDashboard(
       _count: { _all: true },
     }),
     prisma.outlet.findMany({ where: { isHidden: false }, select: { id: true, name: true }, orderBy: { name: "asc" } }),
-    getPointPeriodSetting(),
   ]);
 
   const itemIds = [...new Set(salesAgg.map((s) => s.itemId))];

@@ -204,9 +204,16 @@ model ItemGroupPointDefault {
 // means the period labeled "September" runs 29 Aug – 28 Sep, matching a
 // commission cycle that doesn't follow the calendar month.
 model PointSettings {
-  id             Int @id @default(1)
-  periodStartDay Int @default(1)
-  pointTarget    Int @default(0)
+  id                 Int @id @default(1)
+  periodStartDay     Int @default(1)
+  // Separate targets per period mode on the public points wallboard — a
+  // monthly target is naturally much larger than a daily one, so a single
+  // shared number doesn't make sense across Harian/Mingguan/Bulanan views.
+  // pointTargetMonthly reuses the original "pointTarget" column (@map) from
+  // before the three-way split, so no data migration/rename was needed.
+  pointTargetMonthly Int @default(0) @map("pointTarget")
+  pointTargetWeekly  Int @default(0)
+  pointTargetDaily   Int @default(0)
 
   @@map("point_settings")
 }

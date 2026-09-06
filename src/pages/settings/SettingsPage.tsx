@@ -193,7 +193,9 @@ export function SettingsPage() {
   const [groupRuleError, setGroupRuleError] = useState<string | null>(null);
 
   const [periodStartDay, setPeriodStartDay] = useState("1");
-  const [pointTarget, setPointTarget] = useState("0");
+  const [pointTargetDaily, setPointTargetDaily] = useState("0");
+  const [pointTargetWeekly, setPointTargetWeekly] = useState("0");
+  const [pointTargetMonthly, setPointTargetMonthly] = useState("0");
   const [periodBusy, setPeriodBusy] = useState(false);
   const [periodSaved, setPeriodSaved] = useState(false);
 
@@ -230,7 +232,9 @@ export function SettingsPage() {
       if (res.ok) {
         const d = await res.json();
         setPeriodStartDay(String(d.periodStartDay));
-        setPointTarget(String(d.pointTarget ?? 0));
+        setPointTargetDaily(String(d.pointTargetDaily ?? 0));
+        setPointTargetWeekly(String(d.pointTargetWeekly ?? 0));
+        setPointTargetMonthly(String(d.pointTargetMonthly ?? 0));
       }
     } catch {
       // ignore
@@ -812,14 +816,18 @@ export function SettingsPage() {
   // Points Handlers
   async function savePeriodSetting() {
     const day = Number(periodStartDay);
-    const target = Number(pointTarget);
     setPeriodBusy(true);
     setPeriodSaved(false);
     try {
       const res = await fetch("/api/points/settings", {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ periodStartDay: day, pointTarget: target }),
+        body: JSON.stringify({
+          periodStartDay: day,
+          pointTargetDaily: Number(pointTargetDaily),
+          pointTargetWeekly: Number(pointTargetWeekly),
+          pointTargetMonthly: Number(pointTargetMonthly),
+        }),
       });
       if (res.ok) {
         setPeriodSaved(true);
@@ -2133,7 +2141,9 @@ export function SettingsPage() {
             <span className="w-2.5 h-2.5 rounded-full bg-amber-500 shrink-0" />
             <span className="text-sm font-bold uppercase tracking-wider text-foreground">Siklus &amp; Target Poin</span>
             <span className="text-[11px] font-mono text-muted bg-surface-subtle border border-border/60 rounded px-2 py-0.5">Tanggal {periodStartDay}</span>
-            <span className="text-[11px] font-mono text-muted bg-surface-subtle border border-border/60 rounded px-2 py-0.5">Target {pointTarget}</span>
+            <span className="text-[11px] font-mono text-muted bg-surface-subtle border border-border/60 rounded px-2 py-0.5">
+              H {pointTargetDaily} · M {pointTargetWeekly} · B {pointTargetMonthly}
+            </span>
           </div>
           <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"
             className={`shrink-0 text-muted transition-transform duration-200 ${openSections.has("siklus-periode") ? "rotate-180" : ""}`}>
@@ -2144,6 +2154,9 @@ export function SettingsPage() {
           <div className="px-5 pb-5 pt-4 space-y-3 border-t border-border/60">
             <p className="text-xs text-muted leading-relaxed">
               Tentukan tanggal awal dimulainya siklus bulanan. Masukkan <strong>1</strong> untuk siklus kalender normal (1–akhir bulan), atau tanggal lain (contoh: <strong>29</strong> untuk periode 29 s/d 28 bulan berikutnya).
+            </p>
+            <p className="text-xs text-muted leading-relaxed">
+              Target poin diatur terpisah per mode tampilan Papan Poin — target bulanan wajar jauh lebih besar dari target harian.
             </p>
             <div className="flex flex-wrap items-end gap-3 pt-1">
               <div>
@@ -2161,14 +2174,38 @@ export function SettingsPage() {
               </div>
               <div>
                 <label className="block text-[11px] font-semibold uppercase tracking-wider text-muted mb-1">
-                  Target Poin Global (per Pegawai)
+                  Target Poin Harian
                 </label>
                 <input
                   type="number"
                   min={0}
-                  value={pointTarget}
-                  onChange={(e) => setPointTarget(e.target.value)}
-                  className="w-36 rounded-lg border border-border/80 bg-surface-subtle px-3 py-1.5 text-xs font-mono text-foreground focus:outline-none focus:ring-2 focus:ring-accent/20 focus:border-accent transition-all"
+                  value={pointTargetDaily}
+                  onChange={(e) => setPointTargetDaily(e.target.value)}
+                  className="w-32 rounded-lg border border-border/80 bg-surface-subtle px-3 py-1.5 text-xs font-mono text-foreground focus:outline-none focus:ring-2 focus:ring-accent/20 focus:border-accent transition-all"
+                />
+              </div>
+              <div>
+                <label className="block text-[11px] font-semibold uppercase tracking-wider text-muted mb-1">
+                  Target Poin Mingguan
+                </label>
+                <input
+                  type="number"
+                  min={0}
+                  value={pointTargetWeekly}
+                  onChange={(e) => setPointTargetWeekly(e.target.value)}
+                  className="w-32 rounded-lg border border-border/80 bg-surface-subtle px-3 py-1.5 text-xs font-mono text-foreground focus:outline-none focus:ring-2 focus:ring-accent/20 focus:border-accent transition-all"
+                />
+              </div>
+              <div>
+                <label className="block text-[11px] font-semibold uppercase tracking-wider text-muted mb-1">
+                  Target Poin Bulanan
+                </label>
+                <input
+                  type="number"
+                  min={0}
+                  value={pointTargetMonthly}
+                  onChange={(e) => setPointTargetMonthly(e.target.value)}
+                  className="w-32 rounded-lg border border-border/80 bg-surface-subtle px-3 py-1.5 text-xs font-mono text-foreground focus:outline-none focus:ring-2 focus:ring-accent/20 focus:border-accent transition-all"
                 />
               </div>
               <button

@@ -103,6 +103,7 @@ import {
   includeEmployee,
   computeWeekPeriod,
   getPublicPointsDashboard,
+  type PointTargetUpdate,
 } from "../lib/queries/points";
 import { previewSalesFile, importSalesFile } from "../lib/importSales";
 import { invalidateDefaults } from "../lib/ensureDefaults";
@@ -1140,49 +1141,54 @@ app.get("/api/points/settings", requireFeature("points"), async (req, res) => {
   }
 });
 
-app.put("/api/points/settings", requireMaster, async (req, res) => {
-  try {
-    const { periodStartDay, pointTarget } = req.body;
-    const day = Number(periodStartDay);
-    if (!Number.isInteger(day) || day < 1 || day > 31) {
-      return res.status(400).json({ error: "Tanggal harus 1-31." });
-    }
-    let target: number | undefined;
-    if (pointTarget !== undefined) {
-      target = Number(pointTarget);
-      if (!Number.isInteger(target) || target < 0) {
-        return res.status(400).json({ error: "Target poin harus bilangan bulat >= 0." });
-      }
-    }
-    await setPointPeriodSetting(day, target);
-    await logActivity(req, "PERIOD_UPDATE", `Tanggal mulai siklus → ${day}${target !== undefined ? `, target poin → ${target}` : ""}`);
-    return res.json({ ok: true });
-  } catch (err: any) {
-    return res.status(500).json({ error: err.message });
+// Shared by PUT/POST below: pulls periodStartDay + the 3 optional per-period
+// point targets out of the request body, validating each as an integer >= 0.
+// Returns null (after writing the 400 response itself) on invalid input.
+function parsePointSettingsBody(
+  req: express.Request,
+  res: express.Response
+): { day: number; targets: PointTargetUpdate } | null {
+  const { periodStartDay, pointTargetDaily, pointTargetWeekly, pointTargetMonthly } = req.body;
+  const day = Number(periodStartDay);
+  if (!Number.isInteger(day) || day < 1 || day > 31) {
+    res.status(400).json({ error: "Tanggal harus 1-31." });
+    return null;
   }
-});
+  const targets: PointTargetUpdate = {};
+  for (const [key, raw] of [
+    ["daily", pointTargetDaily],
+    ["weekly", pointTargetWeekly],
+    ["monthly", pointTargetMonthly],
+  ] as const) {
+    if (raw === undefined) continue;
+    const n = Number(raw);
+    if (!Number.isInteger(n) || n < 0) {
+      res.status(400).json({ error: "Target poin harus bilangan bulat >= 0." });
+      return null;
+    }
+    targets[key] = n;
+  }
+  return { day, targets };
+}
 
-app.post("/api/points/settings", requireMaster, async (req, res) => {
+async function handlePointsSettingsWrite(req: express.Request, res: express.Response) {
   try {
-    const { periodStartDay, pointTarget } = req.body;
-    const day = Number(periodStartDay);
-    if (!Number.isInteger(day) || day < 1 || day > 31) {
-      return res.status(400).json({ error: "Tanggal harus 1-31." });
-    }
-    let target: number | undefined;
-    if (pointTarget !== undefined) {
-      target = Number(pointTarget);
-      if (!Number.isInteger(target) || target < 0) {
-        return res.status(400).json({ error: "Target poin harus bilangan bulat >= 0." });
-      }
-    }
-    await setPointPeriodSetting(day, target);
-    await logActivity(req, "PERIOD_UPDATE", `Tanggal mulai siklus → ${day}${target !== undefined ? `, target poin → ${target}` : ""}`);
+    const parsed = parsePointSettingsBody(req, res);
+    if (!parsed) return;
+    const { day, targets } = parsed;
+    await setPointPeriodSetting(day, targets);
+    const targetLog = Object.entries(targets)
+      .map(([k, v]) => `${k} → ${v}`)
+      .join(", ");
+    await logActivity(req, "PERIOD_UPDATE", `Tanggal mulai siklus → ${day}${targetLog ? `, target poin (${targetLog})` : ""}`);
     return res.json({ ok: true });
   } catch (err: any) {
     return res.status(500).json({ error: err.message });
   }
-});
+}
+
+app.put("/api/points/settings", requireMaster, handlePointsSettingsWrite);
+app.post("/api/points/settings", requireMaster, handlePointsSettingsWrite);
 
 app.get("/api/points/employee/:id", requireFeature("points"), async (req, res) => {
   try {
@@ -1368,22 +1374,27 @@ app.delete("/api/points/excluded-employees/:id", requireMaster, async (req, res)
 // requireAuth/requireFeature/requireMaster here, and never let this route
 // return anything beyond points/ranking data (no revenue, no profit).
 
-async function resolvePublicPointsPeriod(req: express.Request): Promise<{ from: Date; to: Date }> {
+// Each period mode (Harian/Mingguan/Bulanan) on the public wallboard compares
+// against its own target — a monthly target is naturally much larger than a
+// daily one, so a single shared number doesn't make sense across views.
+async function resolvePublicPointsPeriod(
+  req: express.Request
+): Promise<{ from: Date; to: Date; pointTarget: number }> {
   const period = req.query.period === "day" || req.query.period === "week" ? req.query.period : "month";
   const dateParam = typeof req.query.date === "string" ? req.query.date : null;
   const dateStr = dateParam && !Number.isNaN(new Date(dateParam).getTime()) ? dateParam : todayStr();
+  const setting = await getPointPeriodSetting();
 
   if (period === "day") {
-    return { from: new Date(dateStr), to: new Date(dateStr) };
+    return { from: new Date(dateStr), to: new Date(dateStr), pointTarget: setting.pointTargetDaily };
   }
   if (period === "week") {
-    return computeWeekPeriod(dateStr);
+    return { ...computeWeekPeriod(dateStr), pointTarget: setting.pointTargetWeekly };
   }
   const [y, m] = dateStr.split("-").map(Number);
-  const { periodStartDay } = await getPointPeriodSetting();
   const monthNum = m || new Date().getMonth() + 1;
   const yearNum = y || new Date().getFullYear();
-  return computeMonthPeriod(yearNum, monthNum, periodStartDay);
+  return { ...computeMonthPeriod(yearNum, monthNum, setting.periodStartDay), pointTarget: setting.pointTargetMonthly };
 }
 
 function parsePublicOutletId(req: express.Request): number | undefined {
@@ -1393,8 +1404,8 @@ function parsePublicOutletId(req: express.Request): number | undefined {
 
 app.get("/api/public/points/dashboard", publicPointsLimiter, async (req, res) => {
   try {
-    const { from, to } = await resolvePublicPointsPeriod(req);
-    const data = await getPublicPointsDashboard(from, to, parsePublicOutletId(req));
+    const { from, to, pointTarget } = await resolvePublicPointsPeriod(req);
+    const data = await getPublicPointsDashboard(from, to, parsePublicOutletId(req), pointTarget);
     return res.json(data);
   } catch {
     // Never leak internal error details on a public, unauthenticated route.

@@ -45,7 +45,17 @@ export const periodSettingSchema = z.object({
     .int("Tanggal mulai periode harus angka 1-31.")
     .min(1, "Tanggal mulai periode harus angka 1-31.")
     .max(31, "Tanggal mulai periode harus angka 1-31."),
-  pointTarget: z.coerce
+  pointTargetDaily: z.coerce
+    .number({ error: "Target poin harus berupa angka bulat >= 0." })
+    .int("Target poin harus berupa angka bulat >= 0.")
+    .min(0, "Target poin harus berupa angka bulat >= 0.")
+    .optional(),
+  pointTargetWeekly: z.coerce
+    .number({ error: "Target poin harus berupa angka bulat >= 0." })
+    .int("Target poin harus berupa angka bulat >= 0.")
+    .min(0, "Target poin harus berupa angka bulat >= 0.")
+    .optional(),
+  pointTargetMonthly: z.coerce
     .number({ error: "Target poin harus berupa angka bulat >= 0." })
     .int("Target poin harus berupa angka bulat >= 0.")
     .min(0, "Target poin harus berupa angka bulat >= 0.")
