@@ -177,3 +177,31 @@ export async function deleteUnifiedTransaction(source: TransactionSource, id: nu
     await prisma.serverDaily.delete({ where: { id } });
   }
 }
+
+export interface BulkDeleteItem {
+  source: TransactionSource;
+  id: number;
+}
+
+export interface BulkDeleteResult {
+  deleted: number;
+  notFound: number;
+}
+
+/** Deletes each row independently rather than in one transaction — a bulk
+ *  selection can span all three source tables, and one missing row (already
+ *  deleted by someone else) shouldn't block the rest from going through. */
+export async function bulkDeleteUnifiedTransactions(items: BulkDeleteItem[]): Promise<BulkDeleteResult> {
+  const saleIds = items.filter((i) => i.source === "SALE").map((i) => i.id);
+  const tartunIds = items.filter((i) => i.source === "TARTUN").map((i) => i.id);
+  const serverIds = items.filter((i) => i.source === "SERVER").map((i) => i.id);
+
+  const [saleResult, tartunResult, serverResult] = await Promise.all([
+    saleIds.length ? prisma.sale.deleteMany({ where: { id: { in: saleIds } } }) : { count: 0 },
+    tartunIds.length ? prisma.tartunDaily.deleteMany({ where: { id: { in: tartunIds } } }) : { count: 0 },
+    serverIds.length ? prisma.serverDaily.deleteMany({ where: { id: { in: serverIds } } }) : { count: 0 },
+  ]);
+
+  const deleted = saleResult.count + tartunResult.count + serverResult.count;
+  return { deleted, notFound: items.length - deleted };
+}

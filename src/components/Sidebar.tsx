@@ -128,11 +128,11 @@ export function Sidebar({ status }: { status: SystemStatus | null }) {
           { href: "/outlets", label: "Performa Outlet", feature: "outlets", icon: <path d="M3 9.5 12 3l9 6.5M5 9v11h14V9M9 20v-6h6v6" /> },
           { href: "/employees", label: "Pegawai & Staff", feature: "employees", icon: <><circle cx="12" cy="8" r="3.2" /><path d="M5 20c0-3.9 3.1-7 7-7s7 3.1 7 7" /></> },
           { href: "/transactions", label: "Daftar Transaksi", feature: "transactions", icon: <><rect x="4" y="4" width="16" height="16" rx="2" /><path d="M4 10h16M9 10v10" /></> },
-          { href: "/analisa-data", label: "Analisa Data", feature: "data_explorer", icon: <><circle cx="11" cy="11" r="7" /><path d="M21 21l-4.3-4.3" /></> },
         ])}
         {/* Group: Manajemen */}
         {renderNavGroup("Manajemen Data & Sistem", [
           { href: "/import", label: "Import & Batch", feature: "import", icon: <path d="M12 3v12m0 0-4-4m4 4 4-4M5 21h14" /> },
+          { href: "/analisa-data", label: "Analisa Data", feature: "data_explorer", icon: <><circle cx="11" cy="11" r="7" /><path d="M21 21l-4.3-4.3" /></> },
           { href: "/log", label: "Log Aktivitas", feature: "activity_log", icon: <><rect x="3" y="4" width="18" height="18" rx="2" /><path d="M7 8h10M7 12h10M7 16h6" /></> },
           {
             href: "/settings", label: "Pengaturan", masterOnly: true,
