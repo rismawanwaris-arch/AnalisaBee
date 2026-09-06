@@ -26,6 +26,7 @@ interface PublicPointsDashboard {
   to: string;
   pointTarget: number;
   outlets: { id: number; name: string }[];
+  periodStartDay: number;
 }
 
 interface ItemPointBreakdownRow {
@@ -37,9 +38,25 @@ interface ItemPointBreakdownRow {
   totalPoints: number;
 }
 
-function currentMonthStr(): string {
+// A period labeled "month M" runs from periodStartDay of M through
+// periodStartDay-1 of M+1 (see computeMonthPeriod on the server). So if
+// today falls before periodStartDay, the period actually running right now
+// started last month, not this one — e.g. periodStartDay=29 and today the
+// 6th means the running period is still "last month" (29th – 28th). Same
+// logic as PointsLeaderboardPage's currentPeriodMonthStr, duplicated here
+// because this page is public and can't call the auth-gated settings route.
+function currentPeriodMonthStr(periodStartDay: number): string {
   const d = new Date();
-  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`;
+  let year = d.getFullYear();
+  let month = d.getMonth() + 1; // 1-12
+  if (d.getDate() < periodStartDay) {
+    month -= 1;
+    if (month === 0) {
+      month = 12;
+      year -= 1;
+    }
+  }
+  return `${year}-${String(month).padStart(2, "0")}`;
 }
 
 const MODE_LABEL: Record<Mode, string> = { day: "Harian", week: "Mingguan", month: "Bulanan" };
@@ -56,7 +73,11 @@ const RANK_BADGE = [
 export function EmployeePointsDashboardPage() {
   const [mode, setMode] = useState<Mode>("month");
   const [day, setDay] = useState(todayStr());
-  const [month, setMonth] = useState(currentMonthStr());
+  // Guessed with periodStartDay=1 until the first response reveals the real
+  // cut-off day, then self-corrected below — same dance PointsLeaderboardPage
+  // does, just without an auth-gated settings call this public page can't make.
+  const [month, setMonth] = useState(() => currentPeriodMonthStr(1));
+  const [periodStartDay, setPeriodStartDay] = useState(1);
   const [outletId, setOutletId] = useState("");
   const [data, setData] = useState<PublicPointsDashboard | null>(null);
   const [loading, setLoading] = useState(true);
@@ -68,6 +89,7 @@ export function EmployeePointsDashboardPage() {
 
   const loadSeq = useRef(0);
   const hasLoadedOnce = useRef(false);
+  const monthTouchedRef = useRef(false);
 
   const queryParams = useCallback(() => {
     const params = new URLSearchParams({ period: mode, date: mode === "month" ? month : day });
@@ -87,7 +109,17 @@ export function EmployeePointsDashboardPage() {
         return;
       }
       setError(null);
-      setData(await res.json());
+      const json: PublicPointsDashboard = await res.json();
+      setData(json);
+      // Self-correct the guessed "current month" once the real cut-off day is
+      // known — mirrors PointsLeaderboardPage's currentPeriodMonthStr dance.
+      if (json.periodStartDay && json.periodStartDay !== periodStartDay) {
+        setPeriodStartDay(json.periodStartDay);
+        if (!monthTouchedRef.current) {
+          const corrected = currentPeriodMonthStr(json.periodStartDay);
+          if (corrected !== month) setMonth(corrected);
+        }
+      }
     } catch {
       if (seq === loadSeq.current) setError("Terjadi kesalahan jaringan.");
     } finally {
@@ -96,7 +128,7 @@ export function EmployeePointsDashboardPage() {
         hasLoadedOnce.current = true;
       }
     }
-  }, [queryParams]);
+  }, [queryParams, periodStartDay, month]);
 
   useEffect(() => {
     load();
@@ -157,7 +189,10 @@ export function EmployeePointsDashboardPage() {
             <input
               type="month"
               value={month}
-              onChange={(e) => setMonth(e.target.value)}
+              onChange={(e) => {
+                monthTouchedRef.current = true;
+                setMonth(e.target.value);
+              }}
               className="rounded-lg border border-border/80 bg-surface-subtle px-3 py-1.5 text-xs text-foreground focus:outline-none focus:ring-2 focus:ring-accent/20 focus:border-accent transition-all"
             />
           ) : (

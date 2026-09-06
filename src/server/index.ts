@@ -1379,22 +1379,26 @@ app.delete("/api/points/excluded-employees/:id", requireMaster, async (req, res)
 // daily one, so a single shared number doesn't make sense across views.
 async function resolvePublicPointsPeriod(
   req: express.Request
-): Promise<{ from: Date; to: Date; pointTarget: number }> {
+): Promise<{ from: Date; to: Date; pointTarget: number; periodStartDay: number }> {
   const period = req.query.period === "day" || req.query.period === "week" ? req.query.period : "month";
   const dateParam = typeof req.query.date === "string" ? req.query.date : null;
   const dateStr = dateParam && !Number.isNaN(new Date(dateParam).getTime()) ? dateParam : todayStr();
   const setting = await getPointPeriodSetting();
 
   if (period === "day") {
-    return { from: new Date(dateStr), to: new Date(dateStr), pointTarget: setting.pointTargetDaily };
+    return { from: new Date(dateStr), to: new Date(dateStr), pointTarget: setting.pointTargetDaily, periodStartDay: setting.periodStartDay };
   }
   if (period === "week") {
-    return { ...computeWeekPeriod(dateStr), pointTarget: setting.pointTargetWeekly };
+    return { ...computeWeekPeriod(dateStr), pointTarget: setting.pointTargetWeekly, periodStartDay: setting.periodStartDay };
   }
   const [y, m] = dateStr.split("-").map(Number);
   const monthNum = m || new Date().getMonth() + 1;
   const yearNum = y || new Date().getFullYear();
-  return { ...computeMonthPeriod(yearNum, monthNum, setting.periodStartDay), pointTarget: setting.pointTargetMonthly };
+  return {
+    ...computeMonthPeriod(yearNum, monthNum, setting.periodStartDay),
+    pointTarget: setting.pointTargetMonthly,
+    periodStartDay: setting.periodStartDay,
+  };
 }
 
 function parsePublicOutletId(req: express.Request): number | undefined {
@@ -1404,9 +1408,12 @@ function parsePublicOutletId(req: express.Request): number | undefined {
 
 app.get("/api/public/points/dashboard", publicPointsLimiter, async (req, res) => {
   try {
-    const { from, to, pointTarget } = await resolvePublicPointsPeriod(req);
+    const { from, to, pointTarget, periodStartDay } = await resolvePublicPointsPeriod(req);
     const data = await getPublicPointsDashboard(from, to, parsePublicOutletId(req), pointTarget);
-    return res.json(data);
+    // periodStartDay lets the page figure out which calendar month the
+    // *currently running* cycle actually belongs to (see EmployeePointsDashboardPage) —
+    // not sensitive, it's the same cut-off day already implied by `from`/`to` below.
+    return res.json({ ...data, periodStartDay });
   } catch {
     // Never leak internal error details on a public, unauthenticated route.
     return res.status(500).json({ error: "Terjadi kesalahan server." });
