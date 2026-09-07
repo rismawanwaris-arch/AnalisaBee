@@ -43,6 +43,11 @@ next-env.d.ts
 
 /src/generated/prisma
 
+# Postgres data directory (bind-mounted by docker-compose.yml) and local
+# database dump backups (see scripts/backup-db.sh) — real data, never committed.
+/pgdata
+/backups
+
 # vendored agent skill docs (synced from prisma/skills via skills-lock.json) —
 # local tooling cache, not app source; re-sync per-machine instead of committing.
 /.agents/skills

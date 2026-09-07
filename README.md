@@ -81,26 +81,56 @@ database berjalan otomatis setiap container start.
 
 1. Salin folder proyek ini ke NAS (atau `git clone` jika sudah didorong ke suatu remote).
 2. Salin `.env.example` menjadi `.env`, ganti `POSTGRES_PASSWORD` dengan password sendiri.
-3. Di ZimaOS, gunakan menu **Install a customized app / docker-compose** dan arahkan ke
-   `docker-compose.yml` di folder proyek — atau jalankan manual lewat SSH:
+3. Jalankan lewat SSH (di ZimaOS, `docker compose` — dengan spasi — kadang tidak terpasang;
+   pakai binary `docker-compose` kalau begitu):
 
    ```bash
-   docker compose up -d --build
+   docker-compose up -d --build
    ```
 
-4. Aplikasi tersedia di `http://<ip-nas>:3000` (port bisa diganti lewat `APP_PORT` di `.env`).
+4. Aplikasi tersedia di `http://<ip-nas>:8080` (port bisa diganti lewat `APP_PORT` di `.env`).
 
-Untuk update ke versi baru: tarik/salin kode terbaru, lalu `docker compose up -d --build` —
-migrasi database berjalan otomatis, data lama tidak hilang (tersimpan di volume
-`analisabee_db_data`).
+Untuk update ke versi baru: tarik/salin kode terbaru, lalu `docker-compose up -d --build` —
+migrasi database berjalan otomatis, data lama tidak hilang. **Jangan pernah** jalankan
+`docker-compose down -v` — flag `-v` menghapus juga folder data database.
+
+### Penyimpanan data — bind-mount, bukan Docker volume
+
+`pgdata/` (data Postgres) sengaja di-bind-mount ke folder biasa di sebelah proyek ini
+(`./pgdata:/var/lib/postgresql/data`), **bukan** Docker named volume. Alasannya: pada
+2026-09-07, sebuah named volume produksi terhapus permanen akibat operasi `rm -rf` yang
+sebetulnya menyasar path lain — datanya tersembunyi di dalam data-root Docker sehingga tidak
+disadari ikut terhapus. Bind-mount membuat data terlihat sebagai folder biasa (`ls pgdata/`
+langsung menunjukkan isinya), jadi jauh lebih sulit terhapus tanpa disadari, dan gampang
+disalin/backup seperti file biasa.
+
+**Migrasi dari deployment lama** (yang masih pakai Docker volume `analisabee_pgdata`): kalau
+volume lama itu masih ada isinya, salin datanya ke `./pgdata` dulu sebelum `docker-compose up`
+pertama kali dengan compose file baru ini:
+
+```bash
+docker run --rm -v analisabee_pgdata:/from -v "$(pwd)/pgdata":/to alpine sh -c "cp -av /from/. /to/"
+```
+
+Kalau volume lamanya sudah kosong/tidak ada (mis. baru deploy dari awal, atau data lama sudah
+hilang), lewati langkah ini — Postgres otomatis membuat database baru yang kosong di `./pgdata`
+saat pertama kali start.
 
 ### Backup
 
-Data hidup di volume Docker `analisabee_db_data`. Backup rutin dengan:
+Backup terjadwal, otomatis, dan independen dari kondisi container — lihat `scripts/backup-db.sh`
+(dump ter-gzip + rotasi otomatis, hapus yang lebih tua dari 14 hari) dan `scripts/restore-db.sh`
+untuk memulihkannya. Jadwalkan lewat cron di host (bukan di dalam container):
 
 ```bash
-docker exec analisabee-db-1 pg_dump -U analisabee analisabee > backup.sql
+crontab -e
+# tambahkan baris ini (backup tiap hari jam 2 pagi):
+0 2 * * * cd ~/Documents/AnalisaBEe && ./scripts/backup-db.sh >> backups/backup.log 2>&1
 ```
+
+Backup tersimpan di `backups/analisabee-<timestamp>.sql.gz`. Sesekali salin folder ini keluar
+dari server (laptop, cloud storage, dll) — backup yang cuma ada di disk yang sama dengan
+datanya tidak melindungi dari kegagalan disk itu sendiri.
 
 ## Roadmap
 
