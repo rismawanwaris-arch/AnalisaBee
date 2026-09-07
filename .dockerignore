@@ -8,3 +8,12 @@ npm-debug.log*
 *.md
 .DS_Store
 docker-compose*.yml
+
+# Postgres bind-mount data dir + local dump backups — real data living right
+# next to the project now that pgdata is a bind-mount, not a named volume.
+# Never belongs in a build context: it's not app source, it can be huge, and
+# Postgres's own internal files are locked down (700, owned by its container
+# user) so the build context reader can't even open them — this actually
+# broke `docker-compose up -d --build` once pgdata/ existed on disk.
+pgdata
+backups
