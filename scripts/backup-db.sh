@@ -1,13 +1,22 @@
 #!/bin/sh
-# Dumps the AnalisaBEe Postgres database to a timestamped, gzipped file under
-# ./backups, and prunes backups older than $RETENTION_DAYS (default 14).
+# Dumps the AnalisaBEe Postgres database to a timestamped, gzipped file, and
+# prunes backups older than $RETENTION_DAYS (default 90).
 #
 # Runs pg_dump *inside* the running "db" container via compose exec, so it
 # always matches whatever's actually live — no need to know container names,
 # credentials, or host/port. Meant to be run from HOST cron (not from inside
-# a container), e.g.:
+# a container). Put the env var right before the script, on the same command
+# — putting it before a `cd &&` (a tempting-looking mistake) only applies it
+# to `cd`, not to the script that runs after `&&`:
 #
-#   0 2 * * * cd ~/Documents/AnalisaBEe && ./scripts/backup-db.sh >> backups/backup.log 2>&1
+#   0 2 * * * cd /DATA/Documents/AnalisaBEe && BACKUP_DIR=/DATA/Documents/Backups/analisabee ./scripts/backup-db.sh >> /DATA/Documents/Backups/analisabee/backup.log 2>&1
+#
+# By default backups land in ./backups next to the project, but set
+# $BACKUP_DIR to write them somewhere else entirely (e.g. a centralized
+# /DATA/Documents/Backups/ folder shared by every app on this host) — worth
+# doing since a backup sitting right next to its own live data doesn't
+# protect against that whole project folder being deleted by mistake.
+# (Use the absolute path, not `~` — cron doesn't reliably expand it.)
 #
 # Why this exists: on 2026-09-07 the Postgres data (a Docker named volume)
 # was permanently lost to an unrelated `rm -rf` on a Docker internal path.
@@ -19,8 +28,8 @@ set -e
 
 cd "$(dirname "$0")/.."
 
-RETENTION_DAYS="${RETENTION_DAYS:-14}"
-BACKUP_DIR="$(pwd)/backups"
+RETENTION_DAYS="${RETENTION_DAYS:-90}"
+BACKUP_DIR="${BACKUP_DIR:-$(pwd)/backups}"
 mkdir -p "$BACKUP_DIR"
 
 TIMESTAMP=$(date +%Y%m%d-%H%M%S)
