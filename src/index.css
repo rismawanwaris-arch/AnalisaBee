@@ -147,6 +147,32 @@
   color: var(--accent-foreground);
 }
 
+/* Printed/exported reports (Target Sales Harian, etc.) always render in the
+   light palette, regardless of the app's current theme — a shared or printed
+   business document shouldn't change look based on the viewer's dark-mode
+   preference, and it prints cleanly without heavy ink use. Re-declaring the
+   tokens here shadows the :root[data-theme="dark"] values for everything
+   inside .report-paper, without touching any component markup. */
+.report-paper {
+  --background: #f8fafc;
+  --surface: #ffffff;
+  --surface-sidebar: #ffffff;
+  --surface-subtle: #f1f5f9;
+  --surface-active: #e0e7ff;
+  --surface-hover: #f1f5f9;
+  --border: #e2e8f0;
+  --border-subtle: #cbd5e1;
+  --foreground: #0f172a;
+  --muted: #475569;
+  --faint: #94a3b8;
+  --accent: #2563eb;
+  --accent-hover: #1d4ed8;
+  --accent-foreground: #ffffff;
+  --positive: #059669;
+  --negative: #e11d48;
+  --ring: #3b82f6;
+}
+
 @media print {
   aside,
   header,

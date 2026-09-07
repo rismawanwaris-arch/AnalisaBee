@@ -259,14 +259,23 @@ export function TargetReportPage({ branch = "BANDUNG" }: { branch?: "BANDUNG" | 
     if (!tableWrapRef.current) return;
     setJpegBusy(true);
     try {
+      // Inter/JetBrains Mono load from Google Fonts (cross-origin) — html2canvas
+      // has a known issue rasterizing cross-origin @font-face text and silently
+      // falls back to the browser's generic serif default instead, which is why
+      // exports used to look like a plain printed document. `useCORS: true`
+      // (Google Fonts serves proper CORS headers) plus waiting for
+      // `document.fonts.ready` fixes it — confirmed by inspecting the actual
+      // exported canvas before/after.
+      await document.fonts.ready;
       const html2canvas = (await import("html2canvas-pro")).default;
       const canvas = await html2canvas(tableWrapRef.current, {
         scale: 2,
         backgroundColor: "#ffffff",
+        useCORS: true,
       });
       const link = document.createElement("a");
       link.download = `target-harian-${date}.jpg`;
-      link.href = canvas.toDataURL("image/jpeg", 0.92);
+      link.href = canvas.toDataURL("image/jpeg", 0.95);
       link.click();
     } finally {
       setJpegBusy(false);
