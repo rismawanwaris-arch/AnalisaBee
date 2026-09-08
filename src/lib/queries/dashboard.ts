@@ -60,7 +60,10 @@ export async function getDashboardSummary(filters: DashboardFilters = {}) {
       }),
       prisma.sale.groupBy({
         by: ["itemId"],
-        where,
+        // Hidden items are kept out of the "Top 10 Item Terlaris" ranking (the
+        // headline totals/trend above still count every sale — same as hidden
+        // outlets, which also stay in the totals).
+        where: { ...where, item: { isHidden: false } },
         _sum: { qty: true, subtotal: true },
         orderBy: { _sum: { subtotal: "desc" } },
         take: 10,

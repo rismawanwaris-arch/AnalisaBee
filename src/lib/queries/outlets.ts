@@ -95,7 +95,7 @@ export async function getOutletDetail(outletId: number) {
     }),
     prisma.sale.groupBy({
       by: ["itemId"],
-      where: { outletId },
+      where: { outletId, item: { isHidden: false } },
       _sum: { qty: true, subtotal: true },
       orderBy: { _sum: { subtotal: "desc" } },
       take: 20,
@@ -108,7 +108,7 @@ export async function getOutletDetail(outletId: number) {
     }),
     prisma.sale.groupBy({
       by: ["itemId", "employeeId"],
-      where: { outletId },
+      where: { outletId, item: { isHidden: false } },
       _sum: { qty: true, subtotal: true },
       orderBy: { _sum: { subtotal: "desc" } },
       take: 500,

@@ -153,8 +153,9 @@ model Item {
   name      String
   itemGroup String?
   // Same role as Outlet.isHidden / Employee.isHidden — a hidden item drops out
-  // of the item search/typeahead, the full catalog list, and the Kategori Item
-  // report. It does NOT delete sales or block a direct /items?id= link.
+  // of the item search/typeahead, the full catalog list, the Kategori Item
+  // report, and every "top item" ranking (Dashboard, Performa Outlet). It does
+  // NOT delete sales, move headline omzet totals, or block a /items?id= link.
   isHidden  Boolean @default(false)
   sales     Sale[]
 
