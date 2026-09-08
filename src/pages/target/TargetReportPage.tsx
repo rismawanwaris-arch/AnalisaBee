@@ -268,8 +268,24 @@ export function TargetReportPage({ branch = "BANDUNG" }: { branch?: "BANDUNG" | 
   }
 
   async function exportJpeg() {
-    if (!tableWrapRef.current) return;
+    const el = tableWrapRef.current;
+    if (!el) return;
     setJpegBusy(true);
+    // Bumps text size (see .report-paper.exporting in index.css) just for the
+    // capture below — the on-screen table stays dense for daily scanning,
+    // but the exported image needs bigger, comfortable-to-read text since
+    // it's usually viewed shared on WhatsApp or printed, not on this screen.
+    // Bigger text makes the (already wide, 13-column) table wider than its
+    // normal container, which would just overflow into a horizontal
+    // scrollbar on-screen — but a screenshot can't scroll, so without this
+    // the overflowed columns would be silently cropped out of the image.
+    // Widening the report card + letting the scroll wrapper grow instead of
+    // clipping means html2canvas captures the *entire* wider table.
+    const scrollWrap = el.querySelector<HTMLElement>(".overflow-x-auto");
+    el.classList.add("exporting");
+    el.style.width = "fit-content";
+    el.style.maxWidth = "none";
+    if (scrollWrap) scrollWrap.style.overflow = "visible";
     try {
       // Inter/JetBrains Mono load from Google Fonts (cross-origin) — html2canvas
       // has a known issue rasterizing cross-origin @font-face text and silently
@@ -280,7 +296,7 @@ export function TargetReportPage({ branch = "BANDUNG" }: { branch?: "BANDUNG" | 
       // exported canvas before/after.
       await document.fonts.ready;
       const html2canvas = (await import("html2canvas-pro")).default;
-      const canvas = await html2canvas(tableWrapRef.current, {
+      const canvas = await html2canvas(el, {
         scale: 2,
         backgroundColor: "#ffffff",
         useCORS: true,
@@ -290,6 +306,10 @@ export function TargetReportPage({ branch = "BANDUNG" }: { branch?: "BANDUNG" | 
       link.href = canvas.toDataURL("image/jpeg", 0.95);
       link.click();
     } finally {
+      el.classList.remove("exporting");
+      el.style.width = "";
+      el.style.maxWidth = "";
+      if (scrollWrap) scrollWrap.style.overflow = "";
       setJpegBusy(false);
     }
   }

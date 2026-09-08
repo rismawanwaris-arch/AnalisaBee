@@ -173,6 +173,32 @@
   --ring: #3b82f6;
 }
 
+/* Toggled on .report-paper for the instant html2canvas is capturing the JPEG
+   (see exportJpeg in TargetReportPage) — the on-screen table is sized dense
+   for daily interactive scanning, but a screenshot shared over WhatsApp/print
+   needs bigger, comfortable-to-read text. Only touches vertical padding, not
+   horizontal, so it stays visually "padat" (dense) rather than turning into
+   a spacious report — just legible at actual size instead of needing a pinch-zoom. */
+.report-paper.exporting h2 {
+  font-size: 1.65rem;
+}
+.report-paper.exporting > div:first-child p {
+  font-size: 1.05rem;
+}
+.report-paper.exporting table {
+  font-size: 15px;
+}
+.report-paper.exporting thead tr:nth-child(2),
+.report-paper.exporting tbody,
+.report-paper.exporting tfoot {
+  font-size: 14px;
+}
+.report-paper.exporting th,
+.report-paper.exporting td {
+  padding-top: 0.65rem;
+  padding-bottom: 0.65rem;
+}
+
 @media print {
   aside,
   header,
