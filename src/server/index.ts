@@ -75,7 +75,7 @@ import { getSystemStatus } from "../lib/queries/systemStatus";
 import { getDashboardSummary } from "../lib/queries/dashboard";
 import { getOutletList, getOutletDetail, getOutletSummary } from "../lib/queries/outlets";
 import { getEmployeeList, getEmployeeDetail } from "../lib/queries/employees";
-import { searchItems, listAllItems, getItemDetail, getItemsByCategory } from "../lib/queries/items";
+import { searchItems, listAllItems, listItemsForVisibility, getItemDetail, getItemsByCategory } from "../lib/queries/items";
 import { getSalesList, getSalesForExport } from "../lib/queries/sales";
 import { parseSalesFilterParams } from "../lib/parseSalesFilterParams";
 import {
@@ -835,6 +835,35 @@ app.get("/api/items/all", requireFeature("items"), cacheBriefly(60), async (req,
   try {
     const items = await listAllItems();
     return res.json(items);
+  } catch (err: any) {
+    return res.status(500).json({ error: err.message });
+  }
+});
+
+// Full catalog INCLUDING hidden items + lifetime sales sums — for the
+// "Visibilitas Item" panel in Settings. Registered before /api/items/:id so
+// "visibility" isn't parsed as an id. Master-only, like the toggle itself.
+app.get("/api/items/visibility", requireMaster, async (_req, res) => {
+  try {
+    const items = await listItemsForVisibility();
+    return res.json(items);
+  } catch (err: any) {
+    return res.status(500).json({ error: err.message });
+  }
+});
+
+app.put("/api/items/:id/visibility", requireMaster, async (req, res) => {
+  try {
+    const id = Number(req.params.id);
+    if (Number.isNaN(id)) return res.status(400).json({ error: "ID tidak valid" });
+    const { isHidden } = req.body;
+    const updated = await prisma.item.update({
+      where: { id },
+      data: { isHidden: Boolean(isHidden) },
+      select: { id: true, name: true, isHidden: true },
+    });
+    await logActivity(req, "ITEM_VISIBILITY", `${updated.name} → ${isHidden ? "disembunyikan" : "ditampilkan"}`);
+    return res.json(updated);
   } catch (err: any) {
     return res.status(500).json({ error: err.message });
   }

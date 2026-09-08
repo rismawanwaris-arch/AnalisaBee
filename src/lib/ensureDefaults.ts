@@ -33,6 +33,7 @@ export async function ensureDefaults(branch: "BANDUNG" | "CIMAHI" = "BANDUNG"): 
   try {
     await prisma.$executeRawUnsafe(`ALTER TABLE "outlets" ADD COLUMN IF NOT EXISTS "isHidden" BOOLEAN NOT NULL DEFAULT false;`);
     await prisma.$executeRawUnsafe(`ALTER TABLE "employees" ADD COLUMN IF NOT EXISTS "isHidden" BOOLEAN NOT NULL DEFAULT false;`);
+    await prisma.$executeRawUnsafe(`ALTER TABLE "items" ADD COLUMN IF NOT EXISTS "isHidden" BOOLEAN NOT NULL DEFAULT false;`);
   } catch {
     // ignore error if tables not yet created
   }

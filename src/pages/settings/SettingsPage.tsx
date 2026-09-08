@@ -34,6 +34,16 @@ interface EmployeeItem {
   subtotal?: number;
   transactionCount?: number;
 }
+interface ItemVisRow {
+  id: number;
+  code: string;
+  name: string;
+  itemGroup: string | null;
+  isHidden: boolean;
+  qty: number;
+  subtotal: number;
+  transactionCount: number;
+}
 interface AliasRow {
   id: number;
   alias: string;
@@ -266,9 +276,20 @@ export function SettingsPage() {
   // ========================================================
   const [allOutlets, setAllOutlets] = useState<OutletItem[]>([]);
   const [allEmployees, setAllEmployees] = useState<EmployeeItem[]>([]);
+  const [allItemsVis, setAllItemsVis] = useState<ItemVisRow[]>([]);
   const [outletFilter, setOutletFilter] = useState("");
   const [employeeFilter, setEmployeeFilter] = useState("");
+  const [itemVisFilter, setItemVisFilter] = useState("");
   const [visibilityBusyId, setVisibilityBusyId] = useState<string | null>(null);
+
+  const loadAllItemsVis = useCallback(async () => {
+    try {
+      const res = await fetch("/api/items/visibility");
+      if (res.ok) setAllItemsVis(await res.json());
+    } catch {
+      // ignore
+    }
+  }, []);
 
   const loadAllOutlets = useCallback(async () => {
     try {
@@ -373,6 +394,7 @@ export function SettingsPage() {
     loadItemExclusions();
     loadAllOutlets();
     loadAllEmployees();
+    loadAllItemsVis();
     loadUsers();
     loadSessions();
     loadRoles();
@@ -387,6 +409,7 @@ export function SettingsPage() {
     loadItemExclusions,
     loadAllOutlets,
     loadAllEmployees,
+    loadAllItemsVis,
     loadUsers,
     loadSessions,
     loadRoles,
@@ -691,7 +714,7 @@ export function SettingsPage() {
       await Promise.all([
         loadTargets(), loadAliases(), loadGroups(), loadItemRules(), loadGroupRules(),
         loadPeriodSetting(), loadExcluded(), loadItemExclusions(), loadAllOutlets(),
-        loadAllEmployees(), loadUsers(), loadRoles(),
+        loadAllEmployees(), loadAllItemsVis(), loadUsers(), loadRoles(),
       ]);
     } catch {
       setBackupError("Terjadi kesalahan jaringan.");
@@ -1064,6 +1087,30 @@ export function SettingsPage() {
     }
   }
 
+  async function toggleItemVisibility(item: ItemVisRow) {
+    const nextHidden = !item.isHidden;
+    const key = `item-${item.id}`;
+    setVisibilityBusyId(key);
+    // Optimistic update
+    setAllItemsVis((prev) =>
+      prev.map((i) => (i.id === item.id ? { ...i, isHidden: nextHidden } : i))
+    );
+    try {
+      await fetch(`/api/items/${item.id}/visibility`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ isHidden: nextHidden }),
+      });
+    } catch {
+      // Revert on error
+      setAllItemsVis((prev) =>
+        prev.map((i) => (i.id === item.id ? { ...i, isHidden: item.isHidden } : i))
+      );
+    } finally {
+      setVisibilityBusyId(null);
+    }
+  }
+
   const filteredOutlets = useMemo(
     () => allOutlets.filter((o) => o.name.toLowerCase().includes(outletFilter.toLowerCase().trim())),
     [allOutlets, outletFilter]
@@ -1080,6 +1127,18 @@ export function SettingsPage() {
   const hiddenEmployeeCount = useMemo(
     () => allEmployees.filter((e) => e.isHidden).length,
     [allEmployees]
+  );
+
+  const filteredItemsVis = useMemo(() => {
+    const q = itemVisFilter.toLowerCase().trim();
+    if (!q) return allItemsVis;
+    return allItemsVis.filter(
+      (i) => i.name.toLowerCase().includes(q) || i.code.toLowerCase().includes(q)
+    );
+  }, [allItemsVis, itemVisFilter]);
+  const hiddenItemVisCount = useMemo(
+    () => allItemsVis.filter((i) => i.isHidden).length,
+    [allItemsVis]
   );
 
   return (
@@ -2856,6 +2915,119 @@ export function SettingsPage() {
                             {isBusy
                               ? "Menyimpan..."
                               : emp.isHidden
+                              ? "✓ Tampilkan"
+                              : "✕ Sembunyikan"}
+                          </button>
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        )}
+      </div>
+
+      {/* ── 11. Visibilitas Item ──────────────────────────────── */}
+      <div className="rounded-xl border border-border/80 bg-surface shadow-xs overflow-hidden">
+        <button type="button" onClick={() => toggleSection("visibilitas-item")}
+          className="w-full flex items-center justify-between gap-3 px-5 py-3.5 text-left hover:bg-surface-hover/50 transition-colors">
+          <div className="flex items-center gap-2.5 min-w-0 flex-wrap">
+            <span className="w-2.5 h-2.5 rounded-full bg-amber-500 shrink-0" />
+            <span className="text-sm font-bold uppercase tracking-wider text-foreground">Visibilitas Item</span>
+            <span className="text-[11px] font-mono text-emerald-600 dark:text-emerald-400 bg-emerald-500/10 border border-emerald-500/20 rounded px-2 py-0.5">{allItemsVis.length - hiddenItemVisCount} tampil</span>
+            {hiddenItemVisCount > 0 && (
+              <span className="text-[11px] font-mono text-rose-600 dark:text-rose-400 bg-rose-500/10 border border-rose-500/20 rounded px-2 py-0.5">{hiddenItemVisCount} disembunyikan</span>
+            )}
+          </div>
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"
+            className={`shrink-0 text-muted transition-transform duration-200 ${openSections.has("visibilitas-item") ? "rotate-180" : ""}`}>
+            <polyline points="6 9 12 15 18 9" />
+          </svg>
+        </button>
+        {openSections.has("visibilitas-item") && (
+          <div className="px-5 pb-5 pt-4 space-y-4 border-t border-border/60">
+            <p className="text-xs text-muted leading-relaxed">
+              Item yang disembunyikan tidak akan muncul di pencarian item, daftar katalog, maupun laporan Kategori Item. Data penjualan lamanya tidak terhapus dan tautan langsung ke detail item tetap bisa dibuka.
+            </p>
+            <div className="flex items-center gap-3 pt-1">
+              <input
+                type="text"
+                value={itemVisFilter}
+                onChange={(e) => setItemVisFilter(e.target.value)}
+                placeholder="Cari nama atau kode item..."
+                className="w-full max-w-sm rounded-lg border border-border/80 bg-surface-subtle px-3 py-1.5 text-xs text-foreground placeholder:text-muted/60 focus:outline-none focus:ring-2 focus:ring-accent/20 focus:border-accent transition-all"
+              />
+            </div>
+            <div className="overflow-x-auto rounded-xl border border-border/80 shadow-xs max-h-96 overflow-y-auto">
+              <table className="w-full text-xs">
+                <thead className="bg-surface-subtle/80 text-muted text-left sticky top-0 border-b border-border/80 z-10">
+                  <tr>
+                    <th className="px-4 py-2.5 font-semibold text-[11px] uppercase">Nama Item</th>
+                    <th className="px-4 py-2.5 font-semibold text-[11px] uppercase">Kategori</th>
+                    <th className="px-4 py-2.5 font-semibold text-[11px] uppercase text-right">Total Omzet</th>
+                    <th className="px-4 py-2.5 font-semibold text-[11px] uppercase text-right">Status Visibilitas</th>
+                    <th className="px-4 py-2.5 font-semibold text-[11px] uppercase text-right">Aksi Toggle</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-border/60">
+                  {filteredItemsVis.length === 0 && (
+                    <tr>
+                      <td colSpan={5} className="px-4 py-6 text-center text-muted">
+                        Tidak ada item yang cocok dengan pencarian.
+                      </td>
+                    </tr>
+                  )}
+                  {filteredItemsVis.map((item) => {
+                    const isBusy = visibilityBusyId === `item-${item.id}`;
+                    return (
+                      <tr
+                        key={item.id}
+                        className={`hover:bg-surface-hover/70 transition-colors ${
+                          item.isHidden ? "bg-surface-subtle/30 opacity-75" : ""
+                        }`}
+                      >
+                        <td className="px-4 py-2.5">
+                          <div className="flex items-center gap-2">
+                            <span className="font-semibold text-foreground">{item.name}</span>
+                            <span className="font-mono text-[10px] text-muted">{item.code}</span>
+                            {item.isHidden && (
+                              <span className="text-[10px] font-medium bg-rose-500/10 text-rose-600 dark:text-rose-400 px-1.5 py-0.2 rounded border border-rose-500/20">
+                                Hidden
+                              </span>
+                            )}
+                          </div>
+                        </td>
+                        <td className="px-4 py-2.5 text-muted">{item.itemGroup?.trim() || "—"}</td>
+                        <td className="px-4 py-2.5 text-right font-mono text-foreground font-medium">
+                          {formatRupiah(item.subtotal)}
+                        </td>
+                        <td className="px-4 py-2.5 text-right">
+                          <span
+                            className={`inline-block px-2 py-0.5 rounded-full text-[10px] font-semibold border ${
+                              item.isHidden
+                                ? "bg-rose-500/10 text-rose-600 dark:text-rose-400 border-rose-500/20"
+                                : "bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border-emerald-500/20"
+                            }`}
+                          >
+                            {item.isHidden ? "Disembunyikan" : "Aktif Tampil"}
+                          </span>
+                        </td>
+                        <td className="px-4 py-2.5 text-right">
+                          <button
+                            type="button"
+                            disabled={isBusy}
+                            onClick={() => toggleItemVisibility(item)}
+                            className={`inline-flex items-center gap-1.5 rounded-lg px-3 py-1 text-xs font-semibold transition-all shadow-2xs ${
+                              item.isHidden
+                                ? "bg-emerald-600 text-white hover:bg-emerald-700"
+                                : "bg-rose-600 text-white hover:bg-rose-700"
+                            }`}
+                          >
+                            {isBusy
+                              ? "Menyimpan..."
+                              : item.isHidden
                               ? "✓ Tampilkan"
                               : "✕ Sembunyikan"}
                           </button>

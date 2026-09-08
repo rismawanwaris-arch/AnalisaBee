@@ -152,6 +152,10 @@ model Item {
   code      String  @unique
   name      String
   itemGroup String?
+  // Same role as Outlet.isHidden / Employee.isHidden — a hidden item drops out
+  // of the item search/typeahead, the full catalog list, and the Kategori Item
+  // report. It does NOT delete sales or block a direct /items?id= link.
+  isHidden  Boolean @default(false)
   sales     Sale[]
 
   @@index([name])

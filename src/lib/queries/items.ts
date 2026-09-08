@@ -2,14 +2,17 @@ import { prisma } from "@/lib/prisma";
 
 export async function searchItems(q: string, limit = 20) {
   return prisma.item.findMany({
-    where: q
-      ? {
-          OR: [
-            { name: { contains: q, mode: "insensitive" } },
-            { code: { contains: q, mode: "insensitive" } },
-          ],
-        }
-      : undefined,
+    where: {
+      isHidden: false,
+      ...(q
+        ? {
+            OR: [
+              { name: { contains: q, mode: "insensitive" } },
+              { code: { contains: q, mode: "insensitive" } },
+            ],
+          }
+        : {}),
+    },
     orderBy: { name: "asc" },
     take: Math.min(limit, 50),
   });
@@ -21,9 +24,44 @@ export async function searchItems(q: string, limit = 20) {
  *  log like Sale), unlike searchItems's capped/paginated dropdown use. */
 export async function listAllItems() {
   return prisma.item.findMany({
+    where: { isHidden: false },
     select: { id: true, code: true, name: true, itemGroup: true },
     orderBy: { name: "asc" },
   });
+}
+
+/** Full catalog WITH hidden items and lifetime sales sums — for the "Visibilitas
+ *  Item" settings panel only. Mirrors getOutletList / getEmployeeList. */
+export async function listItemsForVisibility() {
+  const [items, sums] = await Promise.all([
+    prisma.item.findMany({
+      select: { id: true, code: true, name: true, itemGroup: true, isHidden: true },
+      orderBy: { name: "asc" },
+    }),
+    prisma.sale.groupBy({
+      by: ["itemId"],
+      _sum: { qty: true, subtotal: true },
+      _count: { _all: true },
+    }),
+  ]);
+
+  const sumByItem = new Map(sums.map((s) => [s.itemId, s]));
+
+  return items
+    .map((i) => {
+      const s = sumByItem.get(i.id);
+      return {
+        id: i.id,
+        code: i.code,
+        name: i.name,
+        itemGroup: i.itemGroup,
+        isHidden: i.isHidden,
+        qty: s?._sum.qty ?? 0,
+        subtotal: Number(s?._sum.subtotal ?? 0),
+        transactionCount: s?._count._all ?? 0,
+      };
+    })
+    .sort((a, b) => b.subtotal - a.subtotal);
 }
 
 export interface ItemCategoryRow {
@@ -38,9 +76,12 @@ export interface ItemCategoryRow {
 
 export async function getItemsByCategory(range: { from?: Date; to?: Date } = {}): Promise<ItemCategoryRow[]> {
   const { from, to } = range;
-  const where = from || to
-    ? { tanggal: { ...(from ? { gte: from } : {}), ...(to ? { lte: to } : {}) } }
-    : {};
+  const where = {
+    item: { isHidden: false },
+    ...(from || to
+      ? { tanggal: { ...(from ? { gte: from } : {}), ...(to ? { lte: to } : {}) } }
+      : {}),
+  };
 
   const sums = await prisma.sale.groupBy({
     by: ["itemId"],
