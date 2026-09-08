@@ -196,6 +196,7 @@ export function SettingsPage() {
   const [pointTargetDaily, setPointTargetDaily] = useState("0");
   const [pointTargetWeekly, setPointTargetWeekly] = useState("0");
   const [pointTargetMonthly, setPointTargetMonthly] = useState("0");
+  const [pointRupiahRate, setPointRupiahRate] = useState("100");
   const [periodBusy, setPeriodBusy] = useState(false);
   const [periodSaved, setPeriodSaved] = useState(false);
 
@@ -235,6 +236,7 @@ export function SettingsPage() {
         setPointTargetDaily(String(d.pointTargetDaily ?? 0));
         setPointTargetWeekly(String(d.pointTargetWeekly ?? 0));
         setPointTargetMonthly(String(d.pointTargetMonthly ?? 0));
+        setPointRupiahRate(String(d.pointRupiahRate ?? 100));
       }
     } catch {
       // ignore
@@ -827,6 +829,7 @@ export function SettingsPage() {
           pointTargetDaily: Number(pointTargetDaily),
           pointTargetWeekly: Number(pointTargetWeekly),
           pointTargetMonthly: Number(pointTargetMonthly),
+          pointRupiahRate: Number(pointRupiahRate),
         }),
       });
       if (res.ok) {
@@ -2164,6 +2167,9 @@ export function SettingsPage() {
             <p className="text-xs text-muted leading-relaxed">
               Target poin diatur terpisah per mode tampilan Papan Poin — target bulanan wajar jauh lebih besar dari target harian.
             </p>
+            <p className="text-xs text-muted leading-relaxed">
+              Nilai Rupiah per Poin dipakai untuk menghitung estimasi insentif di halaman <strong>Poin Penjualan</strong> (khusus admin/master — tidak ditampilkan di Papan Poin publik). Ubah nilainya di sini kapan pun tanpa perlu ubah kode.
+            </p>
             <div className="flex flex-wrap items-end gap-3 pt-1">
               <div>
                 <label htmlFor="settings-period-start-day" className="block text-[11px] font-semibold uppercase tracking-wider text-muted mb-1">
@@ -2217,6 +2223,22 @@ export function SettingsPage() {
                   onChange={(e) => setPointTargetMonthly(e.target.value)}
                   className="w-32 rounded-lg border border-border/80 bg-surface-subtle px-3 py-1.5 text-xs font-mono text-foreground focus:outline-none focus:ring-2 focus:ring-accent/20 focus:border-accent transition-all"
                 />
+              </div>
+              <div>
+                <label htmlFor="settings-point-rupiah-rate" className="block text-[11px] font-semibold uppercase tracking-wider text-muted mb-1">
+                  Nilai Rupiah per Poin
+                </label>
+                <div className="relative">
+                  <span className="absolute left-3 top-1/2 -translate-y-1/2 text-xs text-muted font-mono pointer-events-none">Rp</span>
+                  <input
+                    id="settings-point-rupiah-rate"
+                    type="number"
+                    min={0}
+                    value={pointRupiahRate}
+                    onChange={(e) => setPointRupiahRate(e.target.value)}
+                    className="w-32 rounded-lg border border-border/80 bg-surface-subtle pl-8 pr-3 py-1.5 text-xs font-mono text-foreground focus:outline-none focus:ring-2 focus:ring-accent/20 focus:border-accent transition-all"
+                  />
+                </div>
               </div>
               <button
                 type="button"

@@ -214,6 +214,11 @@ model PointSettings {
   pointTargetMonthly Int @default(0) @map("pointTarget")
   pointTargetWeekly  Int @default(0)
   pointTargetDaily   Int @default(0)
+  // Rupiah value of 1 point, for the incentive column on the internal
+  // Poin Penjualan page (admin-only — never exposed on the public Papan
+  // Poin wallboard). Configurable here instead of hardcoded so it can be
+  // changed without a code deploy if the incentive rate is ever revised.
+  pointRupiahRate    Int @default(100)
 
   @@map("point_settings")
 }

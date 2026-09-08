@@ -1166,7 +1166,7 @@ function parsePointSettingsBody(
   req: express.Request,
   res: express.Response
 ): { day: number; targets: PointTargetUpdate } | null {
-  const { periodStartDay, pointTargetDaily, pointTargetWeekly, pointTargetMonthly } = req.body;
+  const { periodStartDay, pointTargetDaily, pointTargetWeekly, pointTargetMonthly, pointRupiahRate } = req.body;
   const day = Number(periodStartDay);
   if (!Number.isInteger(day) || day < 1 || day > 31) {
     res.status(400).json({ error: "Tanggal harus 1-31." });
@@ -1177,6 +1177,7 @@ function parsePointSettingsBody(
     ["daily", pointTargetDaily],
     ["weekly", pointTargetWeekly],
     ["monthly", pointTargetMonthly],
+    ["rupiahRate", pointRupiahRate],
   ] as const) {
     if (raw === undefined) continue;
     const n = Number(raw);

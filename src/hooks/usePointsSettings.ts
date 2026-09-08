@@ -5,6 +5,7 @@ interface PointsSettings {
   pointTargetDaily: number;
   pointTargetWeekly: number;
   pointTargetMonthly: number;
+  pointRupiahRate: number;
 }
 
 /** GET /api/points/settings, cached via React Query (30s staleTime, see

@@ -161,19 +161,23 @@ export interface PointPeriodSetting {
   pointTargetDaily: number;
   pointTargetWeekly: number;
   pointTargetMonthly: number;
+  /** Rupiah value of 1 point — admin-only incentive column on the internal
+   *  Poin Penjualan page, never sent to the public Papan Poin endpoint. */
+  pointRupiahRate: number;
 }
 
 export async function getPointPeriodSetting(): Promise<PointPeriodSetting> {
   const setting = await prisma.pointSettings.upsert({
     where: { id: 1 },
     update: {},
-    create: { id: 1, periodStartDay: 1, pointTargetDaily: 0, pointTargetWeekly: 0, pointTargetMonthly: 0 },
+    create: { id: 1, periodStartDay: 1, pointTargetDaily: 0, pointTargetWeekly: 0, pointTargetMonthly: 0, pointRupiahRate: 100 },
   });
   return {
     periodStartDay: setting.periodStartDay,
     pointTargetDaily: setting.pointTargetDaily,
     pointTargetWeekly: setting.pointTargetWeekly,
     pointTargetMonthly: setting.pointTargetMonthly,
+    pointRupiahRate: setting.pointRupiahRate,
   };
 }
 
@@ -181,6 +185,7 @@ export interface PointTargetUpdate {
   daily?: number;
   weekly?: number;
   monthly?: number;
+  rupiahRate?: number;
 }
 
 export async function setPointPeriodSetting(periodStartDay: number, targets?: PointTargetUpdate): Promise<void> {
@@ -191,6 +196,7 @@ export async function setPointPeriodSetting(periodStartDay: number, targets?: Po
       ...(targets?.daily !== undefined ? { pointTargetDaily: targets.daily } : {}),
       ...(targets?.weekly !== undefined ? { pointTargetWeekly: targets.weekly } : {}),
       ...(targets?.monthly !== undefined ? { pointTargetMonthly: targets.monthly } : {}),
+      ...(targets?.rupiahRate !== undefined ? { pointRupiahRate: targets.rupiahRate } : {}),
     },
     create: {
       id: 1,
@@ -198,6 +204,7 @@ export async function setPointPeriodSetting(periodStartDay: number, targets?: Po
       pointTargetDaily: targets?.daily ?? 0,
       pointTargetWeekly: targets?.weekly ?? 0,
       pointTargetMonthly: targets?.monthly ?? 0,
+      pointRupiahRate: targets?.rupiahRate ?? 100,
     },
   });
 }

@@ -1,7 +1,7 @@
 import { Fragment, useCallback, useEffect, useState } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
-import { formatNumber, formatDate } from "@/lib/format";
+import { formatNumber, formatDate, formatRupiah } from "@/lib/format";
 import { usePointsSettings } from "@/hooks/usePointsSettings";
 
 interface LeaderboardRow {
@@ -60,6 +60,9 @@ export function PointsLeaderboardPage() {
   // periodStartDay is known.
   const { data: settings } = usePointsSettings();
   const periodStartDay = settings?.periodStartDay ?? 1;
+  // Configurable in Settings ("Nilai Rupiah per Poin") — admin-only estimate
+  // of the incentive value, never sent to the public Papan Poin endpoint.
+  const pointRupiahRate = settings?.pointRupiahRate ?? 100;
 
   const urlMode = (searchParams.get("mode") as Mode) || "month";
   const urlDay = searchParams.get("day") || todayStr();
@@ -240,6 +243,11 @@ export function PointsLeaderboardPage() {
               Periode: <strong className="text-foreground">{formatDate(data.from)}</strong> – <strong className="text-foreground">{formatDate(data.to)}</strong>
             </span>
           )}
+          {data && (
+            <span className="text-[11px] text-muted font-mono bg-surface-subtle border border-border/60 rounded px-2 py-1 ml-auto">
+              1 poin = {formatRupiah(pointRupiahRate)} (atur di Settings)
+            </span>
+          )}
         </div>
       </div>
 
@@ -263,6 +271,7 @@ export function PointsLeaderboardPage() {
                 <th className="px-4 py-2.5 font-semibold text-[11px] uppercase">Nama Pegawai</th>
                 <th className="px-4 py-2.5 font-semibold text-[11px] uppercase text-right">Qty Item Berpoin</th>
                 <th className="px-4 py-2.5 font-semibold text-[11px] uppercase text-right">Total Poin</th>
+                <th className="px-4 py-2.5 font-semibold text-[11px] uppercase text-right">Estimasi Insentif</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-border/60">
@@ -305,10 +314,13 @@ export function PointsLeaderboardPage() {
                       <td className="px-4 py-3 text-right font-mono text-sm font-bold text-accent">
                         {formatNumber(r.totalPoints)}
                       </td>
+                      <td className="px-4 py-3 text-right font-mono text-sm font-bold text-emerald-600 dark:text-emerald-400">
+                        {formatRupiah(r.totalPoints * pointRupiahRate)}
+                      </td>
                     </tr>
                     {isExpanded && (
                       <tr>
-                        <td colSpan={4} className="px-6 py-4 bg-surface-subtle/50 border-y border-border/60">
+                        <td colSpan={5} className="px-6 py-4 bg-surface-subtle/50 border-y border-border/60">
                           {breakdownLoading ? (
                             <div className="text-xs text-muted font-medium py-2">Memuat rincian item berpoin...</div>
                           ) : breakdown && breakdown.length > 0 ? (
