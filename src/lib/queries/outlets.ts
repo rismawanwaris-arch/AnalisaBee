@@ -1,5 +1,6 @@
 import { prisma } from "@/lib/prisma";
 import type { Prisma } from "@/generated/prisma/client";
+import { EXCLUDE_HIDDEN_ITEMS } from "@/lib/queries/_hiddenItems";
 
 export interface OutletSummaryFilters {
   from?: Date;
@@ -11,7 +12,7 @@ export interface OutletSummaryFilters {
 }
 
 export async function getOutletSummary(filters: OutletSummaryFilters = {}) {
-  const where: Prisma.SaleWhereInput = { outlet: { isHidden: false } };
+  const where: Prisma.SaleWhereInput = { outlet: { isHidden: false }, ...EXCLUDE_HIDDEN_ITEMS };
 
   if (filters.from || filters.to) {
     where.tanggal = {
@@ -59,6 +60,7 @@ export async function getOutletList(includeHidden = false) {
     }),
     prisma.sale.groupBy({
       by: ["outletId"],
+      where: EXCLUDE_HIDDEN_ITEMS,
       _sum: { qty: true, subtotal: true, labaRugi: true },
       _count: { _all: true },
     }),
@@ -87,28 +89,29 @@ export async function getOutletDetail(outletId: number) {
   const outlet = await prisma.outlet.findUnique({ where: { id: outletId } });
   if (!outlet) return null;
 
+  const saleWhere = { outletId, ...EXCLUDE_HIDDEN_ITEMS };
   const [totals, byItem, byDate, byItemEmployee] = await Promise.all([
     prisma.sale.aggregate({
-      where: { outletId },
+      where: saleWhere,
       _sum: { qty: true, subtotal: true, labaRugi: true },
       _count: { _all: true },
     }),
     prisma.sale.groupBy({
       by: ["itemId"],
-      where: { outletId, item: { isHidden: false } },
+      where: saleWhere,
       _sum: { qty: true, subtotal: true },
       orderBy: { _sum: { subtotal: "desc" } },
       take: 20,
     }),
     prisma.sale.groupBy({
       by: ["tanggal"],
-      where: { outletId },
+      where: saleWhere,
       _sum: { qty: true, subtotal: true },
       orderBy: { tanggal: "asc" },
     }),
     prisma.sale.groupBy({
       by: ["itemId", "employeeId"],
-      where: { outletId, item: { isHidden: false } },
+      where: saleWhere,
       _sum: { qty: true, subtotal: true },
       orderBy: { _sum: { subtotal: "desc" } },
       take: 500,

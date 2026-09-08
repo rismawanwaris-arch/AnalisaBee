@@ -1,5 +1,6 @@
 import { prisma } from "@/lib/prisma";
 import type { Prisma } from "@/generated/prisma/client";
+import { EXCLUDE_HIDDEN_ITEMS } from "@/lib/queries/_hiddenItems";
 
 export interface SalesFilters {
   from?: Date;
@@ -36,7 +37,10 @@ export function buildSalesWhere(filters: SalesFilters): Prisma.SaleWhereInput {
     labaRugiMax,
   } = filters;
   return {
-    ...(itemId ? { itemId } : {}),
+    // A hidden item's rows drop out of the transaction list, totals and export
+    // — unless the user explicitly filters to that one item (itemId set), which
+    // is how the item detail page drills in.
+    ...(itemId ? { itemId } : EXCLUDE_HIDDEN_ITEMS),
     ...(outletId ? { outletId } : {}),
     ...(employeeId ? { employeeId } : {}),
     ...(noTransaksi ? { noTransaksi: { contains: noTransaksi, mode: "insensitive" } } : {}),

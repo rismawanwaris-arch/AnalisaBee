@@ -1,5 +1,6 @@
 import { prisma } from "@/lib/prisma";
 import type { Prisma } from "@/generated/prisma/client";
+import { EXCLUDE_HIDDEN_ITEMS } from "@/lib/queries/_hiddenItems";
 
 export interface DashboardFilters {
   from?: Date;
@@ -10,6 +11,7 @@ export interface DashboardFilters {
 function buildWhere(filters: DashboardFilters): Prisma.SaleWhereInput {
   const { from, to, outletId } = filters;
   return {
+    ...EXCLUDE_HIDDEN_ITEMS,
     ...(outletId ? { outletId } : {}),
     ...(from || to
       ? {
@@ -60,10 +62,7 @@ export async function getDashboardSummary(filters: DashboardFilters = {}) {
       }),
       prisma.sale.groupBy({
         by: ["itemId"],
-        // Hidden items are kept out of the "Top 10 Item Terlaris" ranking (the
-        // headline totals/trend above still count every sale — same as hidden
-        // outlets, which also stay in the totals).
-        where: { ...where, item: { isHidden: false } },
+        where,
         _sum: { qty: true, subtotal: true },
         orderBy: { _sum: { subtotal: "desc" } },
         take: 10,

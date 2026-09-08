@@ -152,10 +152,13 @@ model Item {
   code      String  @unique
   name      String
   itemGroup String?
-  // Same role as Outlet.isHidden / Employee.isHidden — a hidden item drops out
-  // of the item search/typeahead, the full catalog list, the Kategori Item
-  // report, and every "top item" ranking (Dashboard, Performa Outlet). It does
-  // NOT delete sales, move headline omzet totals, or block a /items?id= link.
+  // A hidden item is excluded from every sales-analysis surface — its line
+  // items drop out of omzet/laba/qty/tren, transaction counts, rankings, the
+  // Kategori Item report, Analisa Data, Jam Operasional and the daily target
+  // report, plus the item search/catalog. Sales rows are NOT deleted, the
+  // item's own /items?id= detail page still works, and unhiding restores
+  // everything. Points keep their own ItemPointExclusion mechanism.
+  // See src/lib/queries/_hiddenItems.ts.
   isHidden  Boolean @default(false)
   sales     Sale[]
 

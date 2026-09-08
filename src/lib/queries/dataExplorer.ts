@@ -1,4 +1,5 @@
 import { prisma } from "../prisma";
+import { EXCLUDE_HIDDEN_ITEMS } from "./_hiddenItems";
 
 export type TransactionSource = "SALE" | "TARTUN" | "SERVER";
 
@@ -41,7 +42,9 @@ export async function getUnifiedTransactions(
 
   const [sales, tartun, server] = await Promise.all([
     prisma.sale.findMany({
-      where: hasDateFilter ? { tanggal: dateWhere } : undefined,
+      where: hasDateFilter
+        ? { tanggal: dateWhere, ...EXCLUDE_HIDDEN_ITEMS }
+        : { ...EXCLUDE_HIDDEN_ITEMS },
       select: {
         id: true,
         tanggal: true,

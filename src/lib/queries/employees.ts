@@ -1,4 +1,5 @@
 import { prisma } from "@/lib/prisma";
+import { EXCLUDE_HIDDEN_ITEMS } from "@/lib/queries/_hiddenItems";
 
 export async function getEmployeeList(includeHidden = false) {
   const [employees, sums] = await Promise.all([
@@ -8,6 +9,7 @@ export async function getEmployeeList(includeHidden = false) {
     }),
     prisma.sale.groupBy({
       by: ["employeeId"],
+      where: EXCLUDE_HIDDEN_ITEMS,
       _sum: { qty: true, subtotal: true, labaRugi: true },
       _count: { _all: true },
     }),
@@ -35,22 +37,23 @@ export async function getEmployeeDetail(employeeId: number) {
   const employee = await prisma.employee.findUnique({ where: { id: employeeId } });
   if (!employee) return null;
 
+  const saleWhere = { employeeId, ...EXCLUDE_HIDDEN_ITEMS };
   const [totals, byOutlet, byDate] = await Promise.all([
     prisma.sale.aggregate({
-      where: { employeeId },
+      where: saleWhere,
       _sum: { qty: true, subtotal: true, labaRugi: true },
       _count: { _all: true },
     }),
     prisma.sale.groupBy({
       by: ["outletId"],
-      where: { employeeId },
+      where: saleWhere,
       _sum: { qty: true, subtotal: true },
       orderBy: { _sum: { subtotal: "desc" } },
       take: 20,
     }),
     prisma.sale.groupBy({
       by: ["tanggal"],
-      where: { employeeId },
+      where: saleWhere,
       _sum: { qty: true, subtotal: true },
       orderBy: { tanggal: "asc" },
     }),

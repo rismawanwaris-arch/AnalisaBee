@@ -1,4 +1,5 @@
 import { prisma } from "@/lib/prisma";
+import { EXCLUDE_HIDDEN_ITEMS } from "@/lib/queries/_hiddenItems";
 
 export const OPERATING_HOURS = [6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22];
 
@@ -40,7 +41,7 @@ export async function getHourlyAnalytics(
   const [outlets, sales] = await Promise.all([
     prisma.outlet.findMany({ where: { branch }, orderBy: { name: "asc" } }),
     prisma.sale.findMany({
-      where: { tanggal: date, outlet: { branch } },
+      where: { tanggal: date, outlet: { branch }, ...EXCLUDE_HIDDEN_ITEMS },
       select: { outletId: true, jamBuat: true },
     }),
   ]);

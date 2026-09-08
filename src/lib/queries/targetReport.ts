@@ -1,5 +1,6 @@
 import { prisma } from "@/lib/prisma";
 import { ensureDefaults } from "@/lib/ensureDefaults";
+import { EXCLUDE_HIDDEN_ITEMS } from "@/lib/queries/_hiddenItems";
 import type { BusinessLine, ReportCategory } from "@/generated/prisma/client";
 
 export interface CategoryFigure {
@@ -69,7 +70,7 @@ export async function getDailyTargetReport(date: Date, branch: "BANDUNG" | "CIMA
     prisma.tartunDaily.findMany({ where: { tanggal: date } }),
     prisma.serverDaily.findMany({ where: { tanggal: date } }),
     prisma.sale.findMany({
-      where: { tanggal: date },
+      where: { tanggal: date, ...EXCLUDE_HIDDEN_ITEMS },
       select: { outletId: true, qty: true, labaRugi: true, item: { select: { itemGroup: true } } },
     }),
     prisma.itemGroupMapping.findMany(),
