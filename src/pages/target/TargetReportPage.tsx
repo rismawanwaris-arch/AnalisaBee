@@ -1,6 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
-import * as XLSX from "xlsx";
 import { formatNumber } from "@/lib/format";
 import { yesterdayStr } from "@/lib/dateDefaults";
 
@@ -81,6 +80,7 @@ export function TargetReportPage({ branch = "BANDUNG" }: { branch?: "BANDUNG" | 
   const [sortKey, setSortKey] = useState<SortKey | null>(null);
   const [sortDir, setSortDir] = useState<"asc" | "desc">("desc");
   const [jpegBusy, setJpegBusy] = useState(false);
+  const [excelBusy, setExcelBusy] = useState(false);
   const tableWrapRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => setDate(dateParam), [dateParam]);
@@ -164,8 +164,19 @@ export function TargetReportPage({ branch = "BANDUNG" }: { branch?: "BANDUNG" | 
     return t.SERVER + t.TARTUN + t.PETSHOP + t.AKSESORIS + t.SP_VOUCHER;
   }, [data]);
 
-  function exportExcel() {
+  async function exportExcel() {
     if (!data || !totals) return;
+    setExcelBusy(true);
+    let XLSX: typeof import("xlsx");
+    try {
+      // Dynamic import — same reasoning as html2canvas-pro below: `xlsx` is
+      // ~900KB and only needed when this button is actually clicked, not on
+      // every visit to the report (most visits just look at the table).
+      XLSX = await import("xlsx");
+    } catch {
+      setExcelBusy(false);
+      return;
+    }
     const header = [
       "No",
       "Outlet",
@@ -253,6 +264,7 @@ export function TargetReportPage({ branch = "BANDUNG" }: { branch?: "BANDUNG" | 
     const wb = XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(wb, ws, "Target Harian");
     XLSX.writeFile(wb, `target-harian-${date}.xlsx`);
+    setExcelBusy(false);
   }
 
   async function exportJpeg() {
@@ -311,13 +323,13 @@ export function TargetReportPage({ branch = "BANDUNG" }: { branch?: "BANDUNG" | 
           <button
             type="button"
             onClick={exportExcel}
-            disabled={!data}
+            disabled={!data || excelBusy}
             className="inline-flex items-center gap-1.5 rounded-lg border border-border/80 bg-surface-subtle hover:bg-surface-hover px-3 py-1.5 text-xs font-medium text-foreground transition-all disabled:opacity-50 shadow-2xs"
           >
             <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
               <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4M7 10l5 5 5-5M12 15V3" />
             </svg>
-            <span>Excel</span>
+            <span>{excelBusy ? "Memproses..." : "Excel"}</span>
           </button>
           <button
             type="button"
