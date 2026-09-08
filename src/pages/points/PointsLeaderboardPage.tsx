@@ -23,6 +23,9 @@ interface BreakdownRow {
   pointsPerUnit: number;
   totalPoints: number;
 }
+interface LeaderboardExportRow extends LeaderboardRow {
+  items: BreakdownRow[];
+}
 
 type Mode = "day" | "month" | "range";
 
@@ -85,6 +88,7 @@ export function PointsLeaderboardPage() {
   }, [periodStartDay]);
 
   const [expandedId, setExpandedId] = useState<number | null>(null);
+  const [excelBusy, setExcelBusy] = useState(false);
 
   const queryParams = useCallback(() => {
     const params = new URLSearchParams();
@@ -148,6 +152,73 @@ export function PointsLeaderboardPage() {
 
   function toggleExpand(employeeId: number) {
     setExpandedId((current) => (current === employeeId ? null : employeeId));
+  }
+
+  async function exportExcel() {
+    if (!data || data.rows.length === 0) return;
+    setExcelBusy(true);
+    try {
+      // One request for the leaderboard + every employee's item breakdown, then
+      // build the workbook client-side. `xlsx` (~900KB) is dynamically imported
+      // so it only loads on click — same pattern as TargetReportPage.
+      const [XLSX, exportRes] = await Promise.all([
+        import("xlsx"),
+        fetch(`/api/points/leaderboard/export?${periodKey}`),
+      ]);
+      if (!exportRes.ok) throw new Error("gagal memuat data export");
+      const exportData: { rows: LeaderboardExportRow[] } = await exportRes.json();
+
+      const meta: (string | number)[][] = [
+        ["Poin & Insentif Penjualan"],
+        [`Periode: ${formatDate(data.from)} - ${formatDate(data.to)}`],
+        [`1 poin = ${formatRupiah(pointRupiahRate)}`],
+        [],
+      ];
+
+      // Sheet 1 — leaderboard
+      const header = ["Peringkat", "Nama Pegawai", "Qty Item Berpoin", "Total Poin", "Estimasi Insentif (Rp)"];
+      const totalPoints = exportData.rows.reduce((s, r) => s + r.totalPoints, 0);
+      const rows = exportData.rows.map((r, idx) => [
+        idx + 1,
+        r.employeeName,
+        r.pointItemsQty,
+        r.totalPoints,
+        r.totalPoints * pointRupiahRate,
+      ]);
+      const totalRow = [
+        "",
+        "TOTAL",
+        exportData.rows.reduce((s, r) => s + r.pointItemsQty, 0),
+        totalPoints,
+        totalPoints * pointRupiahRate,
+      ];
+      const ws1 = XLSX.utils.aoa_to_sheet([...meta, header, ...rows, totalRow]);
+      ws1["!cols"] = [{ wch: 9 }, { wch: 28 }, { wch: 16 }, { wch: 12 }, { wch: 22 }];
+
+      // Sheet 2 — per-employee point-item breakdown
+      const detailHeader = ["Peringkat", "Nama Pegawai", "Nama Item", "Kategori", "Qty", "Poin / pcs", "Subtotal Poin"];
+      const detailRows: (string | number)[][] = [];
+      exportData.rows.forEach((r, idx) => {
+        if (r.items.length === 0) {
+          detailRows.push([idx + 1, r.employeeName, "-", "", 0, 0, 0]);
+          return;
+        }
+        for (const b of r.items) {
+          detailRows.push([idx + 1, r.employeeName, b.itemName, b.itemGroup ?? "", b.qty, b.pointsPerUnit, b.totalPoints]);
+        }
+      });
+      const ws2 = XLSX.utils.aoa_to_sheet([...meta, detailHeader, ...detailRows]);
+      ws2["!cols"] = [{ wch: 9 }, { wch: 24 }, { wch: 42 }, { wch: 18 }, { wch: 8 }, { wch: 10 }, { wch: 14 }];
+
+      const wb = XLSX.utils.book_new();
+      XLSX.utils.book_append_sheet(wb, ws1, "Poin & Insentif");
+      XLSX.utils.book_append_sheet(wb, ws2, "Rincian Item");
+      XLSX.writeFile(wb, `poin-insentif-${data.from.slice(0, 10)}_sd_${data.to.slice(0, 10)}.xlsx`);
+    } catch {
+      // ignore — nothing downloaded
+    } finally {
+      setExcelBusy(false);
+    }
   }
 
   return (
@@ -243,11 +314,24 @@ export function PointsLeaderboardPage() {
               Periode: <strong className="text-foreground">{formatDate(data.from)}</strong> – <strong className="text-foreground">{formatDate(data.to)}</strong>
             </span>
           )}
-          {data && (
-            <span className="text-[11px] text-muted font-mono bg-surface-subtle border border-border/60 rounded px-2 py-1 ml-auto">
-              1 poin = {formatRupiah(pointRupiahRate)} (atur di Settings)
-            </span>
-          )}
+          <div className="flex items-center gap-2 ml-auto">
+            <button
+              type="button"
+              onClick={exportExcel}
+              disabled={!data || data.rows.length === 0 || excelBusy}
+              className="inline-flex items-center gap-1.5 rounded-lg border border-border/80 bg-surface-subtle hover:bg-surface-hover px-3 py-1.5 text-xs font-medium text-foreground transition-all disabled:opacity-50 shadow-2xs"
+            >
+              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4M7 10l5 5 5-5M12 15V3" />
+              </svg>
+              <span>{excelBusy ? "Memproses..." : "Export Excel"}</span>
+            </button>
+            {data && (
+              <span className="text-[11px] text-muted font-mono bg-surface-subtle border border-border/60 rounded px-2 py-1">
+                1 poin = {formatRupiah(pointRupiahRate)} (atur di Settings)
+              </span>
+            )}
+          </div>
         </div>
       </div>
 

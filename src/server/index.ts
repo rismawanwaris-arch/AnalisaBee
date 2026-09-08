@@ -86,6 +86,7 @@ import {
 import { getHourlyAnalytics, type Granularity } from "../lib/queries/hourly";
 import {
   getLeaderboard,
+  getLeaderboardExport,
   getEmployeePointBreakdown,
   getPointPeriodSetting,
   setPointPeriodSetting,
@@ -1163,27 +1164,35 @@ app.get("/api/hourly", requireFeature(targetReportFeature), async (req, res) => 
 // 6. POINTS & INCENTIVES
 // ==========================================
 
+// Both the leaderboard and its per-employee breakdown accept either an explicit
+// from/to range or a year+month that's resolved against the configurable cycle
+// start day. Shared here so all three point endpoints agree.
+async function resolvePointPeriod(req: express.Request): Promise<{ from: Date; to: Date }> {
+  const fromParam = parseDateParam(req.query.from);
+  const toParam = parseDateParam(req.query.to);
+  if (fromParam && toParam) return { from: fromParam, to: toParam };
+  const year = req.query.year ? Number(req.query.year) : new Date().getFullYear();
+  const month = req.query.month ? Number(req.query.month) : new Date().getMonth() + 1;
+  const { periodStartDay } = await getPointPeriodSetting();
+  return computeMonthPeriod(year, month, periodStartDay);
+}
+
 app.get("/api/points/leaderboard", requireFeature("points"), async (req, res) => {
   try {
-    let from: Date;
-    let to: Date;
-
-    const fromParam = parseDateParam(req.query.from);
-    const toParam = parseDateParam(req.query.to);
-
-    if (fromParam && toParam) {
-      from = fromParam;
-      to = toParam;
-    } else {
-      const year = req.query.year ? Number(req.query.year) : new Date().getFullYear();
-      const month = req.query.month ? Number(req.query.month) : new Date().getMonth() + 1;
-      const { periodStartDay } = await getPointPeriodSetting();
-      const p = computeMonthPeriod(year, month, periodStartDay);
-      from = p.from;
-      to = p.to;
-    }
-
+    const { from, to } = await resolvePointPeriod(req);
     const data = await getLeaderboard(from, to);
+    return res.json(data);
+  } catch (err: any) {
+    return res.status(500).json({ error: err.message });
+  }
+});
+
+// Leaderboard + every employee's item breakdown in one payload — feeds the
+// "Export Excel" button on the Poin & Insentif page.
+app.get("/api/points/leaderboard/export", requireFeature("points"), async (req, res) => {
+  try {
+    const { from, to } = await resolvePointPeriod(req);
+    const data = await getLeaderboardExport(from, to);
     return res.json(data);
   } catch (err: any) {
     return res.status(500).json({ error: err.message });
@@ -1256,23 +1265,7 @@ app.get("/api/points/employee/:id", requireFeature("points"), async (req, res) =
     const id = Number(req.params.id);
     if (Number.isNaN(id)) return res.status(400).json({ error: "ID tidak valid" });
 
-    let from: Date;
-    let to: Date;
-    const fromParam = parseDateParam(req.query.from);
-    const toParam = parseDateParam(req.query.to);
-
-    if (fromParam && toParam) {
-      from = fromParam;
-      to = toParam;
-    } else {
-      const year = req.query.year ? Number(req.query.year) : new Date().getFullYear();
-      const month = req.query.month ? Number(req.query.month) : new Date().getMonth() + 1;
-      const { periodStartDay } = await getPointPeriodSetting();
-      const p = computeMonthPeriod(year, month, periodStartDay);
-      from = p.from;
-      to = p.to;
-    }
-
+    const { from, to } = await resolvePointPeriod(req);
     const breakdown = await getEmployeePointBreakdown(id, from, to);
     return res.json(breakdown);
   } catch (err: any) {

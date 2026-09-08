@@ -316,6 +316,76 @@ export async function getLeaderboard(
   return { rows, from: from.toISOString(), to: to.toISOString() };
 }
 
+export interface LeaderboardExportRow extends EmployeeLeaderboardRow {
+  items: ItemPointBreakdownRow[];
+}
+
+/** Leaderboard + every employee's point-item breakdown in a single pass — for
+ *  the Excel export, so it doesn't fan out into one request per employee. */
+export async function getLeaderboardExport(
+  from: Date,
+  to: Date
+): Promise<{ rows: LeaderboardExportRow[]; from: string; to: string }> {
+  await ensureDefaults();
+
+  const excludedIds = await getExcludedEmployeeIds();
+
+  const salesAgg = await prisma.sale.groupBy({
+    by: ["itemId", "employeeId"],
+    where: {
+      tanggal: { gte: from, lte: to },
+      ...(excludedIds.length > 0 ? { employeeId: { notIn: excludedIds } } : {}),
+    },
+    _sum: { qty: true },
+  });
+
+  const itemIds = [...new Set(salesAgg.map((s) => s.itemId))];
+  const empIds = [...new Set(salesAgg.map((s) => s.employeeId))];
+
+  const [pointsByItem, employees, items] = await Promise.all([
+    resolveItemPointsForIds(itemIds),
+    prisma.employee.findMany({ where: { id: { in: empIds } }, select: { id: true, name: true } }),
+    prisma.item.findMany({ where: { id: { in: itemIds } }, select: { id: true, name: true, itemGroup: true } }),
+  ]);
+  const empNameById = new Map(employees.map((e) => [e.id, e.name]));
+  const itemById = new Map(items.map((i) => [i.id, i]));
+
+  const byEmployee = new Map<number, LeaderboardExportRow>();
+  for (const s of salesAgg) {
+    const pointsPerUnit = pointsByItem.get(s.itemId) ?? 0;
+    if (pointsPerUnit === 0) continue;
+    const qty = s._sum.qty ?? 0;
+    const earned = pointsPerUnit * qty;
+    const item = itemById.get(s.itemId);
+    const line: ItemPointBreakdownRow = {
+      itemId: s.itemId,
+      itemName: item?.name ?? "Tidak diketahui",
+      itemGroup: item?.itemGroup ?? null,
+      qty,
+      pointsPerUnit,
+      totalPoints: earned,
+    };
+    const existing = byEmployee.get(s.employeeId);
+    if (existing) {
+      existing.totalPoints += earned;
+      existing.pointItemsQty += qty;
+      existing.items.push(line);
+    } else {
+      byEmployee.set(s.employeeId, {
+        employeeId: s.employeeId,
+        employeeName: empNameById.get(s.employeeId) ?? "—",
+        totalPoints: earned,
+        pointItemsQty: qty,
+        items: [line],
+      });
+    }
+  }
+
+  const rows = [...byEmployee.values()].sort((a, b) => b.totalPoints - a.totalPoints);
+  for (const r of rows) r.items.sort((a, b) => b.totalPoints - a.totalPoints);
+  return { rows, from: from.toISOString(), to: to.toISOString() };
+}
+
 export async function getEmployeePointBreakdown(
   employeeId: number,
   from: Date,
