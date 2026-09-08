@@ -1,5 +1,6 @@
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
+import { useQuery } from "@tanstack/react-query";
 import {
   Bar,
   BarChart,
@@ -56,12 +57,14 @@ export function ItemsPage() {
   const selectedId = searchParams.get("id");
 
   const [query, setQuery] = useState("");
-  const [options, setOptions] = useState<ItemOption[]>([]);
+  const [debouncedQuery, setDebouncedQuery] = useState("");
   const [showOptions, setShowOptions] = useState(false);
-  const [detail, setDetail] = useState<ItemDetail | null>(null);
-  const [loading, setLoading] = useState(false);
   const [from, setFrom] = useState("");
   const [to, setTo] = useState("");
+  // "Terapkan" re-runs the detail query for the currently-selected item with
+  // whatever from/to are typed right now — without this, typing a new date
+  // would refetch on every keystroke instead of waiting for the click.
+  const [appliedRange, setAppliedRange] = useState({ from: "", to: "" });
   const boxRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -73,43 +76,40 @@ export function ItemsPage() {
   }, []);
 
   useEffect(() => {
-    if (!query.trim()) {
-      setOptions([]);
-      return;
-    }
-    const t = setTimeout(async () => {
-      try {
-        const res = await fetch(`/api/items?q=${encodeURIComponent(query)}`);
-        if (res.ok) setOptions(await res.json());
-      } catch {
-        // ignore
-      }
-    }, 250);
+    const t = setTimeout(() => setDebouncedQuery(query), 250);
     return () => clearTimeout(t);
   }, [query]);
 
-  const loadDetail = useCallback(
-    async (id: string) => {
-      setLoading(true);
-      const params = new URLSearchParams();
-      if (from) params.set("from", from);
-      if (to) params.set("to", to);
-      try {
-        const res = await fetch(`/api/items/${id}?${params.toString()}`);
-        if (res.ok) setDetail(await res.json());
-      } catch {
-        // ignore
-      } finally {
-        setLoading(false);
-      }
+  const { data: options = [] } = useQuery({
+    queryKey: ["items-search", debouncedQuery],
+    queryFn: async (): Promise<ItemOption[]> => {
+      const res = await fetch(`/api/items?q=${encodeURIComponent(debouncedQuery)}`);
+      if (!res.ok) throw new Error("Gagal mencari item.");
+      return res.json();
     },
-    [from, to]
-  );
+    enabled: debouncedQuery.trim().length > 0,
+  });
 
+  const { data: detail = null, isLoading: loading } = useQuery({
+    queryKey: ["item-detail", selectedId, appliedRange.from, appliedRange.to],
+    queryFn: async (): Promise<ItemDetail> => {
+      const params = new URLSearchParams();
+      if (appliedRange.from) params.set("from", appliedRange.from);
+      if (appliedRange.to) params.set("to", appliedRange.to);
+      const res = await fetch(`/api/items/${selectedId}?${params.toString()}`);
+      if (!res.ok) throw new Error("Gagal memuat detail item.");
+      return res.json();
+    },
+    enabled: !!selectedId,
+  });
+
+  // A freshly-picked item (new selectedId) should show its full history by
+  // default, not whatever from/to happened to be left over from the last one.
   useEffect(() => {
-    if (selectedId) loadDetail(selectedId);
-    else setDetail(null);
-  }, [selectedId, loadDetail]);
+    setFrom("");
+    setTo("");
+    setAppliedRange({ from: "", to: "" });
+  }, [selectedId]);
 
   function selectItem(opt: ItemOption) {
     setQuery(`${opt.name} (${opt.code})`);
@@ -160,7 +160,7 @@ export function ItemsPage() {
               type="button"
               onClick={() => {
                 setQuery("");
-                setOptions([]);
+                setDebouncedQuery("");
               }}
               className="absolute right-3 top-1/2 -translate-y-1/2 text-muted hover:text-foreground text-xs"
             >
@@ -236,7 +236,7 @@ export function ItemsPage() {
               </div>
               <button
                 type="button"
-                onClick={() => selectedId && loadDetail(selectedId)}
+                onClick={() => setAppliedRange({ from, to })}
                 className="inline-flex items-center gap-1 rounded-lg bg-accent text-accent-foreground px-3.5 py-1 text-xs font-semibold hover:bg-accent-hover transition-all shadow-xs"
               >
                 Terapkan

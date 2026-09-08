@@ -1,6 +1,8 @@
-import { Fragment, useCallback, useEffect, useRef, useState } from "react";
+import { Fragment, useCallback, useEffect, useState } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
+import { useQuery } from "@tanstack/react-query";
 import { formatNumber, formatDate } from "@/lib/format";
+import { usePointsSettings } from "@/hooks/usePointsSettings";
 
 interface LeaderboardRow {
   employeeId: number;
@@ -56,7 +58,8 @@ export function PointsLeaderboardPage() {
   // Default to 1 (plain calendar month) until the real cut-off day loads —
   // matches prior behavior for the common case and self-corrects below once
   // periodStartDay is known.
-  const [periodStartDay, setPeriodStartDay] = useState(1);
+  const { data: settings } = usePointsSettings();
+  const periodStartDay = settings?.periodStartDay ?? 1;
 
   const urlMode = (searchParams.get("mode") as Mode) || "month";
   const urlDay = searchParams.get("day") || todayStr();
@@ -70,15 +73,6 @@ export function PointsLeaderboardPage() {
   const [from, setFrom] = useState(urlFrom);
   const [to, setTo] = useState(urlTo);
 
-  useEffect(() => {
-    fetch("/api/points/settings")
-      .then((r) => (r.ok ? r.json() : null))
-      .then((data) => {
-        if (data?.periodStartDay) setPeriodStartDay(data.periodStartDay);
-      })
-      .catch(() => {});
-  }, []);
-
   // Once the real cut-off day is known, correct the "Pilih Bulan" field if
   // the user hasn't explicitly picked a month (via typing or a shared URL).
   useEffect(() => {
@@ -87,11 +81,7 @@ export function PointsLeaderboardPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [periodStartDay]);
 
-  const [data, setData] = useState<LeaderboardResponse | null>(null);
-  const [loading, setLoading] = useState(true);
   const [expandedId, setExpandedId] = useState<number | null>(null);
-  const [breakdown, setBreakdown] = useState<BreakdownRow[] | null>(null);
-  const [breakdownLoading, setBreakdownLoading] = useState(false);
 
   const queryParams = useCallback(() => {
     const params = new URLSearchParams();
@@ -109,33 +99,38 @@ export function PointsLeaderboardPage() {
     return params;
   }, [urlMode, urlDay, urlFrom, urlTo, urlMonth]);
 
-  // The default "month" query changes right after mount once periodStartDay
-  // loads (see currentPeriodMonthStr above), firing a second request close
-  // behind the first. Without this guard, whichever of the two resolves last
-  // wins — sometimes the stale one — so only apply the most recently *fired*
-  // request's result.
-  const loadSeq = useRef(0);
-  const load = useCallback(async () => {
-    const seq = ++loadSeq.current;
-    setLoading(true);
-    try {
-      const res = await fetch(`/api/points/leaderboard?${queryParams().toString()}`);
-      if (res.ok) {
-        const json = await res.json();
-        if (seq === loadSeq.current) setData(json);
-      }
-    } catch {
-      // ignore
-    } finally {
-      if (seq === loadSeq.current) setLoading(false);
-    }
-  }, [queryParams]);
+  // React Query keys off the resolved period params directly, so switching
+  // mode/date and switching back to a period already seen this session
+  // renders instantly from cache instead of refetching. It also replaces the
+  // manual "ignore stale in-flight response" guard the old fetch() version
+  // needed — React Query already discards a response if its query key is no
+  // longer the active one by the time it resolves.
+  const periodKey = queryParams().toString();
+  const { data, isLoading: loading } = useQuery({
+    queryKey: ["points-leaderboard", periodKey],
+    queryFn: async (): Promise<LeaderboardResponse> => {
+      const res = await fetch(`/api/points/leaderboard?${periodKey}`);
+      if (!res.ok) throw new Error("Gagal memuat leaderboard.");
+      return res.json();
+    },
+  });
 
+  // Collapse any expanded row when the period filter changes — matches the
+  // old behavior (a breakdown for a different period would be misleading).
   useEffect(() => {
-    load();
     setExpandedId(null);
-    setBreakdown(null);
-  }, [load]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [periodKey]);
+
+  const { data: breakdown, isLoading: breakdownLoading } = useQuery({
+    queryKey: ["points-employee-breakdown", expandedId, periodKey],
+    queryFn: async (): Promise<BreakdownRow[]> => {
+      const res = await fetch(`/api/points/employee/${expandedId}?${periodKey}`);
+      if (!res.ok) throw new Error("Gagal memuat rincian.");
+      return res.json();
+    },
+    enabled: expandedId !== null,
+  });
 
   function applyFilters() {
     const params = new URLSearchParams();
@@ -148,23 +143,8 @@ export function PointsLeaderboardPage() {
     navigate(`/points?${params.toString()}`);
   }
 
-  async function toggleExpand(employeeId: number) {
-    if (expandedId === employeeId) {
-      setExpandedId(null);
-      setBreakdown(null);
-      return;
-    }
-    setExpandedId(employeeId);
-    setBreakdown(null);
-    setBreakdownLoading(true);
-    try {
-      const res = await fetch(`/api/points/employee/${employeeId}?${queryParams().toString()}`);
-      if (res.ok) setBreakdown(await res.json());
-    } catch {
-      // ignore
-    } finally {
-      setBreakdownLoading(false);
-    }
+  function toggleExpand(employeeId: number) {
+    setExpandedId((current) => (current === employeeId ? null : employeeId));
   }
 
   return (
