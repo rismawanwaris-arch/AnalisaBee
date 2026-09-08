@@ -1,16 +1,13 @@
-import { useCallback, useEffect, useState } from "react";
+import { useEffect, useState } from "react";
 import { Link, useNavigate, useSearchParams } from "react-router-dom";
+import { useQuery } from "@tanstack/react-query";
 import { StatCard } from "@/components/StatCard";
 import { SparkKpiCard } from "@/components/SparkKpiCard";
 import { RevenueAreaChart } from "@/components/RevenueAreaChart";
 import { Leaderboard } from "@/components/Leaderboard";
 import { formatDate, formatNumber, formatRupiah } from "@/lib/format";
 import { todayStr, yesterdayStr } from "@/lib/dateDefaults";
-
-interface OutletOption {
-  id: number;
-  name: string;
-}
+import { useOutlets } from "@/hooks/useOutlets";
 
 interface DashboardData {
   totals: {
@@ -42,40 +39,20 @@ export function DashboardPage() {
   const [from, setFrom] = useState(urlFrom);
   const [to, setTo] = useState(urlTo);
   const [outletId, setOutletId] = useState(urlOutlet);
-  const [outlets, setOutlets] = useState<OutletOption[]>([]);
-  const [data, setData] = useState<DashboardData | null>(null);
-  const [loading, setLoading] = useState(true);
+  const { data: outlets = [] } = useOutlets();
 
-  useEffect(() => {
-    const ctrl = new AbortController();
-    fetch("/api/outlets", { signal: ctrl.signal })
-      .then((r) => (r.ok ? r.json() : []))
-      .then((list: OutletOption[]) => setOutlets(list))
-      .catch(() => {});
-    return () => ctrl.abort();
-  }, []);
-
-  const load = useCallback(async () => {
-    setLoading(true);
-    const params = new URLSearchParams();
-    if (urlFrom) params.set("from", urlFrom);
-    if (urlTo) params.set("to", urlTo);
-    if (urlOutlet) params.set("outletId", urlOutlet);
-    try {
+  const { data, isLoading: loading } = useQuery({
+    queryKey: ["dashboard", urlFrom, urlTo, urlOutlet],
+    queryFn: async (): Promise<DashboardData> => {
+      const params = new URLSearchParams();
+      if (urlFrom) params.set("from", urlFrom);
+      if (urlTo) params.set("to", urlTo);
+      if (urlOutlet) params.set("outletId", urlOutlet);
       const res = await fetch(`/api/dashboard?${params.toString()}`);
-      if (res.ok) {
-        setData(await res.json());
-      }
-    } catch {
-      // ignore
-    } finally {
-      setLoading(false);
-    }
-  }, [urlFrom, urlTo, urlOutlet]);
-
-  useEffect(() => {
-    load();
-  }, [load]);
+      if (!res.ok) throw new Error("Gagal memuat ringkasan dashboard.");
+      return res.json();
+    },
+  });
 
   useEffect(() => {
     setFrom(urlFrom);
