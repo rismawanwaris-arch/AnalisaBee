@@ -4,6 +4,7 @@ import cors from "cors";
 import helmet from "helmet";
 import rateLimit from "express-rate-limit";
 import cookieParser from "cookie-parser";
+import compression from "compression";
 import multer from "multer";
 import path from "node:path";
 import { prisma } from "../lib/prisma";
@@ -140,6 +141,11 @@ const uploadBackup = multer({
 // Security headers
 app.use(helmet({ contentSecurityPolicy: false }));
 
+// Gzip every text response (JSON API responses, the SPA's JS/CSS bundle) —
+// biggest win per line of code: this app's JSON payloads compress ~5-10×
+// since they're repetitive tabular data (outlet names, dates, etc).
+app.use(compression());
+
 // CORS: only needed in development (Vite :5173 → Express :3001).
 // In production the SPA is served by Express itself — same origin, no CORS required.
 if (process.env.NODE_ENV !== "production") {
@@ -171,6 +177,18 @@ function sendError(res: express.Response, status: number, err: unknown, fallback
   const msg = isDev && err instanceof Error ? err.message : fallback;
   if (status >= 500) console.error(err);
   return res.status(status).json({ error: msg });
+}
+
+// Lets a browser reuse its own copy of slow-changing reference data (outlet
+// list, employee list, period settings) for a few seconds instead of
+// re-querying Postgres on every page navigation that needs a dropdown.
+// `private` because it's tied to an authenticated session, not a shared/CDN
+// cache — each user's browser only ever caches its own response.
+function cacheBriefly(seconds: number) {
+  return (_req: express.Request, res: express.Response, next: express.NextFunction) => {
+    res.setHeader("Cache-Control", `private, max-age=${seconds}`);
+    next();
+  };
 }
 
 // Rate limiter for login — max 20 attempts per 15 minutes per IP
@@ -682,7 +700,7 @@ app.get("/api/dashboard", requireFeature("dashboard"), async (req, res) => {
 // Not feature-gated: this is a shared outlet-name reference used as a filter
 // dropdown by several pages (Dashboard, Transactions, Jam Operasional,
 // Settings), not exclusive to the Performa Outlet page.
-app.get("/api/outlets", requireAuth, async (req, res) => {
+app.get("/api/outlets", requireAuth, cacheBriefly(30), async (req, res) => {
   try {
     const includeHidden = req.query.includeHidden === "true" || req.query.includeHidden === "1";
     const list = await getOutletList(includeHidden);
@@ -755,7 +773,7 @@ app.get("/api/outlets/:id", requireFeature("outlets"), async (req, res) => {
   }
 });
 
-app.get("/api/employees", requireAuth, async (req, res) => {
+app.get("/api/employees", requireAuth, cacheBriefly(30), async (req, res) => {
   try {
     const includeHidden = req.query.includeHidden === "true" || req.query.includeHidden === "1";
     const list = await getEmployeeList(includeHidden);
@@ -1132,7 +1150,7 @@ app.get("/api/points/leaderboard", requireFeature("points"), async (req, res) =>
 
 // Feature-gated (not master-only): the leaderboard page also needs this to
 // compute which calendar month the currently-running period belongs to.
-app.get("/api/points/settings", requireFeature("points"), async (req, res) => {
+app.get("/api/points/settings", requireFeature("points"), cacheBriefly(30), async (req, res) => {
   try {
     const data = await getPointPeriodSetting();
     return res.json(data);
@@ -1785,14 +1803,31 @@ app.get("/api/activity-log", requireFeature("activity_log"), async (req, res) =>
 // ==========================================
 
 const distPath = path.resolve(process.cwd(), "dist");
-app.use(express.static(distPath));
+app.use(
+  express.static(distPath, {
+    // Vite hashes every built filename (index-<hash>.js) — safe to cache
+    // for a year, since a new deploy always produces new filenames.
+    // index.html itself is the one exception: it's the only unhashed file,
+    // and it's what points browsers at the current hashed bundle, so it must
+    // always be revalidated (handled explicitly below either way).
+    maxAge: "1y",
+    immutable: true,
+    setHeaders: (res, filePath) => {
+      if (filePath.endsWith("index.html")) {
+        res.setHeader("Cache-Control", "no-cache");
+      }
+    },
+  })
+);
 
 // Fallback all non-API routes to index.html for SPA client-side routing
 app.use((req, res) => {
   if (req.path.startsWith("/api")) {
     return res.status(404).json({ error: "Endpoint not found" });
   }
-  return res.sendFile(path.join(distPath, "index.html"));
+  return res.sendFile(path.join(distPath, "index.html"), {
+    headers: { "Cache-Control": "no-cache" },
+  });
 });
 
 const PORT = process.env.PORT || 3001;
