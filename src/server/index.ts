@@ -75,7 +75,7 @@ import { getSystemStatus } from "../lib/queries/systemStatus";
 import { getDashboardSummary } from "../lib/queries/dashboard";
 import { getOutletList, getOutletDetail, getOutletSummary } from "../lib/queries/outlets";
 import { getEmployeeList, getEmployeeDetail } from "../lib/queries/employees";
-import { searchItems, getItemDetail, getItemsByCategory } from "../lib/queries/items";
+import { searchItems, listAllItems, getItemDetail, getItemsByCategory } from "../lib/queries/items";
 import { getSalesList, getSalesForExport } from "../lib/queries/sales";
 import { parseSalesFilterParams } from "../lib/parseSalesFilterParams";
 import {
@@ -821,6 +821,19 @@ app.get("/api/items", requireFeature("items"), async (req, res) => {
     const q = typeof req.query.q === "string" ? req.query.q : "";
     const limit = Number(req.query.limit) || 20;
     const items = await searchItems(q, limit);
+    return res.json(items);
+  } catch (err: any) {
+    return res.status(500).json({ error: err.message });
+  }
+});
+
+// Full catalog for pages that filter client-side (currently just ItemsPage) —
+// cached briefly since the catalog only changes via import batches, not
+// constantly. Kept separate from /api/items (which stays capped at 50 for
+// dropdown-style typeahead) rather than overloading it with a huge `limit`.
+app.get("/api/items/all", requireFeature("items"), cacheBriefly(60), async (req, res) => {
+  try {
+    const items = await listAllItems();
     return res.json(items);
   } catch (err: any) {
     return res.status(500).json({ error: err.message });

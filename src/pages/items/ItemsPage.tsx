@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
 import {
@@ -57,7 +57,6 @@ export function ItemsPage() {
   const selectedId = searchParams.get("id");
 
   const [query, setQuery] = useState("");
-  const [debouncedQuery, setDebouncedQuery] = useState("");
   const [showOptions, setShowOptions] = useState(false);
   const [from, setFrom] = useState("");
   const [to, setTo] = useState("");
@@ -75,20 +74,29 @@ export function ItemsPage() {
     return () => document.removeEventListener("mousedown", onClickOutside);
   }, []);
 
-  useEffect(() => {
-    const t = setTimeout(() => setDebouncedQuery(query), 250);
-    return () => clearTimeout(t);
-  }, [query]);
-
-  const { data: options = [] } = useQuery({
-    queryKey: ["items-search", debouncedQuery],
+  // The catalog is small and bounded (hundreds of SKUs, not an ever-growing
+  // log) — fetched once and filtered client-side, so typing a search has
+  // zero network latency instead of a round-trip (+ debounce) per keystroke.
+  // staleTime is longer than the app default since items only change via
+  // import batches, not constantly.
+  const { data: allItems = [] } = useQuery({
+    queryKey: ["items-all"],
     queryFn: async (): Promise<ItemOption[]> => {
-      const res = await fetch(`/api/items?q=${encodeURIComponent(debouncedQuery)}`);
-      if (!res.ok) throw new Error("Gagal mencari item.");
+      const res = await fetch("/api/items/all");
+      if (!res.ok) throw new Error("Gagal memuat daftar item.");
       return res.json();
     },
-    enabled: debouncedQuery.trim().length > 0,
+    staleTime: 5 * 60_000,
   });
+
+  const options = useMemo(() => {
+    const q = query.trim().toLowerCase();
+    if (!q) return [];
+    const matches = allItems.filter(
+      (opt) => opt.name.toLowerCase().includes(q) || opt.code.toLowerCase().includes(q)
+    );
+    return matches.slice(0, 50);
+  }, [allItems, query]);
 
   const { data: detail = null, isLoading: loading } = useQuery({
     queryKey: ["item-detail", selectedId, appliedRange.from, appliedRange.to],
@@ -158,10 +166,7 @@ export function ItemsPage() {
           {query && (
             <button
               type="button"
-              onClick={() => {
-                setQuery("");
-                setDebouncedQuery("");
-              }}
+              onClick={() => setQuery("")}
               className="absolute right-3 top-1/2 -translate-y-1/2 text-muted hover:text-foreground text-xs"
             >
               ✕

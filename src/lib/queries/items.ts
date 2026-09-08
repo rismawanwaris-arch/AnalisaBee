@@ -15,6 +15,17 @@ export async function searchItems(q: string, limit = 20) {
   });
 }
 
+/** Full item catalog (id/code/name/itemGroup only), for pages that filter
+ *  client-side instead of round-tripping per keystroke — worth it because
+ *  the catalog is small and bounded (hundreds of SKUs, not an ever-growing
+ *  log like Sale), unlike searchItems's capped/paginated dropdown use. */
+export async function listAllItems() {
+  return prisma.item.findMany({
+    select: { id: true, code: true, name: true, itemGroup: true },
+    orderBy: { name: "asc" },
+  });
+}
+
 export interface ItemCategoryRow {
   itemId: number;
   code: string;
