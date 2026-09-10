@@ -79,9 +79,10 @@ import { searchItems, listAllItems, listItemsForVisibility, getItemDetail, getIt
 import { getSalesList, getSalesForExport } from "../lib/queries/sales";
 import { parseSalesFilterParams } from "../lib/parseSalesFilterParams";
 import {
-  getDailyTargetReport,
+  getTargetReport,
   getTargetAmounts,
   setTargetAmount,
+  type TargetAmounts,
 } from "../lib/queries/targetReport";
 import { getHourlyAnalytics, type Granularity } from "../lib/queries/hourly";
 import {
@@ -1062,19 +1063,46 @@ const targetReportFeature = (req: express.Request): FeatureKey =>
 
 app.get("/api/target/report", requireFeature(targetReportFeature), async (req, res) => {
   try {
-    const dateParam = req.query.date as string;
-    const date = dateParam ? new Date(dateParam) : null;
-    if (!date || Number.isNaN(date.getTime())) {
-      return res.status(400).json({ error: "Parameter date wajib diisi (YYYY-MM-DD)." });
+    // Accepts a `from`/`to` range; `date` alone is still honoured (from == to)
+    // so existing links and the Analitik page keep working unchanged.
+    const fromParam = (req.query.from as string) || (req.query.date as string);
+    const toParam = (req.query.to as string) || (req.query.date as string);
+    const from = fromParam ? new Date(fromParam) : null;
+    const to = toParam ? new Date(toParam) : null;
+    if (!from || !to || Number.isNaN(from.getTime()) || Number.isNaN(to.getTime())) {
+      return res.status(400).json({ error: "Parameter tanggal wajib diisi (YYYY-MM-DD)." });
+    }
+    if (from.getTime() > to.getTime()) {
+      return res.status(400).json({ error: "Tanggal 'dari' tidak boleh setelah tanggal 'sampai'." });
     }
     const branch = (req.query.branch === "CIMAHI" ? "CIMAHI" : "BANDUNG") as "BANDUNG" | "CIMAHI";
-    const [report, targets] = await Promise.all([getDailyTargetReport(date, branch), getTargetAmounts(branch)]);
+    const [report, dailyTargets] = await Promise.all([
+      getTargetReport(from, to, branch),
+      getTargetAmounts(branch),
+    ]);
+
+    // Targets are stored per-day; scale them to the selected period so every
+    // pass/fail highlight and achievement % on the report compares like with
+    // like. dayCount === 1 for a single date -> identical to before.
+    const n = report.dayCount;
+    const scale = (t: TargetAmounts): TargetAmounts => ({
+      SERVER: t.SERVER * n,
+      TARTUN: t.TARTUN * n,
+      PETSHOP: t.PETSHOP * n,
+      AKSESORIS: t.AKSESORIS * n,
+      SP_VOUCHER: t.SP_VOUCHER * n,
+    });
+
     return res.json({
-      date: dateParam,
+      date: fromParam === toParam ? fromParam : undefined,
+      from: fromParam,
+      to: toParam,
+      dayCount: n,
       branch,
       rows: report.rows,
       unmappedItemGroups: report.unmappedItemGroups,
-      targets,
+      targets: { perkonter: scale(dailyTargets.perkonter), all: scale(dailyTargets.all) },
+      dailyTargets,
     });
   } catch (err: any) {
     return res.status(500).json({ error: err.message });

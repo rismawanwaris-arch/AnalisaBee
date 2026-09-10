@@ -31,7 +31,27 @@ interface TargetAmounts {
 interface ReportResponse {
   rows: ReportRow[];
   unmappedItemGroups: string[];
+  // Scaled to the selected range (daily target × dayCount).
   targets: { perkonter: TargetAmounts; all: TargetAmounts };
+  // Unscaled per-day figures, for the "× N hari" hint.
+  dailyTargets: { perkonter: TargetAmounts; all: TargetAmounts };
+  from: string;
+  to: string;
+  dayCount: number;
+}
+
+/** "1 September 2026" for a single day, "1 – 7 September 2026" for a range. */
+function formatPeriod(from: string, to: string): string {
+  const opts: Intl.DateTimeFormatOptions = { day: "numeric", month: "long", year: "numeric", timeZone: "UTC" };
+  const f = new Date(from);
+  const t = new Date(to);
+  if (Number.isNaN(f.getTime()) || Number.isNaN(t.getTime())) return from === to ? from : `${from} – ${to}`;
+  if (from === to) return f.toLocaleDateString("id-ID", opts);
+  const sameMonth = f.getUTCFullYear() === t.getUTCFullYear() && f.getUTCMonth() === t.getUTCMonth();
+  const fromShort = sameMonth
+    ? String(f.getUTCDate())
+    : f.toLocaleDateString("id-ID", { day: "numeric", month: "long", timeZone: "UTC" });
+  return `${fromShort} – ${t.toLocaleDateString("id-ID", opts)}`;
 }
 
 type SortKey =
@@ -72,9 +92,13 @@ function passFail(value: number, target: number): "good" | "bad" {
 export function TargetReportPage({ branch = "BANDUNG" }: { branch?: "BANDUNG" | "CIMAHI" }) {
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
-  const dateParam = searchParams.get("date") || yesterdayStr();
+  // `date` (single) is still read for backward-compatible links; `from`/`to`
+  // take precedence and are what the picker writes.
+  const fromParam = searchParams.get("from") || searchParams.get("date") || yesterdayStr();
+  const toParam = searchParams.get("to") || searchParams.get("date") || fromParam;
 
-  const [date, setDate] = useState(dateParam);
+  const [from, setFrom] = useState(fromParam);
+  const [to, setTo] = useState(toParam);
   const [data, setData] = useState<ReportResponse | null>(null);
   const [loading, setLoading] = useState(true);
   const [sortKey, setSortKey] = useState<SortKey | null>(null);
@@ -83,14 +107,15 @@ export function TargetReportPage({ branch = "BANDUNG" }: { branch?: "BANDUNG" | 
   const [excelBusy, setExcelBusy] = useState(false);
   const tableWrapRef = useRef<HTMLDivElement>(null);
 
-  useEffect(() => setDate(dateParam), [dateParam]);
+  useEffect(() => setFrom(fromParam), [fromParam]);
+  useEffect(() => setTo(toParam), [toParam]);
 
   const basePath = branch === "CIMAHI" ? "/cimahi/target" : "/target";
 
-  const load = useCallback(async (d: string) => {
+  const load = useCallback(async (f: string, t: string) => {
     setLoading(true);
     try {
-      const res = await fetch(`/api/target/report?date=${d}&branch=${branch}`);
+      const res = await fetch(`/api/target/report?from=${f}&to=${t}&branch=${branch}`);
       if (res.ok) setData(await res.json());
     } catch {
       // ignore
@@ -100,11 +125,13 @@ export function TargetReportPage({ branch = "BANDUNG" }: { branch?: "BANDUNG" | 
   }, [branch]);
 
   useEffect(() => {
-    load(dateParam);
-  }, [dateParam, load]);
+    load(fromParam, toParam);
+  }, [fromParam, toParam, load]);
 
-  function applyDate(d: string) {
-    navigate(`${basePath}?date=${d}`);
+  function applyRange() {
+    // Tolerate a reversed pick instead of erroring.
+    const [f, t] = from <= to ? [from, to] : [to, from];
+    navigate(f === t ? `${basePath}?date=${f}` : `${basePath}?from=${f}&to=${t}`);
   }
 
   function toggleSort(key: SortKey) {
@@ -163,6 +190,14 @@ export function TargetReportPage({ branch = "BANDUNG" }: { branch?: "BANDUNG" | 
     const t = data.targets.all;
     return t.SERVER + t.TARTUN + t.PETSHOP + t.AKSESORIS + t.SP_VOUCHER;
   }, [data]);
+
+  // Filename stem + on-report heading, single-day vs range aware.
+  const fileStem = data
+    ? data.from === data.to
+      ? `target-harian-${data.from}`
+      : `target-harian-${data.from}_sd_${data.to}`
+    : "target-harian";
+  const periodLabel = data ? formatPeriod(data.from, data.to) : "";
 
   async function exportExcel() {
     if (!data || !totals) return;
@@ -227,7 +262,7 @@ export function TargetReportPage({ branch = "BANDUNG" }: { branch?: "BANDUNG" | 
     ];
     const targetAllRow = [
       "",
-      "TARGET ALL",
+      data.dayCount > 1 ? `TARGET ALL (${data.dayCount} HARI)` : "TARGET ALL",
       data.targets.all.SERVER,
       "",
       data.targets.all.TARTUN,
@@ -260,10 +295,15 @@ export function TargetReportPage({ branch = "BANDUNG" }: { branch?: "BANDUNG" | 
       "",
     ];
 
-    const ws = XLSX.utils.aoa_to_sheet([header, ...rows, totalRow, targetAllRow, capRow]);
+    const titleRows = [
+      ["TARGET SALES HARIAN"],
+      [data.from === data.to ? `Tanggal: ${data.from}` : `Periode: ${data.from} s/d ${data.to} (${data.dayCount} hari)`],
+      [],
+    ];
+    const ws = XLSX.utils.aoa_to_sheet([...titleRows, header, ...rows, totalRow, targetAllRow, capRow]);
     const wb = XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(wb, ws, "Target Harian");
-    XLSX.writeFile(wb, `target-harian-${date}.xlsx`);
+    XLSX.writeFile(wb, `${fileStem}.xlsx`);
     setExcelBusy(false);
   }
 
@@ -302,7 +342,7 @@ export function TargetReportPage({ branch = "BANDUNG" }: { branch?: "BANDUNG" | 
         useCORS: true,
       });
       const link = document.createElement("a");
-      link.download = `target-harian-${date}.jpg`;
+      link.download = `${fileStem}.jpg`;
       link.href = canvas.toDataURL("image/jpeg", 0.95);
       link.click();
     } finally {
@@ -318,18 +358,28 @@ export function TargetReportPage({ branch = "BANDUNG" }: { branch?: "BANDUNG" | 
     <div className="space-y-4">
       {/* Control Bar */}
       <div className="rounded-xl border border-border/80 bg-surface p-3.5 shadow-xs flex flex-wrap items-center justify-between gap-3 no-print">
-        <div className="flex items-center gap-3">
-          <label htmlFor="target-report-date" className="text-xs font-semibold text-muted">Tanggal:</label>
+        <div className="flex flex-wrap items-center gap-x-3 gap-y-2">
+          <label htmlFor="target-report-from" className="text-xs font-semibold text-muted">Dari:</label>
           <input
-            id="target-report-date"
+            id="target-report-from"
             type="date"
-            value={date}
-            onChange={(e) => setDate(e.target.value)}
+            value={from}
+            max={to || undefined}
+            onChange={(e) => setFrom(e.target.value)}
+            className="rounded-lg border border-border/80 bg-surface-subtle px-3 py-1.5 text-xs text-foreground focus:outline-none focus:ring-2 focus:ring-accent/20 focus:border-accent transition-all"
+          />
+          <label htmlFor="target-report-to" className="text-xs font-semibold text-muted">Sampai:</label>
+          <input
+            id="target-report-to"
+            type="date"
+            value={to}
+            min={from || undefined}
+            onChange={(e) => setTo(e.target.value)}
             className="rounded-lg border border-border/80 bg-surface-subtle px-3 py-1.5 text-xs text-foreground focus:outline-none focus:ring-2 focus:ring-accent/20 focus:border-accent transition-all"
           />
           <button
             type="button"
-            onClick={() => applyDate(date)}
+            onClick={applyRange}
             className="inline-flex items-center gap-1.5 rounded-lg bg-accent text-accent-foreground px-3.5 py-1.5 text-xs font-semibold hover:bg-accent-hover transition-all shadow-xs"
           >
             <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
@@ -406,23 +456,12 @@ export function TargetReportPage({ branch = "BANDUNG" }: { branch?: "BANDUNG" | 
           <div ref={tableWrapRef} className="report-paper bg-surface rounded-xl border border-border/80 p-5 shadow-xs">
             <div className="text-center mb-4 print-header">
               <h2 className="text-lg font-bold text-foreground tracking-tight">TARGET SALES HARIAN</h2>
-              <p className="text-sm text-muted">
-                {(() => {
-                  try {
-                    const d = new Date(date);
-                    return Number.isNaN(d.getTime())
-                      ? date
-                      : d.toLocaleDateString("id-ID", {
-                          day: "numeric",
-                          month: "long",
-                          year: "numeric",
-                          timeZone: "UTC",
-                        });
-                  } catch {
-                    return date;
-                  }
-                })()}
-              </p>
+              <p className="text-sm text-muted">{periodLabel}</p>
+              {data.dayCount > 1 && (
+                <p className="text-[11px] text-muted mt-0.5">
+                  Rentang {data.dayCount} hari — kolom Target = target harian × {data.dayCount}
+                </p>
+              )}
             </div>
 
             <div className="overflow-x-auto">
@@ -535,7 +574,9 @@ export function TargetReportPage({ branch = "BANDUNG" }: { branch?: "BANDUNG" | 
                     <td className="px-2 py-2 text-right">{formatNumber(totals.totalQtyTrx)}</td>
                   </tr>
                   <tr className="bg-surface-subtle/50 text-muted">
-                    <td className="px-3 py-1.5 font-sans border-r border-border/60" colSpan={2}>TARGET ALL</td>
+                    <td className="px-3 py-1.5 font-sans border-r border-border/60" colSpan={2}>
+                      {data.dayCount > 1 ? `TARGET ALL (${data.dayCount} HARI)` : "TARGET ALL"}
+                    </td>
                     <td className="px-2 py-1.5 text-right">{formatNumber(data.targets.all.SERVER)}</td>
                     <td className="px-2 py-1.5 text-right border-r border-border/60">-</td>
                     <td className="px-2 py-1.5 text-right">{formatNumber(data.targets.all.TARTUN)}</td>

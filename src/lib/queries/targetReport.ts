@@ -59,18 +59,31 @@ function emptyFigure(): CategoryFigure {
   return { sales: 0, qtyOrTrx: 0 };
 }
 
-export async function getDailyTargetReport(date: Date, branch: "BANDUNG" | "CIMAHI" = "BANDUNG"): Promise<{
+/** Inclusive whole-day count between two date-only values (from == to -> 1). */
+export function countDays(from: Date, to: Date): number {
+  const ms = Date.UTC(to.getUTCFullYear(), to.getUTCMonth(), to.getUTCDate())
+    - Date.UTC(from.getUTCFullYear(), from.getUTCMonth(), from.getUTCDate());
+  return Math.max(1, Math.floor(ms / 86_400_000) + 1);
+}
+
+export async function getTargetReport(
+  from: Date,
+  to: Date,
+  branch: "BANDUNG" | "CIMAHI" = "BANDUNG"
+): Promise<{
   rows: TargetReportRow[];
   unmappedItemGroups: string[];
+  dayCount: number;
 }> {
   await ensureDefaults(branch);
 
+  const dateRange = { gte: from, lte: to };
   const [outlets, tartunRows, serverRows, saleRows, groupMappings] = await Promise.all([
     prisma.outlet.findMany({ where: { branch }, orderBy: { name: "asc" } }),
-    prisma.tartunDaily.findMany({ where: { tanggal: date } }),
-    prisma.serverDaily.findMany({ where: { tanggal: date } }),
+    prisma.tartunDaily.findMany({ where: { tanggal: dateRange } }),
+    prisma.serverDaily.findMany({ where: { tanggal: dateRange } }),
     prisma.sale.findMany({
-      where: { tanggal: date, ...EXCLUDE_HIDDEN_ITEMS },
+      where: { tanggal: dateRange, ...EXCLUDE_HIDDEN_ITEMS },
       select: { outletId: true, qty: true, labaRugi: true, item: { select: { itemGroup: true } } },
     }),
     prisma.itemGroupMapping.findMany(),
@@ -95,13 +108,21 @@ export async function getDailyTargetReport(date: Date, branch: "BANDUNG" | "CIMA
     });
   }
 
+  // Accumulate (not assign) — a date range has one tartun/server row per day
+  // per outlet, all of which sum into the outlet's figure for the period.
   for (const t of tartunRows) {
     const row = rowsByOutlet.get(t.outletId);
-    if (row) row.tartun = { sales: Number(t.sales), qtyOrTrx: t.trx };
+    if (row) {
+      row.tartun.sales += Number(t.sales);
+      row.tartun.qtyOrTrx += t.trx;
+    }
   }
   for (const s of serverRows) {
     const row = rowsByOutlet.get(s.outletId);
-    if (row) row.server = { sales: Number(s.sales), qtyOrTrx: s.trx };
+    if (row) {
+      row.server.sales += Number(s.sales);
+      row.server.qtyOrTrx += s.trx;
+    }
   }
 
   const unmapped = new Set<string>();
@@ -139,5 +160,5 @@ export async function getDailyTargetReport(date: Date, branch: "BANDUNG" | "CIMA
     return { ...r, totalSales, totalQtyTrx };
   });
 
-  return { rows, unmappedItemGroups: [...unmapped].sort() };
+  return { rows, unmappedItemGroups: [...unmapped].sort(), dayCount: countDays(from, to) };
 }
