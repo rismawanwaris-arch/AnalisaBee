@@ -14,6 +14,11 @@ export interface ImportSummary {
   duplicateCount: number;
   errorRowCount: number;
   noCabangCount: number;
+  /** Distinct item codes in this file not found in this branch's Master Item
+   *  list — auto-created as a fallback (flagged isFromSalesImport) so the
+   *  import never blocks, but worth surfacing so the owner knows to update
+   *  the master list via Settings. */
+  newItemsFromSalesCount: number;
   errors: RowError[];
   periodStart: Date | null;
   periodEnd: Date | null;
@@ -125,21 +130,42 @@ export async function importSalesFile(
         skipDuplicates: true,
       });
     }
+    // Sales import only MATCHES against the branch's Master Item list (see
+    // src/pages/settings — "Master Item per Cabang"); it no longer invents
+    // item definitions itself. A code missing from the master is still let
+    // through as a fallback (using this file's own name/group) so a daily
+    // import never blocks on the master being slightly out of date, but the
+    // fallback item is flagged isFromSalesImport so it's visible for cleanup.
+    let newItemsFromSalesCount = 0;
     if (itemsByCode.size) {
-      await prisma.item.createMany({
-        data: [...itemsByCode.values()].map((i) => ({
-          code: i.code,
-          name: i.name,
-          itemGroup: i.group,
-        })),
-        skipDuplicates: true,
-      });
+      const existingCodes = new Set(
+        (
+          await prisma.item.findMany({
+            where: { branch, code: { in: [...itemsByCode.keys()] } },
+            select: { code: true },
+          })
+        ).map((i) => i.code)
+      );
+      const newItems = [...itemsByCode.values()].filter((i) => !existingCodes.has(i.code));
+      newItemsFromSalesCount = newItems.length;
+      if (newItems.length) {
+        await prisma.item.createMany({
+          data: newItems.map((i) => ({
+            code: i.code,
+            name: i.name,
+            itemGroup: i.group,
+            branch,
+            isFromSalesImport: true,
+          })),
+          skipDuplicates: true,
+        });
+      }
     }
 
     const [outlets, employees, items] = await Promise.all([
       prisma.outlet.findMany({ where: { name: { in: outletNames } } }),
       prisma.employee.findMany({ where: { name: { in: employeeNames } } }),
-      prisma.item.findMany({ where: { code: { in: [...itemsByCode.keys()] } } }),
+      prisma.item.findMany({ where: { branch, code: { in: [...itemsByCode.keys()] } } }),
     ]);
 
     const outletIdByName = new Map(outlets.map((o) => [o.name, o.id]));
@@ -198,6 +224,7 @@ export async function importSalesFile(
       duplicateCount,
       errorRowCount: errors.length,
       noCabangCount,
+      newItemsFromSalesCount,
       errors: errors.slice(0, 50),
       periodStart,
       periodEnd,

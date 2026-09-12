@@ -149,9 +149,14 @@ model ServerDaily {
 
 model Item {
   id        Int     @id @default(autoincrement())
-  code      String  @unique
+  // Unique per branch, not globally — the two branches run independent POS
+  // catalogs and happen to reuse the same numeric codes for unrelated
+  // products (e.g. code "001506" is a Samsung case in Bandung but cat food
+  // in Cimahi). See @@unique([code, branch]) below.
+  code      String
   name      String
   itemGroup String?
+  branch    Branch  @default(BANDUNG)
   // A hidden item is excluded from every sales-analysis surface — its line
   // items drop out of omzet/laba/qty/tren, transaction counts, rankings, the
   // Kategori Item report, Analisa Data, Jam Operasional and the daily target
@@ -160,8 +165,15 @@ model Item {
   // everything. Points keep their own ItemPointExclusion mechanism.
   // See src/lib/queries/_hiddenItems.ts.
   isHidden  Boolean @default(false)
+  // True when this row was auto-created during a sales import because its
+  // (code, branch) wasn't found in the Master Item list yet — flags it as
+  // an unofficial definition for the owner to reconcile via a Master Item
+  // re-upload. A later Master Item import for the same (code, branch)
+  // overwrites the name/group and clears this flag.
+  isFromSalesImport Boolean @default(false)
   sales     Sale[]
 
+  @@unique([code, branch])
   @@index([name])
   @@map("items")
 }

@@ -14,11 +14,19 @@ import { StatCard } from "@/components/StatCard";
 import { formatDate, formatNumber, formatRupiah } from "@/lib/format";
 import { downloadCsv } from "@/lib/csv";
 
+type Branch = "BANDUNG" | "CIMAHI";
+
+const BRANCH_LABEL: Record<Branch, string> = {
+  BANDUNG: "Bandung",
+  CIMAHI: "Cimahi",
+};
+
 interface ItemOption {
   id: number;
   code: string;
   name: string;
   itemGroup: string | null;
+  branch: Branch;
 }
 
 interface DetailRow {
@@ -39,7 +47,7 @@ interface ByOutlet {
 }
 
 interface ItemDetail {
-  item: { id: number; code: string; name: string; itemGroup: string | null };
+  item: { id: number; code: string; name: string; itemGroup: string | null; branch: Branch };
   totals: {
     qty: number;
     subtotal: number;
@@ -184,8 +192,13 @@ export function ItemsPage() {
                   className="w-full text-left px-4 py-2 text-xs hover:bg-surface-hover flex items-center justify-between gap-2 transition-colors"
                 >
                   <span className="font-medium text-foreground truncate">{opt.name}</span>
-                  <span className="text-[11px] font-mono text-muted shrink-0 bg-surface-subtle px-1.5 py-0.5 rounded border border-border/50">
-                    {opt.code}
+                  <span className="flex items-center gap-1 shrink-0">
+                    <span className="text-[10px] font-medium text-muted/80 bg-surface-subtle px-1.5 py-0.5 rounded border border-border/40">
+                      {BRANCH_LABEL[opt.branch]}
+                    </span>
+                    <span className="text-[11px] font-mono text-muted bg-surface-subtle px-1.5 py-0.5 rounded border border-border/50">
+                      {opt.code}
+                    </span>
                   </span>
                 </button>
               </li>
@@ -211,6 +224,7 @@ export function ItemsPage() {
               </div>
               <p className="text-xs text-muted font-mono mt-0.5">
                 Kode: <strong className="text-foreground">{detail.item.code}</strong>
+                {` · Cabang: ${BRANCH_LABEL[detail.item.branch]}`}
                 {detail.item.itemGroup ? ` · Kategori: ${detail.item.itemGroup}` : ""}
               </p>
             </div>

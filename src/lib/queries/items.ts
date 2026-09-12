@@ -1,4 +1,7 @@
 import { prisma } from "@/lib/prisma";
+import { parseMasterItemBuffer } from "@/lib/parseMasterItems";
+
+export type ItemBranch = "BANDUNG" | "CIMAHI";
 
 export async function searchItems(q: string, limit = 20) {
   return prisma.item.findMany({
@@ -18,14 +21,16 @@ export async function searchItems(q: string, limit = 20) {
   });
 }
 
-/** Full item catalog (id/code/name/itemGroup only), for pages that filter
- *  client-side instead of round-tripping per keystroke — worth it because
- *  the catalog is small and bounded (hundreds of SKUs, not an ever-growing
- *  log like Sale), unlike searchItems's capped/paginated dropdown use. */
+/** Full item catalog (id/code/name/itemGroup/branch only), for pages that
+ *  filter client-side instead of round-tripping per keystroke — worth it
+ *  because the catalog is small and bounded (hundreds of SKUs per branch,
+ *  not an ever-growing log like Sale), unlike searchItems's capped/paginated
+ *  dropdown use. `branch` is included because code is only unique per
+ *  branch — two branches can show the same code for different products. */
 export async function listAllItems() {
   return prisma.item.findMany({
     where: { isHidden: false },
-    select: { id: true, code: true, name: true, itemGroup: true },
+    select: { id: true, code: true, name: true, itemGroup: true, branch: true },
     orderBy: { name: "asc" },
   });
 }
@@ -35,7 +40,15 @@ export async function listAllItems() {
 export async function listItemsForVisibility() {
   const [items, sums] = await Promise.all([
     prisma.item.findMany({
-      select: { id: true, code: true, name: true, itemGroup: true, isHidden: true },
+      select: {
+        id: true,
+        code: true,
+        name: true,
+        itemGroup: true,
+        branch: true,
+        isHidden: true,
+        isFromSalesImport: true,
+      },
       orderBy: { name: "asc" },
     }),
     prisma.sale.groupBy({
@@ -55,13 +68,174 @@ export async function listItemsForVisibility() {
         code: i.code,
         name: i.name,
         itemGroup: i.itemGroup,
+        branch: i.branch,
         isHidden: i.isHidden,
+        isFromSalesImport: i.isFromSalesImport,
         qty: s?._sum.qty ?? 0,
         subtotal: Number(s?._sum.subtotal ?? 0),
         transactionCount: s?._count._all ?? 0,
       };
     })
     .sort((a, b) => b.subtotal - a.subtotal);
+}
+
+// ==========================================
+// MASTER ITEM IMPORT — the source of truth for item code -> name/kategori
+// per cabang, uploaded by master via Settings. Independent from sales
+// import: sales import only MATCHES against this list (see importSales.ts),
+// it no longer invents item definitions from whatever a transaction file
+// happens to say.
+// ==========================================
+
+const PREVIEW_CHANGE_CAP = 500;
+
+export interface MasterItemChangeRow {
+  rowNumber: number;
+  code: string;
+  name: string;
+  itemGroup: string | null;
+  status: "NEW" | "UPDATE";
+  previousName?: string;
+  previousItemGroup?: string | null;
+}
+
+export interface MasterItemPreview {
+  branch: ItemBranch;
+  totalRows: number;
+  newCount: number;
+  updateCount: number;
+  unchangedCount: number;
+  duplicateInFileCount: number;
+  errorCount: number;
+  errors: { rowNumber: number; message: string }[];
+  /** NEW + UPDATE rows only, capped — UNCHANGED rows aren't worth listing. */
+  changes: MasterItemChangeRow[];
+}
+
+/** Dry-run: classifies every master-item row as NEW / UPDATE / UNCHANGED
+ *  against the current (code, branch) catalog, without writing anything.
+ *  Mirrors previewSalesFile's preview-before-commit pattern. */
+export async function previewMasterItemImport(
+  buffer: Buffer,
+  branch: ItemBranch
+): Promise<MasterItemPreview> {
+  const { rows, errors, duplicateInFileCount, totalRows } = parseMasterItemBuffer(buffer);
+
+  const existing = await prisma.item.findMany({
+    where: { branch, code: { in: rows.map((r) => r.code) } },
+    select: { code: true, name: true, itemGroup: true },
+  });
+  const existingByCode = new Map(existing.map((i) => [i.code, i]));
+
+  let newCount = 0;
+  let updateCount = 0;
+  let unchangedCount = 0;
+  const changes: MasterItemChangeRow[] = [];
+
+  for (const r of rows) {
+    const ex = existingByCode.get(r.code);
+    if (!ex) {
+      newCount++;
+      if (changes.length < PREVIEW_CHANGE_CAP) changes.push({ ...r, status: "NEW" });
+    } else if (ex.name !== r.name || (ex.itemGroup ?? null) !== r.itemGroup) {
+      updateCount++;
+      if (changes.length < PREVIEW_CHANGE_CAP) {
+        changes.push({
+          ...r,
+          status: "UPDATE",
+          previousName: ex.name,
+          previousItemGroup: ex.itemGroup,
+        });
+      }
+    } else {
+      unchangedCount++;
+    }
+  }
+
+  return {
+    branch,
+    totalRows,
+    newCount,
+    updateCount,
+    unchangedCount,
+    duplicateInFileCount,
+    errorCount: errors.length,
+    errors: errors.slice(0, 50),
+    changes,
+  };
+}
+
+export interface MasterItemImportSummary {
+  branch: ItemBranch;
+  totalRows: number;
+  createdCount: number;
+  updatedCount: number;
+  unchangedCount: number;
+  duplicateInFileCount: number;
+  errorCount: number;
+}
+
+const UPDATE_CHUNK_SIZE = 200;
+
+/** Upserts the master item list for one branch by (code, branch): creates
+ *  rows that don't exist yet, updates name/itemGroup where they changed, and
+ *  clears isFromSalesImport on any match — an official master definition
+ *  always wins over a fallback one created during sales import. */
+export async function importMasterItems(
+  buffer: Buffer,
+  branch: ItemBranch
+): Promise<MasterItemImportSummary> {
+  const { rows, errors, duplicateInFileCount, totalRows } = parseMasterItemBuffer(buffer);
+
+  const existing = await prisma.item.findMany({
+    where: { branch, code: { in: rows.map((r) => r.code) } },
+    select: { id: true, code: true, name: true, itemGroup: true },
+  });
+  const existingByCode = new Map(existing.map((i) => [i.code, i]));
+
+  const toCreate: { code: string; name: string; itemGroup: string | null }[] = [];
+  const toUpdate: { id: number; name: string; itemGroup: string | null }[] = [];
+  let unchangedCount = 0;
+
+  for (const r of rows) {
+    const ex = existingByCode.get(r.code);
+    if (!ex) {
+      toCreate.push({ code: r.code, name: r.name, itemGroup: r.itemGroup });
+    } else if (ex.name !== r.name || (ex.itemGroup ?? null) !== r.itemGroup) {
+      toUpdate.push({ id: ex.id, name: r.name, itemGroup: r.itemGroup });
+    } else {
+      unchangedCount++;
+    }
+  }
+
+  if (toCreate.length) {
+    await prisma.item.createMany({
+      data: toCreate.map((i) => ({ ...i, branch, isFromSalesImport: false })),
+      skipDuplicates: true,
+    });
+  }
+
+  for (let i = 0; i < toUpdate.length; i += UPDATE_CHUNK_SIZE) {
+    const chunk = toUpdate.slice(i, i + UPDATE_CHUNK_SIZE);
+    await prisma.$transaction(
+      chunk.map((u) =>
+        prisma.item.update({
+          where: { id: u.id },
+          data: { name: u.name, itemGroup: u.itemGroup, isFromSalesImport: false },
+        })
+      )
+    );
+  }
+
+  return {
+    branch,
+    totalRows,
+    createdCount: toCreate.length,
+    updatedCount: toUpdate.length,
+    unchangedCount,
+    duplicateInFileCount,
+    errorCount: errors.length,
+  };
 }
 
 export interface ItemCategoryRow {
@@ -188,7 +362,7 @@ export async function getItemDetail(itemId: number, range: { from?: Date; to?: D
   const byOutlet = [...byOutletMap.values()].sort((a, b) => b.qty - a.qty);
 
   return {
-    item: { id: item.id, code: item.code, name: item.name, itemGroup: item.itemGroup },
+    item: { id: item.id, code: item.code, name: item.name, itemGroup: item.itemGroup, branch: item.branch },
     filters: { from: from?.toISOString() ?? null, to: to?.toISOString() ?? null },
     totals: {
       qty: totals._sum.qty ?? 0,

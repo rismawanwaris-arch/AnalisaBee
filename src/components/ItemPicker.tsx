@@ -6,7 +6,13 @@ export interface ItemOption {
   code: string;
   name: string;
   itemGroup: string | null;
+  branch: "BANDUNG" | "CIMAHI";
 }
+
+const BRANCH_LABEL: Record<ItemOption["branch"], string> = {
+  BANDUNG: "Bandung",
+  CIMAHI: "Cimahi",
+};
 
 interface ItemPickerProps {
   selected: ItemOption | null;
@@ -97,8 +103,13 @@ export function ItemPicker({ selected, onSelect, placeholder, inputId }: ItemPic
                 className="w-full text-left px-3.5 py-2 text-xs hover:bg-surface-hover flex items-center justify-between gap-2 transition-colors"
               >
                 <span className="truncate font-medium text-foreground">{opt.name}</span>
-                <span className="text-[11px] font-mono text-muted shrink-0 bg-surface-subtle px-1.5 py-0.5 rounded border border-border/50">
-                  {opt.code}
+                <span className="flex items-center gap-1 shrink-0">
+                  <span className="text-[10px] font-medium text-muted/80 bg-surface-subtle px-1.5 py-0.5 rounded border border-border/40">
+                    {BRANCH_LABEL[opt.branch]}
+                  </span>
+                  <span className="text-[11px] font-mono text-muted bg-surface-subtle px-1.5 py-0.5 rounded border border-border/50">
+                    {opt.code}
+                  </span>
                 </span>
               </button>
             </li>
