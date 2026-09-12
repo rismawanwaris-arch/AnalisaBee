@@ -37,6 +37,9 @@ COPY src/server ./src/server
 COPY src/lib ./src/lib
 COPY tsconfig.json ./
 
+# one-off maintenance scripts — run via `docker compose exec app npx tsx scripts/<name>.ts`
+COPY scripts/*.ts ./scripts/
+
 # entrypoint: run migrations then start server
 COPY docker-entrypoint.sh ./
 RUN chmod +x docker-entrypoint.sh
