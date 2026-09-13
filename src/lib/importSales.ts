@@ -114,14 +114,16 @@ export async function importSalesFile(
     }
 
     if (outletNames.length) {
+      // Only sets branch for outlets created just now (skipDuplicates leaves
+      // existing rows untouched). Deliberately does NOT update branch for
+      // outlets that already exist — a single wrong branch pick on the
+      // upload form would otherwise silently flip every outlet in the file
+      // to the wrong branch (this happened in production 2026-09-13).
+      // Reassigning an outlet's branch is a deliberate, explicit action via
+      // Settings → "Pemetaan Cabang Outlet", never a side effect of import.
       await prisma.outlet.createMany({
         data: outletNames.map((name) => ({ name, branch })),
         skipDuplicates: true,
-      });
-      // Update branch for existing outlets that match this import's cabang names
-      await prisma.outlet.updateMany({
-        where: { name: { in: outletNames } },
-        data: { branch },
       });
     }
     if (employeeNames.length) {
