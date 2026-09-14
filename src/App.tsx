@@ -101,11 +101,15 @@ export function App() {
                 <Route path="/import" element={<ImportPage />} />
 
                 {/* Cimahi Branch */}
+                <Route path="/cimahi/dashboard" element={<DashboardPage branch="CIMAHI" />} />
                 <Route path="/cimahi" element={<CimahiLayout />}>
                   <Route index element={<Navigate to="/cimahi/target" replace />} />
                   <Route path="target" element={<TargetReportPage branch="CIMAHI" />} />
                   <Route path="target/analitik" element={<AnalitikPage branch="CIMAHI" />} />
                   <Route path="target/jam-operasional" element={<JamOperasionalPage branch="CIMAHI" />} />
+                </Route>
+                <Route path="/cimahi/points" element={<PointsLayout branch="CIMAHI" />}>
+                  <Route index element={<PointsLeaderboardPage branch="CIMAHI" />} />
                 </Route>
 
                 {/* Activity Log */}

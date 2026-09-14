@@ -2,17 +2,21 @@ import { prisma } from "@/lib/prisma";
 import type { Prisma } from "@/generated/prisma/client";
 import { EXCLUDE_HIDDEN_ITEMS } from "@/lib/queries/_hiddenItems";
 
+export type DashboardBranch = "BANDUNG" | "CIMAHI";
+
 export interface DashboardFilters {
   from?: Date;
   to?: Date;
   outletId?: number;
+  branch?: DashboardBranch;
 }
 
 function buildWhere(filters: DashboardFilters): Prisma.SaleWhereInput {
-  const { from, to, outletId } = filters;
+  const { from, to, outletId, branch } = filters;
   return {
     ...EXCLUDE_HIDDEN_ITEMS,
     ...(outletId ? { outletId } : {}),
+    ...(branch ? { outlet: { branch } } : {}),
     ...(from || to
       ? {
           tanggal: {
@@ -37,6 +41,7 @@ function trendPct(series: number[]): number | null {
 
 export async function getDashboardSummary(filters: DashboardFilters = {}) {
   const where = buildWhere(filters);
+  const { branch } = filters;
 
   const [
     totals,
@@ -45,7 +50,7 @@ export async function getDashboardSummary(filters: DashboardFilters = {}) {
     topOutletsRaw,
     outletCount,
     itemCount,
-    employeeCount,
+    employeeIds,
     latestImport,
     posTargets,
   ] = await Promise.all([
@@ -74,18 +79,29 @@ export async function getDashboardSummary(filters: DashboardFilters = {}) {
         orderBy: { _sum: { subtotal: "desc" } },
         take: 10,
       }),
-      prisma.outlet.count(),
-      prisma.item.count(),
-      prisma.employee.count(),
-      prisma.importBatch.findFirst({ orderBy: { uploadedAt: "desc" } }),
-      // Network-wide daily LABA target for the POS-derived lines only. Server
-      // and Tarik Tunai targets are excluded because those figures come from
-      // separate imports, not from the Sale rows this dashboard charts.
+      prisma.outlet.count({ where: branch ? { branch } : undefined }),
+      prisma.item.count({ where: branch ? { branch } : undefined }),
+      // Employees aren't tagged with a branch (they can sell at either), so
+      // "active employees" is derived from who actually sold within this
+      // filter's window/branch, not a raw system-wide headcount.
+      prisma.sale.groupBy({ by: ["employeeId"], where }),
+      prisma.importBatch.findFirst({
+        where: branch ? { branch } : undefined,
+        orderBy: { uploadedAt: "desc" },
+      }),
+      // Daily LABA target for the POS-derived lines only (Server and Tarik
+      // Tunai targets are excluded — those figures come from separate
+      // imports, not from the Sale rows this dashboard charts).
       prisma.target.findMany({
-        where: { scope: "ALL", category: { in: ["PETSHOP", "AKSESORIS", "SP_VOUCHER"] } },
+        where: {
+          scope: "ALL",
+          category: { in: ["PETSHOP", "AKSESORIS", "SP_VOUCHER"] },
+          ...(branch ? { branch } : {}),
+        },
         select: { amount: true },
       }),
     ]);
+  const employeeCount = employeeIds.length;
 
   const [items, outlets] = await Promise.all([
     prisma.item.findMany({ where: { id: { in: topItemsRaw.map((i) => i.itemId) } } }),

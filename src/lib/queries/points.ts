@@ -264,7 +264,8 @@ export function classifyItemCategory(itemName: string): string {
 
 export async function getLeaderboard(
   from: Date,
-  to: Date
+  to: Date,
+  branch?: "BANDUNG" | "CIMAHI"
 ): Promise<{ rows: EmployeeLeaderboardRow[]; from: string; to: string }> {
   await ensureDefaults();
 
@@ -276,6 +277,7 @@ export async function getLeaderboard(
     where: {
       tanggal: { gte: from, lte: to },
       ...(excludedIds.length > 0 ? { employeeId: { notIn: excludedIds } } : {}),
+      ...(branch ? { outlet: { branch } } : {}),
     },
     _sum: { qty: true },
   });
@@ -324,7 +326,8 @@ export interface LeaderboardExportRow extends EmployeeLeaderboardRow {
  *  the Excel export, so it doesn't fan out into one request per employee. */
 export async function getLeaderboardExport(
   from: Date,
-  to: Date
+  to: Date,
+  branch?: "BANDUNG" | "CIMAHI"
 ): Promise<{ rows: LeaderboardExportRow[]; from: string; to: string }> {
   await ensureDefaults();
 
@@ -335,6 +338,7 @@ export async function getLeaderboardExport(
     where: {
       tanggal: { gte: from, lte: to },
       ...(excludedIds.length > 0 ? { employeeId: { notIn: excludedIds } } : {}),
+      ...(branch ? { outlet: { branch } } : {}),
     },
     _sum: { qty: true },
   });
@@ -390,14 +394,20 @@ export async function getEmployeePointBreakdown(
   employeeId: number,
   from: Date,
   to: Date,
-  outletId?: number
+  outletId?: number,
+  branch?: "BANDUNG" | "CIMAHI"
 ): Promise<ItemPointBreakdownRow[]> {
   await ensureDefaults();
 
   // Aggregate at DB level — group by item, not individual sale rows
   const salesAgg = await prisma.sale.groupBy({
     by: ["itemId"],
-    where: { employeeId, tanggal: { gte: from, lte: to }, ...(outletId ? { outletId } : {}) },
+    where: {
+      employeeId,
+      tanggal: { gte: from, lte: to },
+      ...(outletId ? { outletId } : {}),
+      ...(branch ? { outlet: { branch } } : {}),
+    },
     _sum: { qty: true },
   });
 

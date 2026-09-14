@@ -54,14 +54,19 @@ function currentPeriodMonthStr(periodStartDay: number): string {
 
 const MODE_LABEL: Record<Mode, string> = { day: "Per Hari", month: "Per Bulan", range: "Per Rentang" };
 
-export function PointsLeaderboardPage() {
+interface PointsLeaderboardPageProps {
+  branch?: "BANDUNG" | "CIMAHI";
+}
+
+export function PointsLeaderboardPage({ branch = "BANDUNG" }: PointsLeaderboardPageProps = {}) {
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
+  const basePath = branch === "CIMAHI" ? "/cimahi/points" : "/points";
 
   // Default to 1 (plain calendar month) until the real cut-off day loads —
   // matches prior behavior for the common case and self-corrects below once
   // periodStartDay is known.
-  const { data: settings } = usePointsSettings();
+  const { data: settings } = usePointsSettings(branch);
   const periodStartDay = settings?.periodStartDay ?? 1;
   // Configurable in Settings ("Nilai Rupiah per Poin") — admin-only estimate
   // of the incentive value, never sent to the public Papan Poin endpoint.
@@ -92,6 +97,7 @@ export function PointsLeaderboardPage() {
 
   const queryParams = useCallback(() => {
     const params = new URLSearchParams();
+    if (branch) params.set("branch", branch);
     if (urlMode === "day") {
       params.set("from", urlDay);
       params.set("to", urlDay);
@@ -104,7 +110,7 @@ export function PointsLeaderboardPage() {
       params.set("month", String(m));
     }
     return params;
-  }, [urlMode, urlDay, urlFrom, urlTo, urlMonth]);
+  }, [branch, urlMode, urlDay, urlFrom, urlTo, urlMonth]);
 
   // React Query keys off the resolved period params directly, so switching
   // mode/date and switching back to a period already seen this session
@@ -147,7 +153,7 @@ export function PointsLeaderboardPage() {
       params.set("from", from);
       params.set("to", to);
     } else params.set("month", month);
-    navigate(`/points?${params.toString()}`);
+    navigate(`${basePath}?${params.toString()}`);
   }
 
   function toggleExpand(employeeId: number) {

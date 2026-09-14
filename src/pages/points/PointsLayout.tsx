@@ -1,18 +1,22 @@
 import { Link, useLocation, Outlet } from "react-router-dom";
 
-const TABS = [
-  { href: "/points", label: "Leaderboard Pegawai", exact: true },
-];
+interface PointsLayoutProps {
+  branch?: "BANDUNG" | "CIMAHI";
+}
 
-export function PointsLayout() {
+export function PointsLayout({ branch = "BANDUNG" }: PointsLayoutProps = {}) {
   const location = useLocation();
   const pathname = location.pathname;
+  const basePath = branch === "CIMAHI" ? "/cimahi/points" : "/points";
+  const TABS = [{ href: basePath, label: "Leaderboard Pegawai", exact: true }];
 
   return (
     <div className="space-y-5">
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-3 pb-2 border-b border-border/60">
         <div>
-          <h1 className="text-lg font-bold tracking-tight text-foreground">Poin &amp; Insentif Penjualan</h1>
+          <h1 className="text-lg font-bold tracking-tight text-foreground">
+            Poin &amp; Insentif Penjualan{branch === "CIMAHI" ? " — Cimahi" : ""}
+          </h1>
           <p className="text-xs text-muted mt-0.5">
             Akumulasi poin produk terjual per pegawai untuk penilaian performa dan insentif.
           </p>

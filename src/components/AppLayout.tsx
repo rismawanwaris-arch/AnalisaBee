@@ -10,6 +10,8 @@ import { FEATURE_KEYS, type FeatureKey } from "../lib/features";
 // before "/items", and "/cimahi/target" before a hypothetical "/cimahi".
 const PATH_FEATURES: [string, FeatureKey][] = [
   ["/cimahi/target", "target_cimahi"],
+  ["/cimahi/dashboard", "dashboard_cimahi"],
+  ["/cimahi/points", "points_cimahi"],
   ["/items/categories", "item_categories"],
   ["/target", "target_bandung"],
   ["/points", "points"],
@@ -28,6 +30,8 @@ const FEATURE_PATHS: Record<FeatureKey, string> = {
   target_bandung: "/target",
   points: "/points",
   target_cimahi: "/cimahi/target",
+  dashboard_cimahi: "/cimahi/dashboard",
+  points_cimahi: "/cimahi/points",
   items: "/items",
   item_categories: "/items/categories",
   outlets: "/outlets",

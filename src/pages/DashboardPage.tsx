@@ -27,7 +27,11 @@ interface DashboardData {
   labaTargetPerDay: number | null;
 }
 
-export function DashboardPage() {
+interface DashboardPageProps {
+  branch?: "BANDUNG" | "CIMAHI";
+}
+
+export function DashboardPage({ branch = "BANDUNG" }: DashboardPageProps) {
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
   const showAll = searchParams.get("all") === "1";
@@ -39,12 +43,14 @@ export function DashboardPage() {
   const [from, setFrom] = useState(urlFrom);
   const [to, setTo] = useState(urlTo);
   const [outletId, setOutletId] = useState(urlOutlet);
-  const { data: outlets = [] } = useOutlets();
+  const { data: outlets = [] } = useOutlets(branch);
+  const basePath = branch === "CIMAHI" ? "/cimahi/dashboard" : "/dashboard";
 
   const { data, isLoading: loading } = useQuery({
-    queryKey: ["dashboard", urlFrom, urlTo, urlOutlet],
+    queryKey: ["dashboard", branch, urlFrom, urlTo, urlOutlet],
     queryFn: async (): Promise<DashboardData> => {
       const params = new URLSearchParams();
+      params.set("branch", branch);
       if (urlFrom) params.set("from", urlFrom);
       if (urlTo) params.set("to", urlTo);
       if (urlOutlet) params.set("outletId", urlOutlet);
@@ -65,14 +71,14 @@ export function DashboardPage() {
     if (from) params.set("from", from);
     if (to) params.set("to", to);
     if (outletId) params.set("outletId", outletId);
-    navigate(`/dashboard?${params.toString()}`);
+    navigate(`${basePath}?${params.toString()}`);
   }
 
   function resetFilters() {
     setFrom("");
     setTo("");
     setOutletId("");
-    navigate("/dashboard?all=1");
+    navigate(`${basePath}?all=1`);
   }
 
   const hasFilters = Boolean(urlFrom || urlTo || urlOutlet);
@@ -108,7 +114,9 @@ export function DashboardPage() {
       {/* Page Header */}
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div>
-          <h1 className="text-lg font-bold text-foreground tracking-tight">Ringkasan Eksekutif</h1>
+          <h1 className="text-lg font-bold text-foreground tracking-tight">
+            Ringkasan Eksekutif{branch === "CIMAHI" ? " — Cimahi" : ""}
+          </h1>
           <p className="text-xs text-muted mt-0.5">
             {showAll ? (
               "Menampilkan agregasi seluruh data penjualan tanpa batas rentang."

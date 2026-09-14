@@ -692,11 +692,16 @@ app.get("/api/status", requireAuth, async (req, res) => {
   }
 });
 
-app.get("/api/dashboard", requireFeature("dashboard"), async (req, res) => {
+const dashboardFeature = (req: express.Request): FeatureKey =>
+  req.query.branch === "CIMAHI" ? "dashboard_cimahi" : "dashboard";
+
+app.get("/api/dashboard", requireFeature(dashboardFeature), async (req, res) => {
   try {
     const from = parseDateParam(req.query.from);
     const to = parseDateParam(req.query.to);
-    const summary = await getDashboardSummary({ from, to });
+    const outletId = req.query.outletId ? Number(req.query.outletId) : undefined;
+    const branch = req.query.branch === "CIMAHI" ? "CIMAHI" : "BANDUNG";
+    const summary = await getDashboardSummary({ from, to, outletId, branch });
     return res.json(summary);
   } catch (err: any) {
     return res.status(500).json({ error: err.message });
@@ -713,7 +718,8 @@ app.get("/api/dashboard", requireFeature("dashboard"), async (req, res) => {
 app.get("/api/outlets", requireAuth, cacheBriefly(30), async (req, res) => {
   try {
     const includeHidden = req.query.includeHidden === "true" || req.query.includeHidden === "1";
-    const list = await getOutletList(includeHidden);
+    const branch = req.query.branch === "CIMAHI" || req.query.branch === "BANDUNG" ? req.query.branch : undefined;
+    const list = await getOutletList(includeHidden, branch);
     return res.json(list);
   } catch (err: any) {
     return res.status(500).json({ error: err.message });
@@ -1213,10 +1219,26 @@ async function resolvePointPeriod(req: express.Request): Promise<{ from: Date; t
   return computeMonthPeriod(year, month, periodStartDay);
 }
 
-app.get("/api/points/leaderboard", requireFeature("points"), async (req, res) => {
+// Points settings (period cut-off, rate, targets) stay shared across both
+// cabang — only the leaderboard DATA is scoped by branch, not the incentive
+// policy itself. The resolver still branches on `?branch=` so a Cimahi-only
+// custom role (holding points_cimahi, not points) can still read/use it.
+const pointsFeature = (req: express.Request): FeatureKey =>
+  req.query.branch === "CIMAHI" ? "points_cimahi" : "points";
+
+// Always resolves to a concrete branch (defaulting to BANDUNG) — the admin
+// leaderboard/export/breakdown endpoints must never silently fall back to
+// mixing both cabang's sales. The public wallboard endpoint intentionally
+// stays company-wide and does NOT use this (see getEmployeePointBreakdown
+// callsite under "PUBLIC POINTS WALLBOARD" below).
+function parsePointsBranch(req: express.Request): "BANDUNG" | "CIMAHI" {
+  return req.query.branch === "CIMAHI" ? "CIMAHI" : "BANDUNG";
+}
+
+app.get("/api/points/leaderboard", requireFeature(pointsFeature), async (req, res) => {
   try {
     const { from, to } = await resolvePointPeriod(req);
-    const data = await getLeaderboard(from, to);
+    const data = await getLeaderboard(from, to, parsePointsBranch(req));
     return res.json(data);
   } catch (err: any) {
     return res.status(500).json({ error: err.message });
@@ -1225,10 +1247,10 @@ app.get("/api/points/leaderboard", requireFeature("points"), async (req, res) =>
 
 // Leaderboard + every employee's item breakdown in one payload — feeds the
 // "Export Excel" button on the Poin & Insentif page.
-app.get("/api/points/leaderboard/export", requireFeature("points"), async (req, res) => {
+app.get("/api/points/leaderboard/export", requireFeature(pointsFeature), async (req, res) => {
   try {
     const { from, to } = await resolvePointPeriod(req);
-    const data = await getLeaderboardExport(from, to);
+    const data = await getLeaderboardExport(from, to, parsePointsBranch(req));
     return res.json(data);
   } catch (err: any) {
     return res.status(500).json({ error: err.message });
@@ -1237,7 +1259,7 @@ app.get("/api/points/leaderboard/export", requireFeature("points"), async (req, 
 
 // Feature-gated (not master-only): the leaderboard page also needs this to
 // compute which calendar month the currently-running period belongs to.
-app.get("/api/points/settings", requireFeature("points"), cacheBriefly(30), async (req, res) => {
+app.get("/api/points/settings", requireFeature(pointsFeature), cacheBriefly(30), async (req, res) => {
   try {
     const data = await getPointPeriodSetting();
     return res.json(data);
@@ -1296,13 +1318,13 @@ async function handlePointsSettingsWrite(req: express.Request, res: express.Resp
 app.put("/api/points/settings", requireMaster, handlePointsSettingsWrite);
 app.post("/api/points/settings", requireMaster, handlePointsSettingsWrite);
 
-app.get("/api/points/employee/:id", requireFeature("points"), async (req, res) => {
+app.get("/api/points/employee/:id", requireFeature(pointsFeature), async (req, res) => {
   try {
     const id = Number(req.params.id);
     if (Number.isNaN(id)) return res.status(400).json({ error: "ID tidak valid" });
 
     const { from, to } = await resolvePointPeriod(req);
-    const breakdown = await getEmployeePointBreakdown(id, from, to);
+    const breakdown = await getEmployeePointBreakdown(id, from, to, undefined, parsePointsBranch(req));
     return res.json(breakdown);
   } catch (err: any) {
     return res.status(500).json({ error: err.message });

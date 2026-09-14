@@ -52,10 +52,13 @@ export async function getOutletSummary(filters: OutletSummaryFilters = {}) {
   return rows;
 }
 
-export async function getOutletList(includeHidden = false) {
+export async function getOutletList(includeHidden = false, branch?: "BANDUNG" | "CIMAHI") {
   const [outlets, sums] = await Promise.all([
     prisma.outlet.findMany({
-      where: includeHidden ? undefined : { isHidden: false },
+      where: {
+        ...(includeHidden ? {} : { isHidden: false }),
+        ...(branch ? { branch } : {}),
+      },
       orderBy: { name: "asc" },
     }),
     prisma.sale.groupBy({
