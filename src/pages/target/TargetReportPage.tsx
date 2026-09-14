@@ -531,23 +531,23 @@ export function TargetReportPage({ branch = "BANDUNG" }: { branch?: "BANDUNG" | 
                         <td className="px-3 py-1.5 font-sans font-medium text-foreground border-r border-border/60 truncate max-w-44">
                           {r.outlet}
                         </td>
-                        <td className={`px-2 py-1.5 text-right font-medium ${serverGood ? "bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 font-bold" : "text-muted"}`}>
+                        <td className={`px-2 py-1.5 text-right font-medium ${serverGood ? "bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 font-bold" : "bg-rose-500/10 text-rose-600 dark:text-rose-400 font-semibold"}`}>
                           {formatNumber(r.server.sales)}
                         </td>
                         <td className="px-2 py-1.5 text-right text-muted border-r border-border/60">{formatNumber(r.server.qtyOrTrx)}</td>
-                        <td className={`px-2 py-1.5 text-right font-medium ${tartunGood ? "bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 font-bold" : "text-muted"}`}>
+                        <td className={`px-2 py-1.5 text-right font-medium ${tartunGood ? "bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 font-bold" : "bg-rose-500/10 text-rose-600 dark:text-rose-400 font-semibold"}`}>
                           {formatNumber(r.tartun.sales)}
                         </td>
                         <td className="px-2 py-1.5 text-right text-muted border-r border-border/60">{formatNumber(r.tartun.qtyOrTrx)}</td>
-                        <td className={`px-2 py-1.5 text-right font-medium ${petshopGood ? "bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 font-bold" : "text-muted"}`}>
+                        <td className={`px-2 py-1.5 text-right font-medium ${petshopGood ? "bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 font-bold" : "bg-rose-500/10 text-rose-600 dark:text-rose-400 font-semibold"}`}>
                           {formatNumber(r.petshop.sales)}
                         </td>
                         <td className="px-2 py-1.5 text-right text-muted border-r border-border/60">{formatNumber(r.petshop.qtyOrTrx)}</td>
-                        <td className={`px-2 py-1.5 text-right font-medium ${accGood ? "bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 font-bold" : "text-muted"}`}>
+                        <td className={`px-2 py-1.5 text-right font-medium ${accGood ? "bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 font-bold" : "bg-rose-500/10 text-rose-600 dark:text-rose-400 font-semibold"}`}>
                           {formatNumber(r.aksesoris.sales)}
                         </td>
                         <td className="px-2 py-1.5 text-right text-muted border-r border-border/60">{formatNumber(r.aksesoris.qtyOrTrx)}</td>
-                        <td className={`px-2 py-1.5 text-right font-medium ${spGood ? "bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 font-bold" : "text-muted"}`}>
+                        <td className={`px-2 py-1.5 text-right font-medium ${spGood ? "bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 font-bold" : "bg-rose-500/10 text-rose-600 dark:text-rose-400 font-semibold"}`}>
                           {formatNumber(r.spVoucher.sales)}
                         </td>
                         <td className="px-2 py-1.5 text-right text-muted border-r border-border/60">{formatNumber(r.spVoucher.qtyOrTrx)}</td>
