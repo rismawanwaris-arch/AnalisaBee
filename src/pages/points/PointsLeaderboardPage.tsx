@@ -54,14 +54,20 @@ function currentPeriodMonthStr(periodStartDay: number): string {
 
 const MODE_LABEL: Record<Mode, string> = { day: "Per Hari", month: "Per Bulan", range: "Per Rentang" };
 
+type PointsCategory = "PETSHOP" | "AKSESORIS";
+
 interface PointsLeaderboardPageProps {
   branch?: "BANDUNG" | "CIMAHI";
+  // Scopes every fetch on this page to one report category (Bandung only —
+  // see src/lib/queries/points.ts getItemGroupsForCategory). Omit to mix
+  // every category, which was the only behavior before this split existed.
+  category?: PointsCategory;
 }
 
-export function PointsLeaderboardPage({ branch = "BANDUNG" }: PointsLeaderboardPageProps = {}) {
+export function PointsLeaderboardPage({ branch = "BANDUNG", category }: PointsLeaderboardPageProps = {}) {
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
-  const basePath = branch === "CIMAHI" ? "/cimahi/points" : "/points";
+  const basePath = branch === "CIMAHI" ? "/cimahi/points" : category === "PETSHOP" ? "/points/petshop" : "/points";
 
   // Default to 1 (plain calendar month) until the real cut-off day loads —
   // matches prior behavior for the common case and self-corrects below once
@@ -98,6 +104,7 @@ export function PointsLeaderboardPage({ branch = "BANDUNG" }: PointsLeaderboardP
   const queryParams = useCallback(() => {
     const params = new URLSearchParams();
     if (branch) params.set("branch", branch);
+    if (category) params.set("category", category);
     if (urlMode === "day") {
       params.set("from", urlDay);
       params.set("to", urlDay);
@@ -110,7 +117,7 @@ export function PointsLeaderboardPage({ branch = "BANDUNG" }: PointsLeaderboardP
       params.set("month", String(m));
     }
     return params;
-  }, [branch, urlMode, urlDay, urlFrom, urlTo, urlMonth]);
+  }, [branch, category, urlMode, urlDay, urlFrom, urlTo, urlMonth]);
 
   // React Query keys off the resolved period params directly, so switching
   // mode/date and switching back to a period already seen this session
@@ -174,8 +181,9 @@ export function PointsLeaderboardPage({ branch = "BANDUNG" }: PointsLeaderboardP
       if (!exportRes.ok) throw new Error("gagal memuat data export");
       const exportData: { rows: LeaderboardExportRow[] } = await exportRes.json();
 
+      const categoryLabel = category === "PETSHOP" ? " — Petshop" : category === "AKSESORIS" ? " — Aksesoris" : "";
       const meta: (string | number)[][] = [
-        ["Poin & Insentif Penjualan"],
+        [`Poin & Insentif Penjualan${categoryLabel}`],
         [`Periode: ${formatDate(data.from)} - ${formatDate(data.to)}`],
         [`1 poin = ${formatRupiah(pointRupiahRate)}`],
         [],
@@ -219,7 +227,8 @@ export function PointsLeaderboardPage({ branch = "BANDUNG" }: PointsLeaderboardP
       const wb = XLSX.utils.book_new();
       XLSX.utils.book_append_sheet(wb, ws1, "Poin & Insentif");
       XLSX.utils.book_append_sheet(wb, ws2, "Rincian Item");
-      XLSX.writeFile(wb, `poin-insentif-${data.from.slice(0, 10)}_sd_${data.to.slice(0, 10)}.xlsx`);
+      const fileSuffix = category ? `-${category.toLowerCase()}` : "";
+      XLSX.writeFile(wb, `poin-insentif${fileSuffix}-${data.from.slice(0, 10)}_sd_${data.to.slice(0, 10)}.xlsx`);
     } catch {
       // ignore — nothing downloaded
     } finally {

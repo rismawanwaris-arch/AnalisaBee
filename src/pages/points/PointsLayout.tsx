@@ -8,14 +8,25 @@ export function PointsLayout({ branch = "BANDUNG" }: PointsLayoutProps = {}) {
   const location = useLocation();
   const pathname = location.pathname;
   const basePath = branch === "CIMAHI" ? "/cimahi/points" : "/points";
-  const TABS = [{ href: basePath, label: "Leaderboard Pegawai", exact: true }];
+  // Bandung splits into two category-scoped leaderboards (Aksesoris vs
+  // Petshop — see FEATURE_KEYS "points" / "points_petshop"); Cimahi doesn't
+  // have that split yet, so it keeps the single original tab.
+  const TABS =
+    branch === "BANDUNG"
+      ? [
+          { href: "/points", label: "Aksesoris", exact: true },
+          { href: "/points/petshop", label: "Petshop", exact: true },
+        ]
+      : [{ href: basePath, label: "Leaderboard Pegawai", exact: true }];
+  const isPetshop = branch === "BANDUNG" && pathname.startsWith("/points/petshop");
+  const titleSuffix = branch === "CIMAHI" ? " — Cimahi" : isPetshop ? " — Petshop (Bandung)" : " — Aksesoris (Bandung)";
 
   return (
     <div className="space-y-5">
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-3 pb-2 border-b border-border/60">
         <div>
           <h1 className="text-lg font-bold tracking-tight text-foreground">
-            Poin &amp; Insentif Penjualan{branch === "CIMAHI" ? " — Cimahi" : ""}
+            Poin &amp; Insentif Penjualan{titleSuffix}
           </h1>
           <p className="text-xs text-muted mt-0.5">
             Akumulasi poin produk terjual per pegawai untuk penilaian performa dan insentif.

@@ -7,13 +7,15 @@ import type { SystemStatus } from "../lib/queries/systemStatus";
 import { FEATURE_KEYS, type FeatureKey } from "../lib/features";
 
 // Longest/most-specific prefix first — "/items/categories" must be checked
-// before "/items", and "/cimahi/target" before a hypothetical "/cimahi".
+// before "/items", "/cimahi/target" before a hypothetical "/cimahi", and
+// "/points/petshop" before "/points" (its own, less-specific, sibling page).
 const PATH_FEATURES: [string, FeatureKey][] = [
   ["/cimahi/target", "target_cimahi"],
   ["/cimahi/dashboard", "dashboard_cimahi"],
   ["/cimahi/points", "points_cimahi"],
   ["/items/categories", "item_categories"],
   ["/target", "target_bandung"],
+  ["/points/petshop", "points_petshop"],
   ["/points", "points"],
   ["/items", "items"],
   ["/outlets", "outlets"],
@@ -29,6 +31,7 @@ const FEATURE_PATHS: Record<FeatureKey, string> = {
   dashboard: "/dashboard",
   target_bandung: "/target",
   points: "/points",
+  points_petshop: "/points/petshop",
   target_cimahi: "/cimahi/target",
   dashboard_cimahi: "/cimahi/dashboard",
   points_cimahi: "/cimahi/points",

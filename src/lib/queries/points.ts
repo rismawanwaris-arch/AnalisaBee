@@ -1,5 +1,19 @@
 import { prisma } from "@/lib/prisma";
 import { ensureDefaults } from "@/lib/ensureDefaults";
+import type { ReportCategory } from "@/generated/prisma/client";
+
+// Lets the leaderboard/export/breakdown queries scope points to one report
+// category (PETSHOP vs AKSESORIS) — reuses the same ItemGroupMapping the
+// daily target report is built from, so "which category is this item" never
+// has a second definition to drift out of sync. Returns the raw itemGroup
+// strings mapped to that category, for an `itemGroup: { in: [...] }` filter.
+async function getItemGroupsForCategory(category: ReportCategory): Promise<string[]> {
+  const rows = await prisma.itemGroupMapping.findMany({
+    where: { category },
+    select: { itemGroup: true },
+  });
+  return rows.map((r) => r.itemGroup);
+}
 
 export async function listItemPointRules() {
   await ensureDefaults();
@@ -265,11 +279,15 @@ export function classifyItemCategory(itemName: string): string {
 export async function getLeaderboard(
   from: Date,
   to: Date,
-  branch?: "BANDUNG" | "CIMAHI"
+  branch?: "BANDUNG" | "CIMAHI",
+  category?: ReportCategory
 ): Promise<{ rows: EmployeeLeaderboardRow[]; from: string; to: string }> {
   await ensureDefaults();
 
-  const excludedIds = await getExcludedEmployeeIds();
+  const [excludedIds, categoryGroups] = await Promise.all([
+    getExcludedEmployeeIds(),
+    category ? getItemGroupsForCategory(category) : Promise.resolve(undefined),
+  ]);
 
   // Aggregate at DB level — avoids pulling every sale row into memory
   const salesAgg = await prisma.sale.groupBy({
@@ -278,6 +296,7 @@ export async function getLeaderboard(
       tanggal: { gte: from, lte: to },
       ...(excludedIds.length > 0 ? { employeeId: { notIn: excludedIds } } : {}),
       ...(branch ? { outlet: { branch } } : {}),
+      ...(categoryGroups ? { item: { itemGroup: { in: categoryGroups } } } : {}),
     },
     _sum: { qty: true },
   });
@@ -327,11 +346,15 @@ export interface LeaderboardExportRow extends EmployeeLeaderboardRow {
 export async function getLeaderboardExport(
   from: Date,
   to: Date,
-  branch?: "BANDUNG" | "CIMAHI"
+  branch?: "BANDUNG" | "CIMAHI",
+  category?: ReportCategory
 ): Promise<{ rows: LeaderboardExportRow[]; from: string; to: string }> {
   await ensureDefaults();
 
-  const excludedIds = await getExcludedEmployeeIds();
+  const [excludedIds, categoryGroups] = await Promise.all([
+    getExcludedEmployeeIds(),
+    category ? getItemGroupsForCategory(category) : Promise.resolve(undefined),
+  ]);
 
   const salesAgg = await prisma.sale.groupBy({
     by: ["itemId", "employeeId"],
@@ -339,6 +362,7 @@ export async function getLeaderboardExport(
       tanggal: { gte: from, lte: to },
       ...(excludedIds.length > 0 ? { employeeId: { notIn: excludedIds } } : {}),
       ...(branch ? { outlet: { branch } } : {}),
+      ...(categoryGroups ? { item: { itemGroup: { in: categoryGroups } } } : {}),
     },
     _sum: { qty: true },
   });
@@ -395,9 +419,12 @@ export async function getEmployeePointBreakdown(
   from: Date,
   to: Date,
   outletId?: number,
-  branch?: "BANDUNG" | "CIMAHI"
+  branch?: "BANDUNG" | "CIMAHI",
+  category?: ReportCategory
 ): Promise<ItemPointBreakdownRow[]> {
   await ensureDefaults();
+
+  const categoryGroups = category ? await getItemGroupsForCategory(category) : undefined;
 
   // Aggregate at DB level — group by item, not individual sale rows
   const salesAgg = await prisma.sale.groupBy({
@@ -407,6 +434,7 @@ export async function getEmployeePointBreakdown(
       tanggal: { gte: from, lte: to },
       ...(outletId ? { outletId } : {}),
       ...(branch ? { outlet: { branch } } : {}),
+      ...(categoryGroups ? { item: { itemGroup: { in: categoryGroups } } } : {}),
     },
     _sum: { qty: true },
   });

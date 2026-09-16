@@ -83,9 +83,13 @@ export function App() {
                   <Route path="pengaturan" element={<Navigate to="/settings?tab=target" replace />} />
                 </Route>
 
-                {/* Points & Incentives Section */}
+                {/* Points & Incentives Section — Bandung splits into two
+                    category-scoped leaderboards (Aksesoris / Petshop) since
+                    both product lines are sold there; see FEATURE_KEYS
+                    "points" / "points_petshop". */}
                 <Route path="/points" element={<PointsLayout />}>
-                  <Route index element={<PointsLeaderboardPage />} />
+                  <Route index element={<PointsLeaderboardPage category="AKSESORIS" />} />
+                  <Route path="petshop" element={<PointsLeaderboardPage category="PETSHOP" />} />
                   <Route path="pengaturan" element={<Navigate to="/settings?tab=points" replace />} />
                 </Route>
 

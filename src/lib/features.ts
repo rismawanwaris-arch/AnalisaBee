@@ -7,6 +7,7 @@ export const FEATURE_KEYS = [
   "dashboard",
   "target_bandung",
   "points",
+  "points_petshop",
   "target_cimahi",
   "dashboard_cimahi",
   "points_cimahi",
@@ -25,7 +26,8 @@ export type FeatureKey = (typeof FEATURE_KEYS)[number];
 export const FEATURE_LABELS: Record<FeatureKey, string> = {
   dashboard: "Dashboard — Bandung",
   target_bandung: "Target Harian — Bandung",
-  points: "Poin Penjualan — Bandung",
+  points: "Poin Penjualan — Aksesoris (Bandung)",
+  points_petshop: "Poin Penjualan — Petshop (Bandung)",
   target_cimahi: "Target Harian — Cimahi",
   dashboard_cimahi: "Dashboard — Cimahi",
   points_cimahi: "Poin Penjualan — Cimahi",

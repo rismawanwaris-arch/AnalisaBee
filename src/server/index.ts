@@ -1221,10 +1221,14 @@ async function resolvePointPeriod(req: express.Request): Promise<{ from: Date; t
 
 // Points settings (period cut-off, rate, targets) stay shared across both
 // cabang — only the leaderboard DATA is scoped by branch, not the incentive
-// policy itself. The resolver still branches on `?branch=` so a Cimahi-only
-// custom role (holding points_cimahi, not points) can still read/use it.
-const pointsFeature = (req: express.Request): FeatureKey =>
-  req.query.branch === "CIMAHI" ? "points_cimahi" : "points";
+// policy itself. The resolver also branches on `?category=` (Bandung only —
+// Petshop and Aksesoris are separate menus/permissions there; Cimahi has no
+// such split yet, so any category on a Cimahi request is ignored for gating,
+// though the query itself still honours it if ever sent).
+const pointsFeature = (req: express.Request): FeatureKey => {
+  if (req.query.branch === "CIMAHI") return "points_cimahi";
+  return req.query.category === "PETSHOP" ? "points_petshop" : "points";
+};
 
 // Always resolves to a concrete branch (defaulting to BANDUNG) — the admin
 // leaderboard/export/breakdown endpoints must never silently fall back to
@@ -1235,10 +1239,18 @@ function parsePointsBranch(req: express.Request): "BANDUNG" | "CIMAHI" {
   return req.query.branch === "CIMAHI" ? "CIMAHI" : "BANDUNG";
 }
 
+// Undefined = no category filter (mixes every category, same as before this
+// split existed) — only the Poin Aksesoris / Poin Petshop pages send one.
+function parsePointsCategory(req: express.Request): ReportCategory | undefined {
+  return req.query.category === "PETSHOP" || req.query.category === "AKSESORIS"
+    ? req.query.category
+    : undefined;
+}
+
 app.get("/api/points/leaderboard", requireFeature(pointsFeature), async (req, res) => {
   try {
     const { from, to } = await resolvePointPeriod(req);
-    const data = await getLeaderboard(from, to, parsePointsBranch(req));
+    const data = await getLeaderboard(from, to, parsePointsBranch(req), parsePointsCategory(req));
     return res.json(data);
   } catch (err: any) {
     return res.status(500).json({ error: err.message });
@@ -1250,7 +1262,7 @@ app.get("/api/points/leaderboard", requireFeature(pointsFeature), async (req, re
 app.get("/api/points/leaderboard/export", requireFeature(pointsFeature), async (req, res) => {
   try {
     const { from, to } = await resolvePointPeriod(req);
-    const data = await getLeaderboardExport(from, to, parsePointsBranch(req));
+    const data = await getLeaderboardExport(from, to, parsePointsBranch(req), parsePointsCategory(req));
     return res.json(data);
   } catch (err: any) {
     return res.status(500).json({ error: err.message });
@@ -1324,7 +1336,14 @@ app.get("/api/points/employee/:id", requireFeature(pointsFeature), async (req, r
     if (Number.isNaN(id)) return res.status(400).json({ error: "ID tidak valid" });
 
     const { from, to } = await resolvePointPeriod(req);
-    const breakdown = await getEmployeePointBreakdown(id, from, to, undefined, parsePointsBranch(req));
+    const breakdown = await getEmployeePointBreakdown(
+      id,
+      from,
+      to,
+      undefined,
+      parsePointsBranch(req),
+      parsePointsCategory(req)
+    );
     return res.json(breakdown);
   } catch (err: any) {
     return res.status(500).json({ error: err.message });
