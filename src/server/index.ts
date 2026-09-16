@@ -1537,10 +1537,20 @@ function parsePublicOutletId(req: express.Request): number | undefined {
   return raw && Number.isInteger(raw) ? raw : undefined;
 }
 
+// Undefined = no category filter (mixes both, the only behavior before the
+// Aksesoris/Petshop wallboard split existed). Same values as the internal
+// pointsFeature/parsePointsCategory — kept separate since this route has no
+// auth/feature-gating to hook a permission check into.
+function parsePublicCategory(req: express.Request): ReportCategory | undefined {
+  return req.query.category === "PETSHOP" || req.query.category === "AKSESORIS"
+    ? req.query.category
+    : undefined;
+}
+
 app.get("/api/public/points/dashboard", publicPointsLimiter, async (req, res) => {
   try {
     const { from, to, pointTarget, periodStartDay } = await resolvePublicPointsPeriod(req);
-    const data = await getPublicPointsDashboard(from, to, parsePublicOutletId(req), pointTarget);
+    const data = await getPublicPointsDashboard(from, to, parsePublicOutletId(req), pointTarget, parsePublicCategory(req));
     // periodStartDay lets the page figure out which calendar month the
     // *currently running* cycle actually belongs to (see EmployeePointsDashboardPage) —
     // not sensitive, it's the same cut-off day already implied by `from`/`to` below.
@@ -1556,7 +1566,14 @@ app.get("/api/public/points/employee/:id", publicPointsLimiter, async (req, res)
   if (!Number.isInteger(employeeId)) return res.status(400).json({ error: "ID tidak valid." });
   try {
     const { from, to } = await resolvePublicPointsPeriod(req);
-    const breakdown = await getEmployeePointBreakdown(employeeId, from, to, parsePublicOutletId(req));
+    const breakdown = await getEmployeePointBreakdown(
+      employeeId,
+      from,
+      to,
+      parsePublicOutletId(req),
+      undefined,
+      parsePublicCategory(req)
+    );
     return res.json(breakdown);
   } catch {
     return res.status(500).json({ error: "Terjadi kesalahan server." });

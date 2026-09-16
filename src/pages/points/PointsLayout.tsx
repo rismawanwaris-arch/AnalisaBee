@@ -52,7 +52,7 @@ export function PointsLayout({ branch = "BANDUNG" }: PointsLayoutProps = {}) {
             })}
           </nav>
           <a
-            href="/papan-poin"
+            href={isPetshop ? "/papan-poin/petshop" : "/papan-poin"}
             target="_blank"
             rel="noopener noreferrer"
             className="inline-flex items-center gap-1.5 rounded-xl border border-border/80 bg-surface px-3 py-1.5 text-xs font-semibold text-foreground hover:bg-surface-hover transition-all shadow-2xs"

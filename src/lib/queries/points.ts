@@ -496,19 +496,26 @@ export interface PublicPointsDashboard {
  *  getLeaderboard (internal, network-wide only), this includes every active
  *  employee — even ones with 0 points this period — and can scope points to
  *  one outlet. An employee's displayed "outlet" is always their busiest one
- *  network-wide for the period (stable, not affected by the outlet filter);
- *  when an outlet filter is active, the roster itself narrows to employees
- *  who actually sold something there in this period, since a wallboard for
- *  one outlet showing every network-wide employee at 0 would be noise. */
+ *  network-wide for the period (stable, not affected by the outlet OR
+ *  category filter); when an outlet filter is active, the roster itself
+ *  narrows to employees who actually sold something there in this period,
+ *  since a wallboard for one outlet showing every network-wide employee at 0
+ *  would be noise. `category` scopes to one report category (Aksesoris vs
+ *  Petshop — see the internal /points split); omit to mix both, the only
+ *  behavior before that split existed. */
 export async function getPublicPointsDashboard(
   from: Date,
   to: Date,
   outletId: number | undefined,
-  pointTarget: number
+  pointTarget: number,
+  category?: ReportCategory
 ): Promise<PublicPointsDashboard> {
   await ensureDefaults();
 
-  const excludedIds = await getExcludedEmployeeIds();
+  const [excludedIds, categoryGroups] = await Promise.all([
+    getExcludedEmployeeIds(),
+    category ? getItemGroupsForCategory(category) : Promise.resolve(undefined),
+  ]);
   const excludeClause = excludedIds.length > 0 ? { employeeId: { notIn: excludedIds } } : {};
 
   const [roster, salesAgg, outletAgg, outlets] = await Promise.all([
@@ -518,7 +525,12 @@ export async function getPublicPointsDashboard(
     }),
     prisma.sale.groupBy({
       by: ["itemId", "employeeId"],
-      where: { tanggal: { gte: from, lte: to }, ...excludeClause, ...(outletId ? { outletId } : {}) },
+      where: {
+        tanggal: { gte: from, lte: to },
+        ...excludeClause,
+        ...(outletId ? { outletId } : {}),
+        ...(categoryGroups ? { item: { itemGroup: { in: categoryGroups } } } : {}),
+      },
       _sum: { qty: true },
     }),
     // Deliberately NOT filtered by outletId — this is what makes an

@@ -67,10 +67,18 @@ const RANK_BADGE = [
   "bg-orange-600/15 text-orange-600 dark:text-orange-400 border-orange-600/30",
 ];
 
+interface EmployeePointsDashboardPageProps {
+  // Which board this is — Bandung sells both accessories and petshop goods,
+  // so (like the internal /points split) the public wallboard is two
+  // separate pages too, not one mixed leaderboard. Omit for the pre-split,
+  // combined behavior (kept only so the route can't 500 if ever hit bare).
+  category?: "PETSHOP" | "AKSESORIS";
+}
+
 // This page is intentionally standalone and public — no login, no
 // AuthContext, no sidebar. It's meant to run unattended on a tablet/TV per
 // outlet, so it auto-refreshes on its own rather than waiting for a click.
-export function EmployeePointsDashboardPage() {
+export function EmployeePointsDashboardPage({ category }: EmployeePointsDashboardPageProps = {}) {
   const [mode, setMode] = useState<Mode>("month");
   const [day, setDay] = useState(todayStr());
   // Guessed with periodStartDay=1 until the first response reveals the real
@@ -94,8 +102,9 @@ export function EmployeePointsDashboardPage() {
   const queryParams = useCallback(() => {
     const params = new URLSearchParams({ period: mode, date: mode === "month" ? month : day });
     if (outletId) params.set("outletId", outletId);
+    if (category) params.set("category", category);
     return params;
-  }, [mode, day, month, outletId]);
+  }, [mode, day, month, outletId, category]);
 
   const load = useCallback(async () => {
     const seq = ++loadSeq.current;
@@ -165,8 +174,18 @@ export function EmployeePointsDashboardPage() {
     <div className="min-h-screen bg-background px-4 py-6 md:px-8 md:py-8">
       <div className="max-w-5xl mx-auto space-y-5">
         <div className="text-center space-y-1">
-          <h1 className="text-2xl font-bold tracking-tight text-foreground">🏆 Papan Poin Karyawan</h1>
-          <p className="text-xs text-muted">Peringkat pencapaian poin penjualan aksesoris</p>
+          <h1 className="text-2xl font-bold tracking-tight text-foreground">
+            🏆 Papan Poin Karyawan{category === "PETSHOP" ? " — Petshop" : category === "AKSESORIS" ? " — Aksesoris" : ""}
+          </h1>
+          <p className="text-xs text-muted">
+            Peringkat pencapaian poin penjualan {category === "PETSHOP" ? "petshop" : "aksesoris"}
+          </p>
+          <a
+            href={category === "PETSHOP" ? "/papan-poin" : "/papan-poin/petshop"}
+            className="inline-block text-[11px] text-muted hover:text-accent underline underline-offset-2 transition-colors"
+          >
+            Lihat papan {category === "PETSHOP" ? "Aksesoris" : "Petshop"} →
+          </a>
         </div>
 
         {/* Filters */}

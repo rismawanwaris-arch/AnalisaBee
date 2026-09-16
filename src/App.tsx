@@ -67,8 +67,12 @@ export function App() {
 
               {/* Public, no-login employee points wallboard — see AGENTS.md-adjacent
                   discussion: Employee and User are unrelated models, so this page
-                  intentionally lives outside <AppLayout /> and its auth guard. */}
-              <Route path="/papan-poin" element={<EmployeePointsDashboardPage />} />
+                  intentionally lives outside <AppLayout /> and its auth guard.
+                  Split into two boards, same reasoning as the internal /points
+                  Aksesoris/Petshop split — /papan-poin keeps its original meaning
+                  (Aksesoris) so existing bookmarks/tablets don't silently change. */}
+              <Route path="/papan-poin" element={<EmployeePointsDashboardPage category="AKSESORIS" />} />
+              <Route path="/papan-poin/petshop" element={<EmployeePointsDashboardPage category="PETSHOP" />} />
 
               {/* Protected Application Routes */}
               <Route element={<AppLayout />}>
