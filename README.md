@@ -1,23 +1,37 @@
 # AnalisaBEe
 
-Dashboard analisa data penjualan dari export Excel POS. Upload file `.xls`/`.xlsx` bulanan,
-data disimpan permanen di database sehingga bisa dianalisa lintas bulan — bukan sekadar
-dibaca sekali lalu hilang.
+Dashboard analisa data penjualan dari export Excel POS, untuk dua cabang (Bandung & Cimahi).
+Upload file `.xls`/`.xlsx` periodik, data disimpan permanen di database sehingga bisa
+dianalisa lintas bulan — bukan sekadar dibaca sekali lalu hilang. Lihat
+[BLUEPRINT.md](BLUEPRINT.md) untuk arsitektur & aturan domain lengkap.
 
 ## Fitur saat ini
 
-- **Import Data** — upload file Excel, otomatis dedup baris yang sudah pernah diimpor (aman
-  diunggah ulang), riwayat setiap import tersimpan.
-- **Item Lookup** — cari satu item, lihat terjual di outlet mana, berapa pcs, tanggal berapa
-  (dengan filter rentang tanggal, chart per outlet, export CSV).
-- **Dashboard** — KPI dengan tren & sparkline, chart omzet/laba harian, leaderboard top 10
-  item & outlet, filter global tanggal + outlet.
-- **Outlet & Pegawai** — halaman performa per outlet dan per pegawai.
+- **Import Data** — upload file Excel penjualan (per cabang), otomatis dedup baris yang
+  sudah pernah diimpor (aman diunggah ulang), riwayat setiap import tersimpan. Katalog item
+  per cabang dikelola terpisah lewat import "Master Item".
+- **Dashboard** — KPI dengan tren & sparkline, chart omzet/laba harian, top 10 item & outlet,
+  filter tanggal + outlet, per cabang.
+- **Laporan Target Harian** — pencapaian per outlet vs target (harian atau rentang tanggal),
+  per kategori (Server/Tartun/Petshop/Aksesoris/SP-Voucher), export Excel & JPEG.
+- **Poin & Insentif Penjualan** — leaderboard poin pegawai per periode (harian/mingguan/
+  bulanan/rentang custom), rincian per item, export Excel. Bandung terpisah jadi dua menu
+  (Aksesoris & Petshop) karena dua lini produk berbeda. Ada juga **Papan Poin** publik
+  (tanpa login, untuk TV/tablet di outlet).
+- **Item & SKU / Kategori Item** — cari & telusuri satu item lintas outlet/tanggal, atau
+  lihat performa per kategori. Item/outlet/pegawai bisa disembunyikan dari seluruh analisa
+  (tanpa menghapus data penjualannya).
+- **Performa Outlet & Pegawai** — halaman performa per outlet dan per pegawai.
+- **Analisa Data** — gabungan Penjualan/Tarik Tunai/Komisi Server dalam satu tabel, dengan
+  hapus massal.
+- **Akun & Peran** — multi-user (`master`/`admin`), peran kustom per fitur untuk akun admin,
+  log aktivitas, backup/restore data & pengaturan.
 
 ## Stack
 
-Next.js 16 (App Router) · PostgreSQL · Prisma 7 (driver adapter, tanpa native binary) ·
-Tailwind v4 · Recharts · next-themes (dark/light).
+Vite + React 19 (SPA) · Express (API server, satu proses dengan SPA di produksi) ·
+PostgreSQL · Prisma 7 (driver adapter, tanpa native binary) · Tailwind v4 · Recharts ·
+React Query. **Bukan Next.js** — lihat [BLUEPRINT.md §2](BLUEPRINT.md#2-stack).
 
 ## Development
 
@@ -62,17 +76,21 @@ Buka http://localhost:3000.
 ## Struktur proyek
 
 ```
-prisma/schema.prisma        Skema database (Outlet, Item, Employee, ImportBatch, Sale)
-src/lib/parseExcel.ts       Parser file Excel → baris ternormalisasi
-src/lib/importSales.ts      Import baris ke database (dedup via rowHash)
-src/lib/queries/*.ts        Query agregasi, dipakai bareng oleh API route & server page
-src/app/api/*               API routes
-src/app/*                   Halaman (dashboard, items, outlets, employees, import)
-src/components/*            Komponen UI (chart, KPI card, leaderboard, dll)
+prisma/schema.prisma         Skema database (Outlet, Item, Employee, ImportBatch, Sale, ...)
+src/lib/parseExcel.ts        Parser file Excel penjualan → baris ternormalisasi
+src/lib/importSales.ts       Import baris ke database (dedup via rowHash)
+src/lib/queries/*.ts         Query agregasi — satu file per domain, dipakai oleh server/routes
+src/server/index.ts          Entry point Express: setup app, mount semua router, listen
+src/server/middleware.ts     Auth guard (requireAuth/requireMaster/requireFeature), logActivity
+src/server/routes/*.ts       Satu file per domain API — lihat BLUEPRINT.md §7 untuk peta lengkap
+src/pages/*                  Halaman (Dashboard, Target, Poin, Item, Outlet, Pegawai, Import, ...)
+src/components/*             Komponen UI (chart, KPI card, tabel, modal, dll)
 ```
 
 Setiap fitur baru pada dasarnya: 1 tabel/relasi baru (jika perlu) → 1 fungsi di
-`lib/queries` → 1 API route → 1 halaman. Tidak perlu mengubah fondasi yang ada.
+`lib/queries` → 1 endpoint di `server/routes/<domain>.ts` yang sesuai → 1 halaman/komponen.
+Detail lengkap alur kerja + jebakan yang sudah pernah menggigit ada di
+[BLUEPRINT.md §12](BLUEPRINT.md#12-menambah-fitur-baru--urutan-kerja).
 
 ## Deploy ke ZimaOS (Docker)
 
@@ -132,9 +150,9 @@ Backup tersimpan di `backups/analisabee-<timestamp>.sql.gz`. Sesekali salin fold
 dari server (laptop, cloud storage, dll) — backup yang cuma ada di disk yang sama dengan
 datanya tidak melindungi dari kegagalan disk itu sendiri.
 
-## Roadmap
+## Belum ada (sadar, bukan lupa)
 
-- **Fase 2**: perbandingan antar bulan, filter grup item pada dashboard.
-- **Fase 3**: export laporan terjadwal, alert item slow-moving.
-
-Prioritas menyesuaikan kebutuhan yang muncul saat dipakai sehari-hari.
+Perbandingan Year-over-Year, alert item slow-moving/stok (tidak ada data stok dari POS),
+global search. Daftar lengkap + alasan tiap satu ada di
+[BLUEPRINT.md §11](BLUEPRINT.md#11-batasan-saat-ini-sadar-bukan-lupa). Prioritas
+menyesuaikan kebutuhan yang muncul saat dipakai sehari-hari, bukan roadmap tetap.

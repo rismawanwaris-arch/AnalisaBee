@@ -48,7 +48,8 @@ dashboard** — bersih, padat data, dark/light mode, aksen biru navy.
 ## 3. Warna (Design Tokens)
 
 Didefinisikan sebagai CSS custom properties, di-switch lewat atribut
-`data-theme="dark"` di root (`next-themes`, default: ikut sistem).
+`data-theme="dark"` di root (dikelola `ThemeContext` sendiri — lihat
+`src/context/ThemeContext.tsx` — bukan library pihak ketiga; default: ikut sistem).
 
 ### Light (default)
 | Token | Hex | Pemakaian |
