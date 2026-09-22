@@ -5,6 +5,7 @@ export interface ParsedMasterItemRow {
   code: string;
   name: string;
   itemGroup: string | null;
+  brand: string | null;
 }
 
 export interface MasterItemRowError {
@@ -20,8 +21,10 @@ export interface MasterItemParseResult {
 }
 
 // Column names as exported by the POS "Table List" master item report. Only
-// Kode Item and Nama Item are required — Item Grup is read when present but
-// its absence doesn't fail the whole file (some exports omit it).
+// Kode Item and Nama Item are required — Item Grup and Merk are read when
+// present but their absence doesn't fail the whole file. "Merk" in
+// particular isn't part of the raw POS export at all — it's a column the
+// owner adds on top of it to power the brand filter on Performa Outlet.
 const REQUIRED_HEADERS = ["Kode Item", "Nama Item"];
 
 export function parseMasterItemBuffer(buffer: Buffer): MasterItemParseResult {
@@ -62,6 +65,11 @@ export function parseMasterItemBuffer(buffer: Buffer): MasterItemParseResult {
       itemGroupRaw === null || itemGroupRaw === undefined || String(itemGroupRaw).trim() === ""
         ? null
         : String(itemGroupRaw).trim();
+    const brandRaw = r["Merk"];
+    const brand =
+      brandRaw === null || brandRaw === undefined || String(brandRaw).trim() === ""
+        ? null
+        : String(brandRaw).trim();
 
     if (!code) {
       errors.push({ rowNumber, message: "Kode Item kosong" });
@@ -76,7 +84,7 @@ export function parseMasterItemBuffer(buffer: Buffer): MasterItemParseResult {
       return; // first occurrence in the file wins
     }
     seenCodes.add(code);
-    rows.push({ rowNumber, code, name, itemGroup });
+    rows.push({ rowNumber, code, name, itemGroup, brand });
   });
 
   return { rows, errors, duplicateInFileCount, totalRows: raw.length };

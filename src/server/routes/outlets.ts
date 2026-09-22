@@ -30,7 +30,9 @@ outletsRouter.get("/api/outlets/summary", requireFeature("outlets"), async (req,
     const employeeId = req.query.employeeId ? Number(req.query.employeeId) : undefined;
     const subtotalMin = req.query.subtotalMin ? Number(req.query.subtotalMin) : undefined;
     const subtotalMax = req.query.subtotalMax ? Number(req.query.subtotalMax) : undefined;
-    const rows = await getOutletSummary({ from, to, itemId, employeeId, subtotalMin, subtotalMax });
+    const itemGroup = typeof req.query.itemGroup === "string" && req.query.itemGroup ? req.query.itemGroup : undefined;
+    const brand = typeof req.query.brand === "string" && req.query.brand ? req.query.brand : undefined;
+    const rows = await getOutletSummary({ from, to, itemId, employeeId, subtotalMin, subtotalMax, itemGroup, brand });
     return res.json(rows);
   } catch (err: any) {
     return res.status(500).json({ error: err.message });

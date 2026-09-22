@@ -35,6 +35,41 @@ export async function listAllItems() {
   });
 }
 
+export interface ItemFilterOptions {
+  itemGroups: string[];
+  brands: string[];
+}
+
+/** Distinct kategori (Item Grup) and merk (brand) values currently in the
+ *  visible catalog — powers the Kategori/Merk filter dropdowns on Performa
+ *  Outlet. Hidden items don't contribute, same as every other catalog list.
+ *  `brands` will be sparse until Master Item files with a "Merk" column are
+ *  (re-)imported — the field is optional and starts empty on every item. */
+export async function getItemFilterOptions(): Promise<ItemFilterOptions> {
+  const [groups, brands] = await Promise.all([
+    prisma.item.findMany({
+      where: { isHidden: false, itemGroup: { not: null } },
+      select: { itemGroup: true },
+      distinct: ["itemGroup"],
+    }),
+    prisma.item.findMany({
+      where: { isHidden: false, brand: { not: null } },
+      select: { brand: true },
+      distinct: ["brand"],
+    }),
+  ]);
+  return {
+    itemGroups: groups
+      .map((g) => g.itemGroup!.trim())
+      .filter((g) => g !== "")
+      .sort((a, b) => a.localeCompare(b)),
+    brands: brands
+      .map((b) => b.brand!.trim())
+      .filter((b) => b !== "")
+      .sort((a, b) => a.localeCompare(b)),
+  };
+}
+
 /** Full catalog WITH hidden items and lifetime sales sums — for the "Visibilitas
  *  Item" settings panel only. Mirrors getOutletList / getEmployeeList. */
 export async function listItemsForVisibility() {
@@ -94,9 +129,11 @@ export interface MasterItemChangeRow {
   code: string;
   name: string;
   itemGroup: string | null;
+  brand: string | null;
   status: "NEW" | "UPDATE";
   previousName?: string;
   previousItemGroup?: string | null;
+  previousBrand?: string | null;
 }
 
 export interface MasterItemPreview {
@@ -123,7 +160,7 @@ export async function previewMasterItemImport(
 
   const existing = await prisma.item.findMany({
     where: { branch, code: { in: rows.map((r) => r.code) } },
-    select: { code: true, name: true, itemGroup: true },
+    select: { code: true, name: true, itemGroup: true, brand: true },
   });
   const existingByCode = new Map(existing.map((i) => [i.code, i]));
 
@@ -137,7 +174,7 @@ export async function previewMasterItemImport(
     if (!ex) {
       newCount++;
       if (changes.length < PREVIEW_CHANGE_CAP) changes.push({ ...r, status: "NEW" });
-    } else if (ex.name !== r.name || (ex.itemGroup ?? null) !== r.itemGroup) {
+    } else if (ex.name !== r.name || (ex.itemGroup ?? null) !== r.itemGroup || (ex.brand ?? null) !== r.brand) {
       updateCount++;
       if (changes.length < PREVIEW_CHANGE_CAP) {
         changes.push({
@@ -145,6 +182,7 @@ export async function previewMasterItemImport(
           status: "UPDATE",
           previousName: ex.name,
           previousItemGroup: ex.itemGroup,
+          previousBrand: ex.brand,
         });
       }
     } else {
@@ -178,9 +216,9 @@ export interface MasterItemImportSummary {
 const UPDATE_CHUNK_SIZE = 200;
 
 /** Upserts the master item list for one branch by (code, branch): creates
- *  rows that don't exist yet, updates name/itemGroup where they changed, and
- *  clears isFromSalesImport on any match — an official master definition
- *  always wins over a fallback one created during sales import. */
+ *  rows that don't exist yet, updates name/itemGroup/brand where they
+ *  changed, and clears isFromSalesImport on any match — an official master
+ *  definition always wins over a fallback one created during sales import. */
 export async function importMasterItems(
   buffer: Buffer,
   branch: ItemBranch
@@ -189,20 +227,20 @@ export async function importMasterItems(
 
   const existing = await prisma.item.findMany({
     where: { branch, code: { in: rows.map((r) => r.code) } },
-    select: { id: true, code: true, name: true, itemGroup: true },
+    select: { id: true, code: true, name: true, itemGroup: true, brand: true },
   });
   const existingByCode = new Map(existing.map((i) => [i.code, i]));
 
-  const toCreate: { code: string; name: string; itemGroup: string | null }[] = [];
-  const toUpdate: { id: number; name: string; itemGroup: string | null }[] = [];
+  const toCreate: { code: string; name: string; itemGroup: string | null; brand: string | null }[] = [];
+  const toUpdate: { id: number; name: string; itemGroup: string | null; brand: string | null }[] = [];
   let unchangedCount = 0;
 
   for (const r of rows) {
     const ex = existingByCode.get(r.code);
     if (!ex) {
-      toCreate.push({ code: r.code, name: r.name, itemGroup: r.itemGroup });
-    } else if (ex.name !== r.name || (ex.itemGroup ?? null) !== r.itemGroup) {
-      toUpdate.push({ id: ex.id, name: r.name, itemGroup: r.itemGroup });
+      toCreate.push({ code: r.code, name: r.name, itemGroup: r.itemGroup, brand: r.brand });
+    } else if (ex.name !== r.name || (ex.itemGroup ?? null) !== r.itemGroup || (ex.brand ?? null) !== r.brand) {
+      toUpdate.push({ id: ex.id, name: r.name, itemGroup: r.itemGroup, brand: r.brand });
     } else {
       unchangedCount++;
     }
@@ -221,7 +259,7 @@ export async function importMasterItems(
       chunk.map((u) =>
         prisma.item.update({
           where: { id: u.id },
-          data: { name: u.name, itemGroup: u.itemGroup, isFromSalesImport: false },
+          data: { name: u.name, itemGroup: u.itemGroup, brand: u.brand, isFromSalesImport: false },
         })
       )
     );

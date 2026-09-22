@@ -20,6 +20,11 @@ interface EmployeeOption {
   name: string;
 }
 
+interface ItemFilterOptions {
+  itemGroups: string[];
+  brands: string[];
+}
+
 function startOfWeekStr(): string {
   const d = new Date();
   d.setDate(d.getDate() - d.getDay());
@@ -71,6 +76,7 @@ export function OutletsPage() {
   const { currentPeriod, loaded: periodLoaded } = usePeriod();
   const [outlets, setOutlets] = useState<OutletRow[]>([]);
   const [employees, setEmployees] = useState<EmployeeOption[]>([]);
+  const [filterOptions, setFilterOptions] = useState<ItemFilterOptions>({ itemGroups: [], brands: [] });
   const [loading, setLoading] = useState(true);
 
   // Filter state — initialised from custom period once loaded
@@ -90,6 +96,8 @@ export function OutletsPage() {
   const [employeeId, setEmployeeId] = useState("");
   const [subtotalMin, setSubtotalMin] = useState("");
   const [subtotalMax, setSubtotalMax] = useState("");
+  const [itemGroup, setItemGroup] = useState("");
+  const [brand, setBrand] = useState("");
 
   useEffect(() => {
     const ctrl = new AbortController();
@@ -98,6 +106,12 @@ export function OutletsPage() {
       .then((list: EmployeeOption[]) =>
         setEmployees([...list].sort((a, b) => a.name.localeCompare(b.name)))
       )
+      .catch(() => {});
+    fetch("/api/items/filter-options", { signal: ctrl.signal })
+      .then((r) => (r.ok ? r.json() : null))
+      .then((opts: ItemFilterOptions | null) => {
+        if (opts) setFilterOptions(opts);
+      })
       .catch(() => {});
     return () => ctrl.abort();
   }, []);
@@ -112,6 +126,8 @@ export function OutletsPage() {
       if (employeeId) params.set("employeeId", employeeId);
       if (subtotalMin) params.set("subtotalMin", subtotalMin);
       if (subtotalMax) params.set("subtotalMax", subtotalMax);
+      if (itemGroup) params.set("itemGroup", itemGroup);
+      if (brand) params.set("brand", brand);
       const res = await fetch(`/api/outlets/summary?${params}`);
       if (res.ok) setOutlets(await res.json());
     } catch {
@@ -119,7 +135,7 @@ export function OutletsPage() {
     } finally {
       setLoading(false);
     }
-  }, [from, to, selectedItem, employeeId, subtotalMin, subtotalMax]);
+  }, [from, to, selectedItem, employeeId, subtotalMin, subtotalMax, itemGroup, brand]);
 
   useEffect(() => {
     loadData();
@@ -145,6 +161,8 @@ export function OutletsPage() {
     setEmployeeId("");
     setSubtotalMin("");
     setSubtotalMax("");
+    setItemGroup("");
+    setBrand("");
   }
 
   const filtered = outletSearch.trim()
@@ -152,7 +170,7 @@ export function OutletsPage() {
     : outlets;
 
   const hasFilter = outletSearch || selectedItem || employeeId || subtotalMin || subtotalMax
-    || from !== currentPeriod.from || to !== currentPeriod.to;
+    || itemGroup || brand || from !== currentPeriod.from || to !== currentPeriod.to;
 
   return (
     <div className="space-y-5">
@@ -239,6 +257,40 @@ export function OutletsPage() {
             />
           </div>
 
+          {/* Kategori (Item.itemGroup) */}
+          <div className="flex flex-col gap-1 min-w-0" style={{ minWidth: "150px", maxWidth: "200px" }}>
+            <label htmlFor="outlets-item-group" className="text-[10px] font-semibold uppercase tracking-wider text-muted">Kategori</label>
+            <select
+              id="outlets-item-group"
+              value={itemGroup}
+              onChange={(e) => setItemGroup(e.target.value)}
+              className="rounded-lg border border-border/80 bg-surface-subtle px-3 py-1.5 text-xs text-foreground focus:outline-none focus:ring-2 focus:ring-accent/20 focus:border-accent transition-all"
+            >
+              <option value="">Semua kategori</option>
+              {filterOptions.itemGroups.map((g) => (
+                <option key={g} value={g}>{g}</option>
+              ))}
+            </select>
+          </div>
+
+          {/* Merk (Item.brand) */}
+          <div className="flex flex-col gap-1 min-w-0" style={{ minWidth: "150px", maxWidth: "200px" }}>
+            <label htmlFor="outlets-brand" className="text-[10px] font-semibold uppercase tracking-wider text-muted">Merk</label>
+            <select
+              id="outlets-brand"
+              value={brand}
+              onChange={(e) => setBrand(e.target.value)}
+              disabled={filterOptions.brands.length === 0}
+              title={filterOptions.brands.length === 0 ? "Belum ada data merk — isi kolom Merk di Master Item" : undefined}
+              className="rounded-lg border border-border/80 bg-surface-subtle px-3 py-1.5 text-xs text-foreground focus:outline-none focus:ring-2 focus:ring-accent/20 focus:border-accent transition-all disabled:opacity-50"
+            >
+              <option value="">{filterOptions.brands.length === 0 ? "Belum ada data merk" : "Semua merk"}</option>
+              {filterOptions.brands.map((b) => (
+                <option key={b} value={b}>{b}</option>
+              ))}
+            </select>
+          </div>
+
           {/* Employee */}
           <div className="flex flex-col gap-1 min-w-0" style={{ minWidth: "160px", maxWidth: "220px" }}>
             <label htmlFor="outlets-employee" className="text-[10px] font-semibold uppercase tracking-wider text-muted">Karyawan</label>
@@ -282,11 +334,13 @@ export function OutletsPage() {
       </div>
 
       {/* Active filter summary */}
-      {(selectedItem || employeeId || from || to) && (
+      {(selectedItem || employeeId || itemGroup || brand || from || to) && (
         <p className="text-[11px] text-muted px-0.5">
           Menampilkan {formatNumber(filtered.length)} outlet
           {from && to ? ` · ${from} s/d ${to}` : from ? ` · dari ${from}` : to ? ` · s/d ${to}` : ""}
           {selectedItem ? ` · item: ${selectedItem.name}` : ""}
+          {itemGroup ? ` · kategori: ${itemGroup}` : ""}
+          {brand ? ` · merk: ${brand}` : ""}
           {employeeId ? ` · karyawan: ${employees.find((e) => String(e.id) === employeeId)?.name ?? ""}` : ""}
         </p>
       )}

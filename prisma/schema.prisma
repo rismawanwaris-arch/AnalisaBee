@@ -156,6 +156,12 @@ model Item {
   code      String
   name      String
   itemGroup String?
+  // Product brand/manufacturer, e.g. "ROBOT"/"UFONE" (aksesoris) or
+  // "WHISKAS"/"BOLT" (petshop) — optional, filled via the "Merk" column of
+  // the Master Item import (see parseMasterItems.ts). Free text, not an
+  // enum/mapping table like itemGroup->ReportCategory: the set of brands is
+  // completely different per itemGroup and isn't a small fixed list.
+  brand     String?
   branch    Branch  @default(BANDUNG)
   // A hidden item is excluded from every sales-analysis surface — its line
   // items drop out of omzet/laba/qty/tren, transaction counts, rankings, the

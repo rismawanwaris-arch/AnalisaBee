@@ -4,7 +4,7 @@
 // ==========================================
 import { Router } from "express";
 import { prisma } from "../../lib/prisma";
-import { searchItems, listAllItems, listItemsForVisibility, getItemDetail, getItemsByCategory } from "../../lib/queries/items";
+import { searchItems, listAllItems, listItemsForVisibility, getItemDetail, getItemsByCategory, getItemFilterOptions } from "../../lib/queries/items";
 import { requireAuth, requireFeature, requireMaster, cacheBriefly, parseDateParam, logActivity } from "../middleware";
 
 export const itemsRouter = Router();
@@ -68,6 +68,19 @@ itemsRouter.get("/api/items/by-category", requireFeature("item_categories"), asy
     const to = parseDateParam(req.query.to);
     const rows = await getItemsByCategory({ from, to });
     return res.json(rows);
+  } catch (err: any) {
+    return res.status(500).json({ error: err.message });
+  }
+});
+
+// Not feature-gated to "items" — shared reference data for the Kategori/Merk
+// filter dropdowns on Performa Outlet (which only requires "outlets"), same
+// reasoning as /api/outlets and /api/employees. Registered before
+// /api/items/:id so "filter-options" isn't parsed as an id.
+itemsRouter.get("/api/items/filter-options", requireAuth, cacheBriefly(60), async (_req, res) => {
+  try {
+    const options = await getItemFilterOptions();
+    return res.json(options);
   } catch (err: any) {
     return res.status(500).json({ error: err.message });
   }

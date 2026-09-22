@@ -18,9 +18,11 @@ interface MasterItemChangeRow {
   code: string;
   name: string;
   itemGroup: string | null;
+  brand: string | null;
   status: "NEW" | "UPDATE";
   previousName?: string;
   previousItemGroup?: string | null;
+  previousBrand?: string | null;
 }
 
 interface MasterItemPreview {
@@ -195,6 +197,8 @@ export function MasterItemImport() {
           </label>
           <p className="text-[11px] text-muted mt-2">
             Format export "Table List" dari POS (.xls / .xlsx) — kolom wajib: Kode Item, Nama Item.
+            Kolom Item Grup dan Merk opsional — Merk bukan bagian dari export POS, tambahkan sendiri
+            kalau mau item tersaring per merk di halaman Performa Outlet.
           </p>
         </div>
       )}
@@ -244,6 +248,7 @@ export function MasterItemImport() {
                     <tr>
                       <th className="px-2.5 py-1.5 font-semibold">Kode</th>
                       <th className="px-2.5 py-1.5 font-semibold">Nama</th>
+                      <th className="px-2.5 py-1.5 font-semibold">Merk</th>
                       <th className="px-2.5 py-1.5 font-semibold">Status</th>
                     </tr>
                   </thead>
@@ -260,6 +265,17 @@ export function MasterItemImport() {
                             </>
                           ) : (
                             <span className="text-foreground font-medium">{c.name}</span>
+                          )}
+                        </td>
+                        <td className="px-2.5 py-1.5 text-muted">
+                          {c.status === "UPDATE" && (c.previousBrand ?? null) !== c.brand ? (
+                            <>
+                              <span className="line-through text-muted/50">{c.previousBrand ?? "—"}</span>
+                              {" → "}
+                              <span className="text-foreground">{c.brand ?? "—"}</span>
+                            </>
+                          ) : (
+                            c.brand ?? "—"
                           )}
                         </td>
                         <td className="px-2.5 py-1.5">

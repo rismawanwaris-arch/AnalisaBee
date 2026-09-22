@@ -38,6 +38,16 @@ describe("parseMasterItemBuffer", () => {
     expect(result.rows[0].itemGroup).toBeNull();
   });
 
+  it("parses an optional Merk column, treating blank/missing as null", () => {
+    const buf = makeBuffer([
+      { "Kode Item": "001", "Nama Item": "Barang A", Merk: "ROBOT" },
+      { "Kode Item": "002", "Nama Item": "Barang B", Merk: "" },
+      { "Kode Item": "003", "Nama Item": "Barang C" },
+    ]);
+    const result = parseMasterItemBuffer(buf);
+    expect(result.rows.map((r) => r.brand)).toEqual(["ROBOT", null, null]);
+  });
+
   it("flags rows with an empty Kode Item or Nama Item as errors, not silent drops", () => {
     const buf = makeBuffer([
       { "Kode Item": "", "Nama Item": "Barang A" },

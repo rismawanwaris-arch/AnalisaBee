@@ -48,6 +48,10 @@ next-env.d.ts
 /pgdata
 /backups
 
+# Local files written by one-off scripts (e.g. scripts/suggest-item-brands.ts)
+# — generated from the live catalog, real data, never committed.
+/scripts-output
+
 # vendored agent skill docs (synced from prisma/skills via skills-lock.json) —
 # local tooling cache, not app source; re-sync per-machine instead of committing.
 /.agents/skills

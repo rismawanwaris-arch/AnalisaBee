@@ -9,10 +9,26 @@ export interface OutletSummaryFilters {
   employeeId?: number;
   subtotalMin?: number;
   subtotalMax?: number;
+  // Kategori (Item.itemGroup — raw POS "Item Group", same value as the
+  // Kategori Item report) and Merk (Item.brand, filled via Master Item's
+  // optional "Merk" column). Both are exact matches against the visible
+  // catalog, not free text.
+  itemGroup?: string;
+  brand?: string;
 }
 
 export async function getOutletSummary(filters: OutletSummaryFilters = {}) {
-  const where: Prisma.SaleWhereInput = { outlet: { isHidden: false }, ...EXCLUDE_HIDDEN_ITEMS };
+  // Not EXCLUDE_HIDDEN_ITEMS's shared object here — itemGroup/brand need to
+  // extend the same `item` clause, and that constant is a shared singleton
+  // (mutating it in place would leak across unrelated requests).
+  const where: Prisma.SaleWhereInput = {
+    outlet: { isHidden: false },
+    item: {
+      isHidden: false,
+      ...(filters.itemGroup ? { itemGroup: filters.itemGroup } : {}),
+      ...(filters.brand ? { brand: filters.brand } : {}),
+    },
+  };
 
   if (filters.from || filters.to) {
     where.tanggal = {
