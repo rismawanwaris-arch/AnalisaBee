@@ -97,7 +97,17 @@ export function OutletsPage() {
   const [subtotalMin, setSubtotalMin] = useState("");
   const [subtotalMax, setSubtotalMax] = useState("");
   const [itemGroup, setItemGroup] = useState("");
+  // Free-text substring search on item name (e.g. "ufone" matches every item
+  // whose name contains it, brand curated or not — see getOutletSummary's
+  // itemKeyword). `brandInput` is what the field displays and reacts to
+  // instantly; `brand` is the debounced value that actually drives the
+  // fetch, so typing doesn't refetch on every keystroke.
+  const [brandInput, setBrandInput] = useState("");
   const [brand, setBrand] = useState("");
+  useEffect(() => {
+    const t = setTimeout(() => setBrand(brandInput.trim()), 350);
+    return () => clearTimeout(t);
+  }, [brandInput]);
 
   useEffect(() => {
     const ctrl = new AbortController();
@@ -127,7 +137,7 @@ export function OutletsPage() {
       if (subtotalMin) params.set("subtotalMin", subtotalMin);
       if (subtotalMax) params.set("subtotalMax", subtotalMax);
       if (itemGroup) params.set("itemGroup", itemGroup);
-      if (brand) params.set("brand", brand);
+      if (brand) params.set("itemKeyword", brand);
       const res = await fetch(`/api/outlets/summary?${params}`);
       if (res.ok) setOutlets(await res.json());
     } catch {
@@ -162,6 +172,7 @@ export function OutletsPage() {
     setSubtotalMin("");
     setSubtotalMax("");
     setItemGroup("");
+    setBrandInput("");
     setBrand("");
   }
 
@@ -170,7 +181,7 @@ export function OutletsPage() {
     : outlets;
 
   const hasFilter = outletSearch || selectedItem || employeeId || subtotalMin || subtotalMax
-    || itemGroup || brand || from !== currentPeriod.from || to !== currentPeriod.to;
+    || itemGroup || brandInput || from !== currentPeriod.from || to !== currentPeriod.to;
 
   return (
     <div className="space-y-5">
@@ -273,22 +284,26 @@ export function OutletsPage() {
             </select>
           </div>
 
-          {/* Merk (Item.brand) */}
-          <div className="flex flex-col gap-1 min-w-0" style={{ minWidth: "150px", maxWidth: "200px" }}>
-            <label htmlFor="outlets-brand" className="text-[10px] font-semibold uppercase tracking-wider text-muted">Merk</label>
-            <select
+          {/* Merk / kata kunci item — free-text substring match on item name
+              (see itemKeyword in getOutletSummary), NOT limited to items that
+              already have Item.brand curated. The datalist just surfaces
+              known merk as typing hints; any text is accepted. */}
+          <div className="flex flex-col gap-1 min-w-0" style={{ minWidth: "170px", maxWidth: "220px" }}>
+            <label htmlFor="outlets-brand" className="text-[10px] font-semibold uppercase tracking-wider text-muted">Merk / Kata Kunci Item</label>
+            <input
               id="outlets-brand"
-              value={brand}
-              onChange={(e) => setBrand(e.target.value)}
-              disabled={filterOptions.brands.length === 0}
-              title={filterOptions.brands.length === 0 ? "Belum ada data merk — isi kolom Merk di Master Item" : undefined}
-              className="rounded-lg border border-border/80 bg-surface-subtle px-3 py-1.5 text-xs text-foreground focus:outline-none focus:ring-2 focus:ring-accent/20 focus:border-accent transition-all disabled:opacity-50"
-            >
-              <option value="">{filterOptions.brands.length === 0 ? "Belum ada data merk" : "Semua merk"}</option>
+              type="text"
+              list="outlets-brand-suggestions"
+              value={brandInput}
+              onChange={(e) => setBrandInput(e.target.value)}
+              placeholder="cth: ufone"
+              className="rounded-lg border border-border/80 bg-surface-subtle px-3 py-1.5 text-xs text-foreground placeholder:text-muted focus:outline-none focus:ring-2 focus:ring-accent/20 focus:border-accent transition-all"
+            />
+            <datalist id="outlets-brand-suggestions">
               {filterOptions.brands.map((b) => (
-                <option key={b} value={b}>{b}</option>
+                <option key={b} value={b} />
               ))}
-            </select>
+            </datalist>
           </div>
 
           {/* Employee */}
@@ -334,13 +349,13 @@ export function OutletsPage() {
       </div>
 
       {/* Active filter summary */}
-      {(selectedItem || employeeId || itemGroup || brand || from || to) && (
+      {(selectedItem || employeeId || itemGroup || brandInput || from || to) && (
         <p className="text-[11px] text-muted px-0.5">
           Menampilkan {formatNumber(filtered.length)} outlet
           {from && to ? ` · ${from} s/d ${to}` : from ? ` · dari ${from}` : to ? ` · s/d ${to}` : ""}
           {selectedItem ? ` · item: ${selectedItem.name}` : ""}
           {itemGroup ? ` · kategori: ${itemGroup}` : ""}
-          {brand ? ` · merk: ${brand}` : ""}
+          {brandInput ? ` · merk/kata kunci: ${brandInput}` : ""}
           {employeeId ? ` · karyawan: ${employees.find((e) => String(e.id) === employeeId)?.name ?? ""}` : ""}
         </p>
       )}
