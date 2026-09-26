@@ -41,6 +41,7 @@ salesRouter.get("/api/sales/export", requireFeature("transactions"), async (req,
       "Subtotal",
       "Laba/Rugi",
       "Pegawai",
+      "Jenis",
     ];
 
     const csvRows = [
@@ -59,6 +60,7 @@ salesRouter.get("/api/sales/export", requireFeature("transactions"), async (req,
           r.subtotal,
           r.labaRugi,
           csvField(r.employeeName),
+          csvField(r.isRetur ? "Retur" : "Penjualan"),
         ].join(",")
       ),
     ];

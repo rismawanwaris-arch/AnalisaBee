@@ -473,6 +473,11 @@ export function DataExplorerPage() {
                       <span className={`text-[10px] font-bold tracking-wide px-2 py-0.5 rounded-full border ${SOURCE_BADGE[r.source]}`}>
                         {SOURCE_LABEL[r.source]}
                       </span>
+                      {r.source === "SALE" && r.detail.isRetur && (
+                        <span className="ml-1 text-[10px] font-bold tracking-wide px-2 py-0.5 rounded-full border bg-amber-500/10 text-amber-600 dark:text-amber-400 border-amber-500/20">
+                          Retur
+                        </span>
+                      )}
                     </td>
                     <td className="px-3 py-2 font-mono text-right text-foreground whitespace-nowrap">{formatRupiah(r.jumlah)}</td>
                     <td className="px-3 py-2 text-muted truncate max-w-72" title={r.keterangan}>{r.keterangan}</td>
@@ -547,6 +552,11 @@ export function DataExplorerPage() {
                 <span className={`inline-block mt-1 text-[10px] font-bold tracking-wide px-2 py-0.5 rounded-full border ${SOURCE_BADGE[detailRow.source]}`}>
                   {SOURCE_LABEL[detailRow.source]}
                 </span>
+                {detailRow.source === "SALE" && detailRow.detail.isRetur && (
+                  <span className="inline-block mt-1 ml-1 text-[10px] font-bold tracking-wide px-2 py-0.5 rounded-full border bg-amber-500/10 text-amber-600 dark:text-amber-400 border-amber-500/20">
+                    Retur
+                  </span>
+                )}
               </div>
               <button type="button" onClick={() => setDetailRow(null)} className="text-muted hover:text-foreground">
                 <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">

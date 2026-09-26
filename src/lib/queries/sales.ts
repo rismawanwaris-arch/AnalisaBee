@@ -130,6 +130,7 @@ export async function getSalesList(
       subtotal: Number(r.subtotal),
       labaRugi: Number(r.labaRugi),
       employeeName: r.employee.name,
+      isRetur: r.isRetur,
     })),
     page,
     pageSize,
@@ -166,5 +167,6 @@ export async function getSalesForExport(filters: SalesFilters) {
     subtotal: Number(r.subtotal),
     labaRugi: Number(r.labaRugi),
     employeeName: r.employee.name,
+    isRetur: r.isRetur,
   }));
 }

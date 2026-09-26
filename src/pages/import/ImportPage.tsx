@@ -23,6 +23,7 @@ interface ImportHistoryItem {
   filename: string;
   uploadedAt: string;
   status: "PROCESSING" | "DONE" | "FAILED";
+  isRetur: boolean;
   rowCount: number;
   insertedCount: number;
   duplicateCount: number;
@@ -284,6 +285,7 @@ export function ImportPage() {
               <tr>
                 <th className="px-4 py-2.5 font-semibold text-[11px] uppercase">Waktu Upload</th>
                 <th className="px-4 py-2.5 font-semibold text-[11px] uppercase">File</th>
+                <th className="px-4 py-2.5 font-semibold text-[11px] uppercase">Jenis</th>
                 <th className="px-4 py-2.5 font-semibold text-[11px] uppercase">Periode</th>
                 <th className="px-4 py-2.5 font-semibold text-[11px] uppercase">Status</th>
                 <th className="px-4 py-2.5 font-semibold text-[11px] uppercase text-right">Baris Baru</th>
@@ -295,7 +297,7 @@ export function ImportPage() {
             <tbody className="divide-y divide-border/60">
               {history.length === 0 && (
                 <tr>
-                  <td colSpan={8} className="px-4 py-8 text-center text-muted">
+                  <td colSpan={9} className="px-4 py-8 text-center text-muted">
                     Belum ada file yang diimpor ke database.
                   </td>
                 </tr>
@@ -304,6 +306,9 @@ export function ImportPage() {
                 <tr key={h.id} className="hover:bg-surface-hover/70 transition-colors">
                   <td className="px-4 py-2.5 font-mono whitespace-nowrap text-muted">{formatDate(h.uploadedAt)}</td>
                   <td className="px-4 py-2.5 font-medium text-foreground">{h.filename}</td>
+                  <td className="px-4 py-2.5">
+                    <TypeBadge isRetur={h.isRetur} />
+                  </td>
                   <td className="px-4 py-2.5 font-mono whitespace-nowrap text-muted">
                     {h.periodStart && h.periodEnd
                       ? `${formatDate(h.periodStart)} – ${formatDate(h.periodEnd)}`
@@ -354,6 +359,18 @@ export function ImportPage() {
         onConfirm={handleDelete}
       />
     </div>
+  );
+}
+
+function TypeBadge({ isRetur }: { isRetur: boolean }) {
+  return isRetur ? (
+    <span className="inline-block px-2.5 py-0.5 rounded-full text-[10px] font-semibold border bg-amber-500/10 text-amber-600 dark:text-amber-400 border-amber-500/20">
+      Retur
+    </span>
+  ) : (
+    <span className="inline-block px-2.5 py-0.5 rounded-full text-[10px] font-semibold border bg-surface-subtle text-muted border-border/60">
+      Penjualan
+    </span>
   );
 }
 

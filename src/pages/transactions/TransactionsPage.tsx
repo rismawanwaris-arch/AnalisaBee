@@ -29,6 +29,7 @@ interface SaleRow {
   subtotal: number;
   labaRugi: number;
   employeeName: string;
+  isRetur: boolean;
 }
 
 interface SalesResult {
@@ -393,6 +394,7 @@ export function TransactionsPage() {
               <thead className="bg-surface-subtle/70 text-muted text-left border-b border-border/80">
                 <tr>
                   <th className="px-3.5 py-2.5 font-semibold text-[11px] uppercase whitespace-nowrap">No Transaksi</th>
+                  <th className="px-3.5 py-2.5 font-semibold text-[11px] uppercase whitespace-nowrap">Jenis</th>
                   <th className="px-3.5 py-2.5 font-semibold text-[11px] uppercase whitespace-nowrap">Tanggal</th>
                   <th className="px-3.5 py-2.5 font-semibold text-[11px] uppercase whitespace-nowrap">Jam</th>
                   <th className="px-3.5 py-2.5 font-semibold text-[11px] uppercase">Outlet</th>
@@ -406,7 +408,7 @@ export function TransactionsPage() {
               <tbody className="divide-y divide-border/60">
                 {data.rows.length === 0 && (
                   <tr>
-                    <td colSpan={9} className="px-4 py-8 text-center text-muted">
+                    <td colSpan={10} className="px-4 py-8 text-center text-muted">
                       Tidak ada data transaksi yang sesuai dengan kriteria filter.
                     </td>
                   </tr>
@@ -414,6 +416,17 @@ export function TransactionsPage() {
                 {data.rows.map((r) => (
                   <tr key={r.id} className="hover:bg-surface-hover/70 transition-colors">
                     <td className="px-3.5 py-2 font-mono whitespace-nowrap text-foreground/80">{r.noTransaksi}</td>
+                    <td className="px-3.5 py-2 whitespace-nowrap">
+                      {r.isRetur ? (
+                        <span className="inline-block px-2 py-0.5 rounded-full text-[10px] font-semibold border bg-amber-500/10 text-amber-600 dark:text-amber-400 border-amber-500/20">
+                          Retur
+                        </span>
+                      ) : (
+                        <span className="inline-block px-2 py-0.5 rounded-full text-[10px] font-semibold border bg-surface-subtle text-muted border-border/60">
+                          Penjualan
+                        </span>
+                      )}
+                    </td>
                     <td className="px-3.5 py-2 font-mono whitespace-nowrap text-muted">{formatDate(r.tanggal)}</td>
                     <td className="px-3.5 py-2 font-mono whitespace-nowrap text-muted">{r.jamBuat}</td>
                     <td className="px-3.5 py-2 font-medium text-foreground">{r.outletName}</td>
