@@ -55,6 +55,12 @@ model ImportBatch {
   periodStart     DateTime?    @db.Date
   periodEnd       DateTime?    @db.Date
   branch          Branch       @default(BANDUNG)
+  // True for a batch imported via "Retur Penjualan" (src/lib/importSalesReturn.ts)
+  // instead of the regular sales import — its Sale rows are reversals
+  // (negative qty/subtotal/labaRugi), not new sales. Kept separate from
+  // ImportStatus since a retur batch goes through the same
+  // PROCESSING/DONE/FAILED lifecycle as any other import.
+  isRetur         Boolean      @default(false)
   sales           Sale[]
 
   @@map("import_batches")
@@ -291,6 +297,23 @@ model Sale {
   // sha256 over the full raw row — the dedup key so re-uploading an
   // overlapping file never double-counts a sale.
   rowHash       String   @unique
+
+  // True when this row is a reversal from "Retur Penjualan" import, not an
+  // actual sale — qty/subtotal/hpp/labaRugi are negative, netting the
+  // original sale's contribution out of every aggregate query (omzet, laba,
+  // poin, target) automatically, with zero change to those queries. See
+  // src/lib/importSalesReturn.ts.
+  isRetur       Boolean  @default(false)
+  // For a retur row: the original Sale it reverses, matched by the retur
+  // export's own "No.Penjualan" column (== Sale.noTransaksi) plus item code
+  // — an exact reference, not a heuristic guess. Null when No.Penjualan
+  // isn't found among our Sale rows (falls back to the "Tidak Diketahui"
+  // employee instead — see importSalesReturn.ts). Self-relation, so an
+  // original sale can be looked up to see which retur reversed it, and
+  // matching can skip a sale that's already been claimed by one.
+  returOfSaleId Int?
+  returOf       Sale?    @relation("SaleReturns", fields: [returOfSaleId], references: [id])
+  returns       Sale[]   @relation("SaleReturns")
 
   outletId   Int
   outlet     Outlet   @relation(fields: [outletId], references: [id])

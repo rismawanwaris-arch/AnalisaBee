@@ -7,6 +7,7 @@
 import { Router } from "express";
 import { prisma } from "../../lib/prisma";
 import { previewSalesFile, importSalesFile } from "../../lib/importSales";
+import { previewSalesReturnFile, importSalesReturnFile } from "../../lib/importSalesReturn";
 import { invalidateDefaults } from "../../lib/ensureDefaults";
 import { parseTartunBuffer, parseServerBuffer, parseServerText } from "../../lib/parseTartunServer";
 import { importDailyMetric } from "../../lib/importTartunServer";
@@ -43,6 +44,38 @@ importsRouter.post("/api/import", requireFeature("import"), upload.single("file"
     return res.json(summary);
   } catch (err: any) {
     return res.status(422).json({ error: err.message || "Gagal mengimpor file." });
+  }
+});
+
+importsRouter.post("/api/import/retur/preview", requireFeature("import"), upload.single("file"), async (req, res) => {
+  if (!req.file) return res.status(400).json({ error: "File wajib diupload." });
+  try {
+    const branch = (req.body.branch === "CIMAHI" ? "CIMAHI" : "BANDUNG") as "BANDUNG" | "CIMAHI";
+    const preview = await previewSalesReturnFile(req.file.buffer, branch);
+    return res.json(preview);
+  } catch (err: any) {
+    return res.status(422).json({ error: err.message || "Gagal membaca file Excel." });
+  }
+});
+
+importsRouter.post("/api/import/retur", requireFeature("import"), upload.single("file"), async (req, res) => {
+  if (!req.file) return res.status(400).json({ error: "File wajib diupload." });
+  try {
+    let forceImportHashes: string[] = [];
+    if (req.body.forceImportHashes) {
+      const parsed = JSON.parse(req.body.forceImportHashes);
+      if (!Array.isArray(parsed) || parsed.length > 500) {
+        return res.status(400).json({ error: "forceImportHashes tidak valid." });
+      }
+      forceImportHashes = parsed.filter((h): h is string => typeof h === "string");
+    }
+    const branch = (req.body.branch === "CIMAHI" ? "CIMAHI" : "BANDUNG") as "BANDUNG" | "CIMAHI";
+    const summary = await importSalesReturnFile(req.file.originalname, req.file.buffer, forceImportHashes, branch);
+    invalidateDefaults();
+    await logActivity(req, "IMPORT_SALES_RETURN", `[${branch}] ${req.file.originalname} — ${summary.insertedCount} baris retur diimpor`);
+    return res.json(summary);
+  } catch (err: any) {
+    return res.status(422).json({ error: err.message || "Gagal mengimpor file retur." });
   }
 });
 

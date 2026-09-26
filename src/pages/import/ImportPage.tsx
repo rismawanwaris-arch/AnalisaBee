@@ -3,6 +3,7 @@ import { formatNumber, formatDate } from "@/lib/format";
 import { ConfirmDeleteModal } from "@/components/ConfirmDeleteModal";
 import { ImportPreviewPanel, type ImportPreview } from "@/components/ImportPreviewPanel";
 import { TartunServerImport } from "@/components/TartunServerImport";
+import { SalesReturnImport } from "@/components/SalesReturnImport";
 
 interface ImportSummary {
   importId: number;
@@ -262,6 +263,13 @@ export function ImportPage() {
       )}
 
       <TartunServerImport />
+
+      <div>
+        <h2 className="text-sm font-bold text-foreground uppercase tracking-wider mb-3">Retur Penjualan</h2>
+        <div className="rounded-xl border border-border/80 bg-surface p-4 shadow-xs">
+          <SalesReturnImport />
+        </div>
+      </div>
 
       <div>
         <div className="flex items-center justify-between mb-3">
