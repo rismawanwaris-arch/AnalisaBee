@@ -116,10 +116,20 @@ export function requireFeature(key: FeatureKey | ((req: express.Request) => Feat
   };
 }
 
+// X-Forwarded-For is client-controlled and only meaningful if a reverse
+// proxy in front of this app overwrites it — trusting it unconditionally
+// would let anyone forge the IP recorded in the activity log. Set
+// TRUST_PROXY=true only when this app really does sit behind a reverse
+// proxy that sets/replaces the header itself (e.g. nginx/Caddy in front of
+// the Docker container); otherwise the socket's own remote address is used.
+const TRUST_PROXY = process.env.TRUST_PROXY === "true";
+
 export function clientIp(req: express.Request): string | null {
-  const forwarded = req.headers["x-forwarded-for"];
-  if (typeof forwarded === "string" && forwarded.length > 0) {
-    return forwarded.split(",")[0].trim();
+  if (TRUST_PROXY) {
+    const forwarded = req.headers["x-forwarded-for"];
+    if (typeof forwarded === "string" && forwarded.length > 0) {
+      return forwarded.split(",")[0].trim();
+    }
   }
   return req.socket.remoteAddress ?? null;
 }

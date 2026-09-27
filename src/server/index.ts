@@ -44,8 +44,28 @@ import { activityLogRouter } from "./routes/activityLog";
 
 const app = express();
 
-// Security headers
-app.use(helmet({ contentSecurityPolicy: false }));
+// Security headers. CSP is scoped to what the SPA actually loads: bundled
+// same-origin scripts only (no inline script anywhere in the build), Google
+// Fonts for stylesheet+font files, and 'unsafe-inline' for style only (chart
+// libraries inject inline style attributes/tags — far lower XSS impact than
+// inline script, which stays blocked).
+app.use(
+  helmet({
+    contentSecurityPolicy: {
+      directives: {
+        defaultSrc: ["'self'"],
+        scriptSrc: ["'self'"],
+        styleSrc: ["'self'", "'unsafe-inline'", "https://fonts.googleapis.com"],
+        fontSrc: ["'self'", "https://fonts.gstatic.com"],
+        imgSrc: ["'self'", "data:"],
+        connectSrc: ["'self'"],
+        objectSrc: ["'none'"],
+        baseUri: ["'self'"],
+        frameAncestors: ["'self'"],
+      },
+    },
+  })
+);
 
 // Gzip every text response (JSON API responses, the SPA's JS/CSS bundle) —
 // biggest win per line of code: this app's JSON payloads compress ~5-10×

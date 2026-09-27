@@ -25,7 +25,21 @@ async function insertChunked<T>(
   }
 }
 
+// Every table this module ever calls resetSequence() with — kept here as a
+// hard allowlist so the function is safe by construction, not just safe
+// because every current caller happens to pass a hardcoded string. $executeRawUnsafe
+// can't parameterize an identifier, so this check is what stands between a
+// stray dynamic value and SQL injection if a future change ever wires one in.
+const RESETTABLE_TABLES = new Set([
+  "outlets", "employees", "items", "import_batches", "sales", "tartun_daily", "server_daily",
+  "targets", "outlet_aliases", "item_group_mappings", "item_points", "item_point_exclusions",
+  "item_group_point_defaults", "points_exclusions", "custom_roles",
+]);
+
 async function resetSequence(table: string): Promise<void> {
+  if (!RESETTABLE_TABLES.has(table)) {
+    throw new BackupError(`Tabel tidak dikenal untuk reset sequence: ${table}`, 500);
+  }
   await prisma.$executeRawUnsafe(
     `SELECT setval(pg_get_serial_sequence('"${table}"', 'id'), COALESCE((SELECT MAX(id) FROM "${table}"), 1), (SELECT MAX(id) IS NOT NULL FROM "${table}"))`,
   );
