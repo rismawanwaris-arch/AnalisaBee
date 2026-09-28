@@ -62,6 +62,13 @@ app.use(
         objectSrc: ["'none'"],
         baseUri: ["'self'"],
         frameAncestors: ["'self'"],
+        // Helmet adds this directive by default, which makes the browser
+        // rewrite every same-origin request (the JS bundle, fonts, API
+        // calls) to https:// — this app is served over plain HTTP (both
+        // local `npm start` and the ZimaOS deploy have no TLS termination
+        // in front of it), so that rewrite fails outright and the page
+        // loads blank. Must stay disabled unless HTTPS is added in front.
+        upgradeInsecureRequests: null,
       },
     },
   })
