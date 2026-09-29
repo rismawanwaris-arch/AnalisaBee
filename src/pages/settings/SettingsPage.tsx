@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { formatNumber, formatRupiah } from "@/lib/format";
+import { formatNumber, formatRupiah, TARGET_DECIMAL_STORAGE_KEY } from "@/lib/format";
 import { FEATURE_KEYS, FEATURE_LABELS, type FeatureKey } from "@/lib/features";
 import { ConfirmDeleteModal } from "@/components/ConfirmDeleteModal";
 import { MasterItemImport } from "@/components/MasterItemImport";
@@ -141,6 +141,28 @@ export function SettingsPage() {
   const [all, setAll] = useState<Amounts | null>(null);
   const [targetBusy, setTargetBusy] = useState(false);
   const [targetSaved, setTargetSaved] = useState(false);
+
+  // Decimal precision state
+  const [targetDecimals, setTargetDecimals] = useState<number>(() => {
+    if (typeof window !== "undefined") {
+      const saved = localStorage.getItem(TARGET_DECIMAL_STORAGE_KEY);
+      if (saved !== null) {
+        const n = parseInt(saved, 10);
+        if ([0, 1, 2, 3].includes(n)) return n;
+      }
+    }
+    return 0;
+  });
+  const [decimalSavedToast, setDecimalSavedToast] = useState(false);
+
+  function handleTargetDecimalsSave(val: number) {
+    setTargetDecimals(val);
+    if (typeof window !== "undefined") {
+      localStorage.setItem(TARGET_DECIMAL_STORAGE_KEY, String(val));
+    }
+    setDecimalSavedToast(true);
+    setTimeout(() => setDecimalSavedToast(false), 2500);
+  }
 
   // Cimahi targets
   const [perkonterCimahi, setPerkonterCimahi] = useState<Amounts | null>(null);
@@ -1749,6 +1771,96 @@ export function SettingsPage() {
         }}
         onConfirm={confirmRestore}
       />
+
+      {/* ── 0. Presisi Desimal Laporan Target ───────────────────────── */}
+      <div className="rounded-xl border border-border/80 bg-surface shadow-xs overflow-hidden">
+        <button type="button" onClick={() => toggleSection("presisi-desimal-target")}
+          className="w-full flex items-center justify-between gap-3 px-5 py-3.5 text-left hover:bg-surface-hover/50 transition-colors">
+          <div className="flex items-center gap-2.5 min-w-0">
+            <span className="w-2.5 h-2.5 rounded-full bg-cyan-500 shrink-0" />
+            <span className="text-sm font-bold uppercase tracking-wider text-foreground">Presisi Angka di Belakang Koma (Desimal)</span>
+            <span className="text-[11px] font-mono text-muted bg-surface-subtle border border-border/60 rounded px-2 py-0.5">
+              {targetDecimals === 0 ? "0 (Bulat / Tersembunyi)" : `${targetDecimals} Desimal`}
+            </span>
+          </div>
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"
+            className={`shrink-0 text-muted transition-transform duration-200 ${openSections.has("presisi-desimal-target") ? "rotate-180" : ""}`}>
+            <polyline points="6 9 12 15 18 9" />
+          </svg>
+        </button>
+        {openSections.has("presisi-desimal-target") && (
+          <div className="px-5 pb-5 pt-4 space-y-4 border-t border-border/60">
+            <p className="text-xs text-muted leading-relaxed">
+              Atur berapa angka di belakang koma yang ingin ditampilkan pada tabel <strong>Target Penjualan Harian</strong> (Bandung &amp; Cimahi), ekspor <strong>Excel</strong>, dan cetak/ekspor <strong>JPEG</strong>. Anda dapat menyembunyikan koma (angka bulat) atau melihat detail desimal (1, 2, atau 3 angka).
+            </p>
+
+            <div className="grid sm:grid-cols-2 lg:grid-cols-4 gap-3 pt-1">
+              {[
+                {
+                  val: 0,
+                  title: "0 Angka (Bulat)",
+                  desc: "Sembunyikan angka di belakang koma",
+                  example: "Rp 1.250.000 (105%)",
+                },
+                {
+                  val: 1,
+                  title: "1 Angka Desimal",
+                  desc: "Detail 1 digit di belakang koma",
+                  example: "Rp 1.250.000,5 (105,2%)",
+                },
+                {
+                  val: 2,
+                  title: "2 Angka Desimal",
+                  desc: "Standar laporan keuangan / akuntansi",
+                  example: "Rp 1.250.000,50 (105,25%)",
+                },
+                {
+                  val: 3,
+                  title: "3 Angka Desimal",
+                  desc: "Detail presisi tinggi komisi / pecahan",
+                  example: "Rp 1.250.000,500 (105,250%)",
+                },
+              ].map((opt) => {
+                const isSelected = targetDecimals === opt.val;
+                return (
+                  <button
+                    key={opt.val}
+                    type="button"
+                    onClick={() => handleTargetDecimalsSave(opt.val)}
+                    className={`flex flex-col text-left p-3.5 rounded-xl border transition-all ${
+                      isSelected
+                        ? "border-accent bg-accent/10 shadow-xs"
+                        : "border-border/80 bg-surface-subtle/50 hover:bg-surface-subtle hover:border-border"
+                    }`}
+                  >
+                    <div className="flex items-center justify-between w-full mb-1.5">
+                      <span className="text-xs font-bold text-foreground">{opt.title}</span>
+                      <span className={`w-3.5 h-3.5 rounded-full border flex items-center justify-center ${
+                        isSelected ? "border-accent bg-accent" : "border-border"
+                      }`}>
+                        {isSelected && <span className="w-1.5 h-1.5 rounded-full bg-accent-foreground" />}
+                      </span>
+                    </div>
+                    <span className="text-[11px] text-muted mb-2">{opt.desc}</span>
+                    <span className="text-[11px] font-mono font-semibold text-accent mt-auto bg-surface/80 px-2 py-1 rounded border border-border/60">
+                      {opt.example}
+                    </span>
+                  </button>
+                );
+              })}
+            </div>
+
+            {decimalSavedToast && (
+              <div className="text-xs font-semibold text-emerald-600 dark:text-emerald-400 flex items-center gap-1.5 pt-1">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
+                  <polyline points="20 6 9 17 4 12" />
+                </svg>
+                <span>Format desimal berhasil disimpan dan diterapkan pada Laporan Target Harian.</span>
+              </div>
+            )}
+          </div>
+        )}
+      </div>
 
       {/* ── 1. Nominal Target Harian — Bandung ───────────────────── */}
       <div className="rounded-xl border border-border/80 bg-surface shadow-xs overflow-hidden">

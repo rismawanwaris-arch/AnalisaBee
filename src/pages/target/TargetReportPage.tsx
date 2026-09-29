@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
-import { formatNumber } from "@/lib/format";
+import { formatNumber, TARGET_DECIMAL_STORAGE_KEY } from "@/lib/format";
 import { yesterdayStr } from "@/lib/dateDefaults";
 
 interface Figure {
@@ -106,6 +106,24 @@ export function TargetReportPage({ branch = "BANDUNG" }: { branch?: "BANDUNG" | 
   const [jpegBusy, setJpegBusy] = useState(false);
   const [excelBusy, setExcelBusy] = useState(false);
   const tableWrapRef = useRef<HTMLDivElement>(null);
+
+  const [decimals, setDecimals] = useState<number>(() => {
+    if (typeof window !== "undefined") {
+      const saved = localStorage.getItem(TARGET_DECIMAL_STORAGE_KEY);
+      if (saved !== null) {
+        const n = parseInt(saved, 10);
+        if ([0, 1, 2, 3].includes(n)) return n;
+      }
+    }
+    return 0; // Default: 0 (Bulat / Sembunyikan koma)
+  });
+
+  function handleDecimalsChange(val: number) {
+    setDecimals(val);
+    if (typeof window !== "undefined") {
+      localStorage.setItem(TARGET_DECIMAL_STORAGE_KEY, String(val));
+    }
+  }
 
   useEffect(() => setFrom(fromParam), [fromParam]);
   useEffect(() => setTo(toParam), [toParam]);
@@ -228,56 +246,57 @@ export function TargetReportPage({ branch = "BANDUNG" }: { branch?: "BANDUNG" | 
       "Total Sales",
       "Total Qty/Trx",
     ];
+    const formatVal = (v: number) => (decimals === 0 ? Math.round(v) : Number(v.toFixed(decimals)));
     const rows = sortedRows.map((r, idx) => [
       idx + 1,
       r.outlet,
-      r.server.sales,
+      formatVal(r.server.sales),
       r.server.qtyOrTrx,
-      r.tartun.sales,
+      formatVal(r.tartun.sales),
       r.tartun.qtyOrTrx,
-      r.petshop.sales,
+      formatVal(r.petshop.sales),
       r.petshop.qtyOrTrx,
-      r.aksesoris.sales,
+      formatVal(r.aksesoris.sales),
       r.aksesoris.qtyOrTrx,
-      r.spVoucher.sales,
+      formatVal(r.spVoucher.sales),
       r.spVoucher.qtyOrTrx,
-      r.totalSales,
+      formatVal(r.totalSales),
       r.totalQtyTrx,
     ]);
     const totalRow = [
       "",
       "TOTAL",
-      totals.server.sales,
+      formatVal(totals.server.sales),
       totals.server.trx,
-      totals.tartun.sales,
+      formatVal(totals.tartun.sales),
       totals.tartun.trx,
-      totals.petshop.sales,
+      formatVal(totals.petshop.sales),
       totals.petshop.pcs,
-      totals.aksesoris.sales,
+      formatVal(totals.aksesoris.sales),
       totals.aksesoris.pcs,
-      totals.spVoucher.sales,
+      formatVal(totals.spVoucher.sales),
       totals.spVoucher.pcs,
-      totals.totalSales,
+      formatVal(totals.totalSales),
       totals.totalQtyTrx,
     ];
     const targetAllRow = [
       "",
       data.dayCount > 1 ? `TARGET ALL (${data.dayCount} HARI)` : "TARGET ALL",
-      data.targets.all.SERVER,
+      formatVal(data.targets.all.SERVER),
       "",
-      data.targets.all.TARTUN,
+      formatVal(data.targets.all.TARTUN),
       "",
-      data.targets.all.PETSHOP,
+      formatVal(data.targets.all.PETSHOP),
       "",
-      data.targets.all.AKSESORIS,
+      formatVal(data.targets.all.AKSESORIS),
       "",
-      data.targets.all.SP_VOUCHER,
+      formatVal(data.targets.all.SP_VOUCHER),
       "",
-      totalTargetAll,
+      formatVal(totalTargetAll),
       "",
     ];
     const capPct = (actual: number, target: number) =>
-      target > 0 ? `${((actual / target) * 100).toFixed(1)}%` : "-";
+      target > 0 ? `${formatNumber((actual / target) * 100, decimals)}%` : "-";
     const capRow = [
       "",
       "CAPAIAN (%)",
@@ -389,6 +408,39 @@ export function TargetReportPage({ branch = "BANDUNG" }: { branch?: "BANDUNG" | 
           </button>
         </div>
 
+        {/* Decimal Places Selector */}
+        <div className="flex items-center gap-1.5 bg-surface-subtle border border-border/80 rounded-lg p-1">
+          <span className="text-[11px] font-semibold text-muted px-1.5 flex items-center gap-1 select-none">
+            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+              <circle cx="12" cy="19" r="2" fill="currentColor" />
+              <path d="M4 7V4h16v3M9 20h6M12 4v16" />
+            </svg>
+            <span>Desimal:</span>
+          </span>
+          <div className="flex items-center gap-0.5">
+            {[
+              { d: 0, label: "0 (Bulat)", title: "Sembunyikan koma / Angka bulat" },
+              { d: 1, label: ",0", title: "1 angka di belakang koma (,0)" },
+              { d: 2, label: ",00", title: "2 angka di belakang koma (,00)" },
+              { d: 3, label: ",000", title: "3 angka di belakang koma (,000)" },
+            ].map((opt) => (
+              <button
+                key={opt.d}
+                type="button"
+                onClick={() => handleDecimalsChange(opt.d)}
+                title={opt.title}
+                className={`px-2 py-1 text-xs font-mono font-bold rounded-md transition-all ${
+                  decimals === opt.d
+                    ? "bg-accent text-accent-foreground shadow-2xs"
+                    : "text-muted hover:text-foreground hover:bg-surface-hover"
+                }`}
+              >
+                {opt.label}
+              </button>
+            ))}
+          </div>
+        </div>
+
         <div className="flex items-center gap-2">
           <button
             type="button"
@@ -482,19 +534,19 @@ export function TargetReportPage({ branch = "BANDUNG" }: { branch?: "BANDUNG" | 
                       Outlet {sortKey === "outlet" && (sortDir === "asc" ? "▲" : "▼")}
                     </th>
                     <th colSpan={2} className="px-2 py-1 text-center font-bold border-r border-border/60">
-                      Server (Target: {formatNumber(data.targets.perkonter.SERVER)})
+                      Server (Target: {formatNumber(data.targets.perkonter.SERVER, decimals)})
                     </th>
                     <th colSpan={2} className="px-2 py-1 text-center font-bold border-r border-border/60">
-                      Tartun (Target: {formatNumber(data.targets.perkonter.TARTUN)})
+                      Tartun (Target: {formatNumber(data.targets.perkonter.TARTUN, decimals)})
                     </th>
                     <th colSpan={2} className="px-2 py-1 text-center font-bold border-r border-border/60">
-                      Petshop (Target: {formatNumber(data.targets.perkonter.PETSHOP)})
+                      Petshop (Target: {formatNumber(data.targets.perkonter.PETSHOP, decimals)})
                     </th>
                     <th colSpan={2} className="px-2 py-1 text-center font-bold border-r border-border/60">
-                      Aksesoris (Target: {formatNumber(data.targets.perkonter.AKSESORIS)})
+                      Aksesoris (Target: {formatNumber(data.targets.perkonter.AKSESORIS, decimals)})
                     </th>
                     <th colSpan={2} className="px-2 py-1 text-center font-bold border-r border-border/60">
-                      SP/Voucher (Target: {formatNumber(data.targets.perkonter.SP_VOUCHER)})
+                      SP/Voucher (Target: {formatNumber(data.targets.perkonter.SP_VOUCHER, decimals)})
                     </th>
                     <th colSpan={2} className="px-2 py-1 text-center font-bold">
                       Total
@@ -532,26 +584,26 @@ export function TargetReportPage({ branch = "BANDUNG" }: { branch?: "BANDUNG" | 
                           {r.outlet}
                         </td>
                         <td className={`px-2 py-1.5 text-right font-medium ${serverGood ? "bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 font-bold" : "bg-rose-500/10 text-rose-600 dark:text-rose-400 font-semibold"}`}>
-                          {formatNumber(r.server.sales)}
+                          {formatNumber(r.server.sales, decimals)}
                         </td>
                         <td className="px-2 py-1.5 text-right text-muted border-r border-border/60">{formatNumber(r.server.qtyOrTrx)}</td>
                         <td className={`px-2 py-1.5 text-right font-medium ${tartunGood ? "bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 font-bold" : "bg-rose-500/10 text-rose-600 dark:text-rose-400 font-semibold"}`}>
-                          {formatNumber(r.tartun.sales)}
+                          {formatNumber(r.tartun.sales, decimals)}
                         </td>
                         <td className="px-2 py-1.5 text-right text-muted border-r border-border/60">{formatNumber(r.tartun.qtyOrTrx)}</td>
                         <td className={`px-2 py-1.5 text-right font-medium ${petshopGood ? "bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 font-bold" : "bg-rose-500/10 text-rose-600 dark:text-rose-400 font-semibold"}`}>
-                          {formatNumber(r.petshop.sales)}
+                          {formatNumber(r.petshop.sales, decimals)}
                         </td>
                         <td className="px-2 py-1.5 text-right text-muted border-r border-border/60">{formatNumber(r.petshop.qtyOrTrx)}</td>
                         <td className={`px-2 py-1.5 text-right font-medium ${accGood ? "bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 font-bold" : "bg-rose-500/10 text-rose-600 dark:text-rose-400 font-semibold"}`}>
-                          {formatNumber(r.aksesoris.sales)}
+                          {formatNumber(r.aksesoris.sales, decimals)}
                         </td>
                         <td className="px-2 py-1.5 text-right text-muted border-r border-border/60">{formatNumber(r.aksesoris.qtyOrTrx)}</td>
                         <td className={`px-2 py-1.5 text-right font-medium ${spGood ? "bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 font-bold" : "bg-rose-500/10 text-rose-600 dark:text-rose-400 font-semibold"}`}>
-                          {formatNumber(r.spVoucher.sales)}
+                          {formatNumber(r.spVoucher.sales, decimals)}
                         </td>
                         <td className="px-2 py-1.5 text-right text-muted border-r border-border/60">{formatNumber(r.spVoucher.qtyOrTrx)}</td>
-                        <td className="px-2 py-1.5 text-right font-bold text-foreground">{formatNumber(r.totalSales)}</td>
+                        <td className="px-2 py-1.5 text-right font-bold text-foreground">{formatNumber(r.totalSales, decimals)}</td>
                         <td className="px-2 py-1.5 text-right text-muted">{formatNumber(r.totalQtyTrx)}</td>
                       </tr>
                     );
@@ -560,48 +612,60 @@ export function TargetReportPage({ branch = "BANDUNG" }: { branch?: "BANDUNG" | 
                 <tfoot className="border-t-2 border-border font-mono text-[11px] font-bold">
                   <tr className="bg-surface-subtle text-foreground">
                     <td className="px-3 py-2 font-sans border-r border-border/60" colSpan={2}>TOTAL REALISASI</td>
-                    <td className="px-2 py-2 text-right">{formatNumber(totals.server.sales)}</td>
+                    <td className="px-2 py-2 text-right">{formatNumber(totals.server.sales, decimals)}</td>
                     <td className="px-2 py-2 text-right border-r border-border/60">{formatNumber(totals.server.trx)}</td>
-                    <td className="px-2 py-2 text-right">{formatNumber(totals.tartun.sales)}</td>
+                    <td className="px-2 py-2 text-right">{formatNumber(totals.tartun.sales, decimals)}</td>
                     <td className="px-2 py-2 text-right border-r border-border/60">{formatNumber(totals.tartun.trx)}</td>
-                    <td className="px-2 py-2 text-right">{formatNumber(totals.petshop.sales)}</td>
+                    <td className="px-2 py-2 text-right">{formatNumber(totals.petshop.sales, decimals)}</td>
                     <td className="px-2 py-2 text-right border-r border-border/60">{formatNumber(totals.petshop.pcs)}</td>
-                    <td className="px-2 py-2 text-right">{formatNumber(totals.aksesoris.sales)}</td>
+                    <td className="px-2 py-2 text-right">{formatNumber(totals.aksesoris.sales, decimals)}</td>
                     <td className="px-2 py-2 text-right border-r border-border/60">{formatNumber(totals.aksesoris.pcs)}</td>
-                    <td className="px-2 py-2 text-right">{formatNumber(totals.spVoucher.sales)}</td>
+                    <td className="px-2 py-2 text-right">{formatNumber(totals.spVoucher.sales, decimals)}</td>
                     <td className="px-2 py-2 text-right border-r border-border/60">{formatNumber(totals.spVoucher.pcs)}</td>
-                    <td className="px-2 py-2 text-right text-accent">{formatNumber(totals.totalSales)}</td>
+                    <td className="px-2 py-2 text-right text-accent">{formatNumber(totals.totalSales, decimals)}</td>
                     <td className="px-2 py-2 text-right">{formatNumber(totals.totalQtyTrx)}</td>
                   </tr>
                   <tr className="bg-surface-subtle/50 text-muted">
                     <td className="px-3 py-1.5 font-sans border-r border-border/60" colSpan={2}>
                       {data.dayCount > 1 ? `TARGET ALL (${data.dayCount} HARI)` : "TARGET ALL"}
                     </td>
-                    <td className="px-2 py-1.5 text-right">{formatNumber(data.targets.all.SERVER)}</td>
+                    <td className="px-2 py-1.5 text-right">{formatNumber(data.targets.all.SERVER, decimals)}</td>
                     <td className="px-2 py-1.5 text-right border-r border-border/60">-</td>
-                    <td className="px-2 py-1.5 text-right">{formatNumber(data.targets.all.TARTUN)}</td>
+                    <td className="px-2 py-1.5 text-right">{formatNumber(data.targets.all.TARTUN, decimals)}</td>
                     <td className="px-2 py-1.5 text-right border-r border-border/60">-</td>
-                    <td className="px-2 py-1.5 text-right">{formatNumber(data.targets.all.PETSHOP)}</td>
+                    <td className="px-2 py-1.5 text-right">{formatNumber(data.targets.all.PETSHOP, decimals)}</td>
+                    <td className="px-2 py-2 text-right border-r border-border/60">-</td>
+                    <td className="px-2 py-1.5 text-right">{formatNumber(data.targets.all.AKSESORIS, decimals)}</td>
                     <td className="px-2 py-1.5 text-right border-r border-border/60">-</td>
-                    <td className="px-2 py-1.5 text-right">{formatNumber(data.targets.all.AKSESORIS)}</td>
+                    <td className="px-2 py-1.5 text-right">{formatNumber(data.targets.all.SP_VOUCHER, decimals)}</td>
                     <td className="px-2 py-1.5 text-right border-r border-border/60">-</td>
-                    <td className="px-2 py-1.5 text-right">{formatNumber(data.targets.all.SP_VOUCHER)}</td>
-                    <td className="px-2 py-1.5 text-right border-r border-border/60">-</td>
-                    <td className="px-2 py-1.5 text-right font-bold text-foreground" colSpan={2}>{formatNumber(totalTargetAll)}</td>
+                    <td className="px-2 py-1.5 text-right font-bold text-foreground" colSpan={2}>{formatNumber(totalTargetAll, decimals)}</td>
                   </tr>
                   <tr className="bg-surface-subtle/70 text-foreground">
                     <td className="px-3 py-1.5 font-sans border-r border-border/60" colSpan={2}>CAPAIAN (%)</td>
-                    <td className="px-2 py-1.5 text-right text-accent">{data.targets.all.SERVER > 0 ? `${((totals.server.sales / data.targets.all.SERVER) * 100).toFixed(1)}%` : "-"}</td>
+                    <td className="px-2 py-1.5 text-right text-accent font-bold">
+                      {data.targets.all.SERVER > 0 ? `${formatNumber((totals.server.sales / data.targets.all.SERVER) * 100, decimals)}%` : "-"}
+                    </td>
                     <td className="px-2 py-1.5 text-right border-r border-border/60">-</td>
-                    <td className="px-2 py-1.5 text-right text-accent">{data.targets.all.TARTUN > 0 ? `${((totals.tartun.sales / data.targets.all.TARTUN) * 100).toFixed(1)}%` : "-"}</td>
+                    <td className="px-2 py-1.5 text-right text-accent font-bold">
+                      {data.targets.all.TARTUN > 0 ? `${formatNumber((totals.tartun.sales / data.targets.all.TARTUN) * 100, decimals)}%` : "-"}
+                    </td>
                     <td className="px-2 py-1.5 text-right border-r border-border/60">-</td>
-                    <td className="px-2 py-1.5 text-right text-accent">{data.targets.all.PETSHOP > 0 ? `${((totals.petshop.sales / data.targets.all.PETSHOP) * 100).toFixed(1)}%` : "-"}</td>
+                    <td className="px-2 py-1.5 text-right text-accent font-bold">
+                      {data.targets.all.PETSHOP > 0 ? `${formatNumber((totals.petshop.sales / data.targets.all.PETSHOP) * 100, decimals)}%` : "-"}
+                    </td>
                     <td className="px-2 py-1.5 text-right border-r border-border/60">-</td>
-                    <td className="px-2 py-1.5 text-right text-accent">{data.targets.all.AKSESORIS > 0 ? `${((totals.aksesoris.sales / data.targets.all.AKSESORIS) * 100).toFixed(1)}%` : "-"}</td>
+                    <td className="px-2 py-1.5 text-right text-accent font-bold">
+                      {data.targets.all.AKSESORIS > 0 ? `${formatNumber((totals.aksesoris.sales / data.targets.all.AKSESORIS) * 100, decimals)}%` : "-"}
+                    </td>
                     <td className="px-2 py-1.5 text-right border-r border-border/60">-</td>
-                    <td className="px-2 py-1.5 text-right text-accent">{data.targets.all.SP_VOUCHER > 0 ? `${((totals.spVoucher.sales / data.targets.all.SP_VOUCHER) * 100).toFixed(1)}%` : "-"}</td>
+                    <td className="px-2 py-1.5 text-right text-accent font-bold">
+                      {data.targets.all.SP_VOUCHER > 0 ? `${formatNumber((totals.spVoucher.sales / data.targets.all.SP_VOUCHER) * 100, decimals)}%` : "-"}
+                    </td>
                     <td className="px-2 py-1.5 text-right border-r border-border/60">-</td>
-                    <td className="px-2 py-1.5 text-right font-bold text-accent" colSpan={2}>{totalTargetAll > 0 ? `${((totals.totalSales / totalTargetAll) * 100).toFixed(1)}%` : "-"}</td>
+                    <td className="px-2 py-1.5 text-right font-bold text-accent" colSpan={2}>
+                      {totalTargetAll > 0 ? `${formatNumber((totals.totalSales / totalTargetAll) * 100, decimals)}%` : "-"}
+                    </td>
                   </tr>
                 </tfoot>
               </table>

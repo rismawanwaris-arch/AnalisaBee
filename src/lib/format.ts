@@ -6,7 +6,15 @@ export function formatRupiah(value: number): string {
   }).format(value);
 }
 
-export function formatNumber(value: number): string {
+export const TARGET_DECIMAL_STORAGE_KEY = "target_report_decimal_digits";
+
+export function formatNumber(value: number, decimalDigits?: number): string {
+  if (decimalDigits !== undefined && decimalDigits >= 0) {
+    return new Intl.NumberFormat("id-ID", {
+      minimumFractionDigits: decimalDigits,
+      maximumFractionDigits: decimalDigits,
+    }).format(value);
+  }
   return new Intl.NumberFormat("id-ID").format(value);
 }
 

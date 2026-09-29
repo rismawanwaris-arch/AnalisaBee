@@ -26,6 +26,14 @@ describe("formatNumber", () => {
   it("formats with Indonesian thousands separators", () => {
     expect(formatNumber(2384)).toBe("2.384");
   });
+
+  it("formats with specified decimal digits", () => {
+    expect(formatNumber(2384.5678, 0)).toBe("2.385");
+    expect(formatNumber(2384.5678, 1)).toBe("2.384,6");
+    expect(formatNumber(2384.5678, 2)).toBe("2.384,57");
+    expect(formatNumber(2384.5678, 3)).toBe("2.384,568");
+    expect(formatNumber(1500000, 2)).toBe("1.500.000,00");
+  });
 });
 
 describe("formatDate", () => {
