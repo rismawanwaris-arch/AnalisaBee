@@ -118,12 +118,23 @@ export function TargetReportPage({ branch = "BANDUNG" }: { branch?: "BANDUNG" | 
     return 0; // Default: 0 (Bulat / Sembunyikan koma)
   });
 
-  function handleDecimalsChange(val: number) {
-    setDecimals(val);
-    if (typeof window !== "undefined") {
-      localStorage.setItem(TARGET_DECIMAL_STORAGE_KEY, String(val));
+  useEffect(() => {
+    function syncDecimals() {
+      if (typeof window !== "undefined") {
+        const saved = localStorage.getItem(TARGET_DECIMAL_STORAGE_KEY);
+        if (saved !== null) {
+          const n = parseInt(saved, 10);
+          if ([0, 1, 2, 3].includes(n)) {
+            setDecimals(n);
+            return;
+          }
+        }
+        setDecimals(0);
+      }
     }
-  }
+    window.addEventListener("storage", syncDecimals);
+    return () => window.removeEventListener("storage", syncDecimals);
+  }, []);
 
   useEffect(() => setFrom(fromParam), [fromParam]);
   useEffect(() => setTo(toParam), [toParam]);
@@ -406,39 +417,6 @@ export function TargetReportPage({ branch = "BANDUNG" }: { branch?: "BANDUNG" | 
             </svg>
             <span>Tampilkan</span>
           </button>
-        </div>
-
-        {/* Decimal Places Selector */}
-        <div className="flex items-center gap-1.5 bg-surface-subtle border border-border/80 rounded-lg p-1">
-          <span className="text-[11px] font-semibold text-muted px-1.5 flex items-center gap-1 select-none">
-            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-              <circle cx="12" cy="19" r="2" fill="currentColor" />
-              <path d="M4 7V4h16v3M9 20h6M12 4v16" />
-            </svg>
-            <span>Desimal:</span>
-          </span>
-          <div className="flex items-center gap-0.5">
-            {[
-              { d: 0, label: "0 (Bulat)", title: "Sembunyikan koma / Angka bulat" },
-              { d: 1, label: ",0", title: "1 angka di belakang koma (,0)" },
-              { d: 2, label: ",00", title: "2 angka di belakang koma (,00)" },
-              { d: 3, label: ",000", title: "3 angka di belakang koma (,000)" },
-            ].map((opt) => (
-              <button
-                key={opt.d}
-                type="button"
-                onClick={() => handleDecimalsChange(opt.d)}
-                title={opt.title}
-                className={`px-2 py-1 text-xs font-mono font-bold rounded-md transition-all ${
-                  decimals === opt.d
-                    ? "bg-accent text-accent-foreground shadow-2xs"
-                    : "text-muted hover:text-foreground hover:bg-surface-hover"
-                }`}
-              >
-                {opt.label}
-              </button>
-            ))}
-          </div>
         </div>
 
         <div className="flex items-center gap-2">
