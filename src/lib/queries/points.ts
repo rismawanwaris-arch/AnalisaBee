@@ -239,6 +239,23 @@ export function computeMonthPeriod(
   return { from, to };
 }
 
+/** The month-cycle period (see computeMonthPeriod) that contains today — e.g.
+ *  periodStartDay=29 and today the 6th means the period actually running
+ *  right now is still "last month" (29th – 28th), not the calendar month. */
+export function computeCurrentMonthPeriod(periodStartDay: number): { from: Date; to: Date } {
+  const now = new Date();
+  let year = now.getFullYear();
+  let month = now.getMonth() + 1; // 1-12
+  if (now.getDate() < periodStartDay) {
+    month -= 1;
+    if (month === 0) {
+      month = 12;
+      year -= 1;
+    }
+  }
+  return computeMonthPeriod(year, month, periodStartDay);
+}
+
 /** Monday–Sunday week containing `dateStr` (YYYY-MM-DD), inclusive. */
 export function computeWeekPeriod(dateStr: string): { from: Date; to: Date } {
   const [y, m, d] = dateStr.split("-").map(Number);

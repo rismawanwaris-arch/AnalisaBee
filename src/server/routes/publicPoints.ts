@@ -7,38 +7,33 @@
 // requireAuth/requireFeature/requireMaster here, and never let these routes
 // return anything beyond points/ranking data (no revenue, no profit).
 import { Router, type Request } from "express";
-import { getPointPeriodSetting, computeMonthPeriod, computeWeekPeriod, getPublicPointsDashboard, getEmployeePointBreakdown } from "../../lib/queries/points";
-import { todayStr } from "../../lib/dateDefaults";
+import { getPointPeriodSetting, computeCurrentMonthPeriod, getPublicPointsDashboard, getEmployeePointBreakdown } from "../../lib/queries/points";
 import type { ReportCategory } from "@/generated/prisma/client";
 import { publicPointsLimiter } from "../middleware";
 
 export const publicPointsRouter = Router();
 
-// Each period mode (Harian/Mingguan/Bulanan) on the public wallboard compares
-// against its own target — a monthly target is naturally much larger than a
-// daily one, so a single shared number doesn't make sense across views.
+// The wallboard's date filter is a plain range (no Harian/Mingguan/Bulanan
+// preset anymore) — pass ?from=&to= to pick one explicitly. Omit both to get
+// the month-cycle period (per PointSettings.periodStartDay) currently
+// running, e.g. periodStartDay=29 defaults to "29th – 28th". The displayed
+// target is always pointTargetMonthly regardless of the range picked — the
+// other two target settings (harian/mingguan) exist only for the internal
+// /points leaderboard's own Harian/Mingguan tabs, not this page.
 async function resolvePublicPointsPeriod(
   req: Request
 ): Promise<{ from: Date; to: Date; pointTarget: number; periodStartDay: number }> {
-  const period = req.query.period === "day" || req.query.period === "week" ? req.query.period : "month";
-  const dateParam = typeof req.query.date === "string" ? req.query.date : null;
-  const dateStr = dateParam && !Number.isNaN(new Date(dateParam).getTime()) ? dateParam : todayStr();
   const setting = await getPointPeriodSetting();
+  const fromParam = typeof req.query.from === "string" ? req.query.from : null;
+  const toParam = typeof req.query.to === "string" ? req.query.to : null;
+  const fromValid = fromParam && !Number.isNaN(new Date(fromParam).getTime());
+  const toValid = toParam && !Number.isNaN(new Date(toParam).getTime());
 
-  if (period === "day") {
-    return { from: new Date(dateStr), to: new Date(dateStr), pointTarget: setting.pointTargetDaily, periodStartDay: setting.periodStartDay };
-  }
-  if (period === "week") {
-    return { ...computeWeekPeriod(dateStr), pointTarget: setting.pointTargetWeekly, periodStartDay: setting.periodStartDay };
-  }
-  const [y, m] = dateStr.split("-").map(Number);
-  const monthNum = m || new Date().getMonth() + 1;
-  const yearNum = y || new Date().getFullYear();
-  return {
-    ...computeMonthPeriod(yearNum, monthNum, setting.periodStartDay),
-    pointTarget: setting.pointTargetMonthly,
-    periodStartDay: setting.periodStartDay,
-  };
+  const { from, to } = fromValid && toValid
+    ? { from: new Date(fromParam), to: new Date(toParam) }
+    : computeCurrentMonthPeriod(setting.periodStartDay);
+
+  return { from, to, pointTarget: setting.pointTargetMonthly, periodStartDay: setting.periodStartDay };
 }
 
 function parsePublicOutletId(req: Request): number | undefined {

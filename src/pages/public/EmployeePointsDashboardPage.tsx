@@ -1,8 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { formatNumber } from "@/lib/format";
-import { todayStr } from "@/lib/dateDefaults";
-
-type Mode = "day" | "week" | "month";
 
 interface CategoryPointRow {
   category: string;
@@ -26,7 +23,6 @@ interface PublicPointsDashboard {
   to: string;
   pointTarget: number;
   outlets: { id: number; name: string }[];
-  periodStartDay: number;
 }
 
 interface ItemPointBreakdownRow {
@@ -37,29 +33,6 @@ interface ItemPointBreakdownRow {
   pointsPerUnit: number;
   totalPoints: number;
 }
-
-// A period labeled "month M" runs from periodStartDay of M through
-// periodStartDay-1 of M+1 (see computeMonthPeriod on the server). So if
-// today falls before periodStartDay, the period actually running right now
-// started last month, not this one — e.g. periodStartDay=29 and today the
-// 6th means the running period is still "last month" (29th – 28th). Same
-// logic as PointsLeaderboardPage's currentPeriodMonthStr, duplicated here
-// because this page is public and can't call the auth-gated settings route.
-function currentPeriodMonthStr(periodStartDay: number): string {
-  const d = new Date();
-  let year = d.getFullYear();
-  let month = d.getMonth() + 1; // 1-12
-  if (d.getDate() < periodStartDay) {
-    month -= 1;
-    if (month === 0) {
-      month = 12;
-      year -= 1;
-    }
-  }
-  return `${year}-${String(month).padStart(2, "0")}`;
-}
-
-const MODE_LABEL: Record<Mode, string> = { day: "Harian", week: "Mingguan", month: "Bulanan" };
 
 const RANK_BADGE = [
   "bg-amber-500/15 text-amber-600 dark:text-amber-400 border-amber-500/30",
@@ -79,13 +52,8 @@ interface EmployeePointsDashboardPageProps {
 // AuthContext, no sidebar. It's meant to run unattended on a tablet/TV per
 // outlet, so it auto-refreshes on its own rather than waiting for a click.
 export function EmployeePointsDashboardPage({ category }: EmployeePointsDashboardPageProps = {}) {
-  const [mode, setMode] = useState<Mode>("month");
-  const [day, setDay] = useState(todayStr());
-  // Guessed with periodStartDay=1 until the first response reveals the real
-  // cut-off day, then self-corrected below — same dance PointsLeaderboardPage
-  // does, just without an auth-gated settings call this public page can't make.
-  const [month, setMonth] = useState(() => currentPeriodMonthStr(1));
-  const [periodStartDay, setPeriodStartDay] = useState(1);
+  const [from, setFrom] = useState("");
+  const [to, setTo] = useState("");
   const [outletId, setOutletId] = useState("");
   const [data, setData] = useState<PublicPointsDashboard | null>(null);
   const [loading, setLoading] = useState(true);
@@ -97,14 +65,23 @@ export function EmployeePointsDashboardPage({ category }: EmployeePointsDashboar
 
   const loadSeq = useRef(0);
   const hasLoadedOnce = useRef(false);
-  const monthTouchedRef = useRef(false);
+  // Becomes true the moment the person edits either date input by hand.
+  // Until then, the board keeps following the server's "current month cycle"
+  // default on every refresh, so it rolls over on its own right after the
+  // period boundary (e.g. midnight on the 29th) instead of freezing on
+  // whatever range happened to be default when the tablet was last touched.
+  const rangeTouchedRef = useRef(false);
 
   const queryParams = useCallback(() => {
-    const params = new URLSearchParams({ period: mode, date: mode === "month" ? month : day });
+    const params = new URLSearchParams();
+    if (rangeTouchedRef.current) {
+      if (from) params.set("from", from);
+      if (to) params.set("to", to);
+    }
     if (outletId) params.set("outletId", outletId);
     if (category) params.set("category", category);
     return params;
-  }, [mode, day, month, outletId, category]);
+  }, [from, to, outletId, category]);
 
   const load = useCallback(async () => {
     const seq = ++loadSeq.current;
@@ -120,14 +97,11 @@ export function EmployeePointsDashboardPage({ category }: EmployeePointsDashboar
       setError(null);
       const json: PublicPointsDashboard = await res.json();
       setData(json);
-      // Self-correct the guessed "current month" once the real cut-off day is
-      // known — mirrors PointsLeaderboardPage's currentPeriodMonthStr dance.
-      if (json.periodStartDay && json.periodStartDay !== periodStartDay) {
-        setPeriodStartDay(json.periodStartDay);
-        if (!monthTouchedRef.current) {
-          const corrected = currentPeriodMonthStr(json.periodStartDay);
-          if (corrected !== month) setMonth(corrected);
-        }
+      // Reflect the server's default range in the inputs as long as the
+      // person hasn't picked their own — see rangeTouchedRef above.
+      if (!rangeTouchedRef.current) {
+        setFrom(json.from.slice(0, 10));
+        setTo(json.to.slice(0, 10));
       }
     } catch {
       if (seq === loadSeq.current) setError("Terjadi kesalahan jaringan.");
@@ -137,7 +111,7 @@ export function EmployeePointsDashboardPage({ category }: EmployeePointsDashboar
         hasLoadedOnce.current = true;
       }
     }
-  }, [queryParams, periodStartDay, month]);
+  }, [queryParams]);
 
   useEffect(() => {
     load();
@@ -190,38 +164,27 @@ export function EmployeePointsDashboardPage({ category }: EmployeePointsDashboar
 
         {/* Filters */}
         <div className="rounded-xl border border-border/80 bg-surface p-3.5 flex flex-wrap items-center justify-center gap-3 shadow-xs">
-          <div className="inline-flex rounded-lg border border-border/80 p-1 bg-surface-subtle shadow-2xs">
-            {(["day", "week", "month"] as Mode[]).map((m) => (
-              <button
-                key={m}
-                type="button"
-                onClick={() => setMode(m)}
-                className={`px-3 py-1.5 text-xs font-semibold rounded-md transition-all ${
-                  mode === m ? "bg-accent text-accent-foreground shadow-xs" : "text-muted hover:text-foreground"
-                }`}
-              >
-                {MODE_LABEL[m]}
-              </button>
-            ))}
-          </div>
-          {mode === "month" ? (
+          <div className="flex items-center gap-1.5">
             <input
-              type="month"
-              value={month}
+              type="date"
+              value={from}
               onChange={(e) => {
-                monthTouchedRef.current = true;
-                setMonth(e.target.value);
+                rangeTouchedRef.current = true;
+                setFrom(e.target.value);
               }}
               className="rounded-lg border border-border/80 bg-surface-subtle px-3 py-1.5 text-xs text-foreground focus:outline-none focus:ring-2 focus:ring-accent/20 focus:border-accent transition-all"
             />
-          ) : (
+            <span className="text-muted text-xs">–</span>
             <input
               type="date"
-              value={day}
-              onChange={(e) => setDay(e.target.value)}
+              value={to}
+              onChange={(e) => {
+                rangeTouchedRef.current = true;
+                setTo(e.target.value);
+              }}
               className="rounded-lg border border-border/80 bg-surface-subtle px-3 py-1.5 text-xs text-foreground focus:outline-none focus:ring-2 focus:ring-accent/20 focus:border-accent transition-all"
             />
-          )}
+          </div>
           <select
             value={outletId}
             onChange={(e) => setOutletId(e.target.value)}
