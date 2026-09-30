@@ -2436,20 +2436,34 @@ export function SettingsPage() {
                 </span>
               )}
             </div>
-            <p className="text-xs pt-2 border-t border-border/60">
-              <a
-                href="/papan-poin"
-                target="_blank"
-                rel="noopener noreferrer"
-                className="inline-flex items-center gap-1.5 text-accent hover:underline font-semibold"
-              >
-                Buka Papan Poin Karyawan
-                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
-                  <path d="M7 17L17 7M7 7h10v10" />
-                </svg>
-              </a>
-              <span className="text-muted"> — halaman publik tanpa login, cocok dipasang di tablet/TV outlet.</span>
-            </p>
+            <div className="text-xs pt-2 border-t border-border/60 space-y-1">
+              <div className="flex flex-wrap items-center gap-3">
+                <a
+                  href="/papan-poin"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="inline-flex items-center gap-1.5 text-accent hover:underline font-semibold"
+                >
+                  Papan Poin Bandung
+                  <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
+                    <path d="M7 17L17 7M7 7h10v10" />
+                  </svg>
+                </a>
+                <span className="text-muted">·</span>
+                <a
+                  href="/papan-poin/cimahi"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="inline-flex items-center gap-1.5 text-accent hover:underline font-semibold"
+                >
+                  Papan Poin Cimahi
+                  <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
+                    <path d="M7 17L17 7M7 7h10v10" />
+                  </svg>
+                </a>
+              </div>
+              <p className="text-muted">Halaman publik tanpa login, cocok dipasang di tablet/TV outlet.</p>
+            </div>
           </div>
         )}
       </div>

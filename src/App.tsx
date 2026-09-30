@@ -71,9 +71,16 @@ export function App() {
                   Split into two boards, same reasoning as the internal /points
                   Aksesoris/Petshop split — /papan-poin keeps its original meaning
                   (Aksesoris) so existing bookmarks/tablets don't silently change. */}
-              <Route path="/papan-poin" element={<EmployeePointsDashboardPage category="AKSESORIS" />} />
-              <Route path="/papan-poin/petshop" element={<EmployeePointsDashboardPage category="PETSHOP" />} />
-              <Route path="/papan-poin/sp" element={<EmployeePointsDashboardPage category="SP_VOUCHER" />} />
+              <Route path="/papan-poin" element={<EmployeePointsDashboardPage branch="BANDUNG" category="AKSESORIS" />} />
+              <Route path="/papan-poin/aksesoris" element={<Navigate to="/papan-poin" replace />} />
+              <Route path="/papan-poin/petshop" element={<EmployeePointsDashboardPage branch="BANDUNG" category="PETSHOP" />} />
+              <Route path="/papan-poin/sp" element={<EmployeePointsDashboardPage branch="BANDUNG" category="SP_VOUCHER" />} />
+
+              {/* Public Cimahi points wallboards */}
+              <Route path="/papan-poin/cimahi" element={<EmployeePointsDashboardPage branch="CIMAHI" category="AKSESORIS" />} />
+              <Route path="/papan-poin/cimahi/aksesoris" element={<Navigate to="/papan-poin/cimahi" replace />} />
+              <Route path="/papan-poin/cimahi/petshop" element={<EmployeePointsDashboardPage branch="CIMAHI" category="PETSHOP" />} />
+              <Route path="/papan-poin/cimahi/sp" element={<EmployeePointsDashboardPage branch="CIMAHI" category="SP_VOUCHER" />} />
 
               {/* Protected Application Routes */}
               <Route element={<AppLayout />}>

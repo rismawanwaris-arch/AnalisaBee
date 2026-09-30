@@ -51,16 +51,37 @@ const CATEGORY_META: Record<PublicCategory, { title: string; subtitle: string; p
   SP_VOUCHER: { title: "SP/Voucher", subtitle: "SP/voucher", path: "/papan-poin/sp" },
 };
 
+function getCategoryPath(category: PublicCategory, branch: "BANDUNG" | "CIMAHI"): string {
+  if (branch === "CIMAHI") {
+    if (category === "PETSHOP") return "/papan-poin/cimahi/petshop";
+    if (category === "SP_VOUCHER") return "/papan-poin/cimahi/sp";
+    return "/papan-poin/cimahi";
+  }
+  return CATEGORY_META[category].path;
+}
+
+function getBranchSwitchPath(targetBranch: "BANDUNG" | "CIMAHI", category?: PublicCategory): string {
+  if (!category || category === "AKSESORIS") {
+    return targetBranch === "CIMAHI" ? "/papan-poin/cimahi" : "/papan-poin";
+  }
+  const suffix = category === "PETSHOP" ? "petshop" : "sp";
+  return targetBranch === "CIMAHI" ? `/papan-poin/cimahi/${suffix}` : `/papan-poin/${suffix}`;
+}
+
 interface EmployeePointsDashboardPageProps {
   // Which board this is. Omit for the pre-split, combined behavior (kept
   // only so the route can't 500 if ever hit bare).
   category?: PublicCategory;
+  branch?: "BANDUNG" | "CIMAHI";
 }
 
 // This page is intentionally standalone and public — no login, no
 // AuthContext, no sidebar. It's meant to run unattended on a tablet/TV per
 // outlet, so it auto-refreshes on its own rather than waiting for a click.
-export function EmployeePointsDashboardPage({ category }: EmployeePointsDashboardPageProps = {}) {
+export function EmployeePointsDashboardPage({
+  category,
+  branch = "BANDUNG",
+}: EmployeePointsDashboardPageProps = {}) {
   const [from, setFrom] = useState("");
   const [to, setTo] = useState("");
   const [outletId, setOutletId] = useState("");
@@ -89,8 +110,9 @@ export function EmployeePointsDashboardPage({ category }: EmployeePointsDashboar
     }
     if (outletId) params.set("outletId", outletId);
     if (category) params.set("category", category);
+    if (branch) params.set("branch", branch);
     return params;
-  }, [from, to, outletId, category]);
+  }, [from, to, outletId, category, branch]);
 
   const load = useCallback(async () => {
     const seq = ++loadSeq.current;
@@ -153,28 +175,42 @@ export function EmployeePointsDashboardPage({ category }: EmployeePointsDashboar
     }
   }
 
+  const branchLabel = branch === "CIMAHI" ? "Cimahi" : "Bandung";
+  const otherBranch = branch === "CIMAHI" ? "BANDUNG" : "CIMAHI";
+  const otherBranchLabel = otherBranch === "CIMAHI" ? "Cimahi" : "Bandung";
+
   return (
     <div className="min-h-screen bg-background px-4 py-6 md:px-8 md:py-8">
       <div className="max-w-5xl mx-auto space-y-5">
         <div className="text-center space-y-1">
+          <div className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-[11px] font-semibold tracking-wide uppercase bg-accent/10 text-accent border border-accent/20 mb-1">
+            Cabang {branchLabel}
+          </div>
           <h1 className="text-2xl font-bold tracking-tight text-foreground">
             🏆 Papan Poin Karyawan{category ? ` — ${CATEGORY_META[category].title}` : ""}
           </h1>
           <p className="text-xs text-muted">
-            Peringkat pencapaian poin penjualan {category ? CATEGORY_META[category].subtitle : ""}
+            Peringkat pencapaian poin penjualan {category ? CATEGORY_META[category].subtitle : ""} · Cabang {branchLabel}
           </p>
-          <div className="flex items-center justify-center gap-3 flex-wrap">
+          <div className="flex items-center justify-center gap-3 flex-wrap pt-1">
             {(Object.keys(CATEGORY_META) as PublicCategory[])
               .filter((c) => c !== category)
               .map((c) => (
                 <a
                   key={c}
-                  href={CATEGORY_META[c].path}
+                  href={getCategoryPath(c, branch)}
                   className="inline-block text-[11px] text-muted hover:text-accent underline underline-offset-2 transition-colors"
                 >
-                  Lihat papan {CATEGORY_META[c].title} →
+                  Lihat {CATEGORY_META[c].title} →
                 </a>
               ))}
+            <span className="text-muted/40 text-xs">·</span>
+            <a
+              href={getBranchSwitchPath(otherBranch, category)}
+              className="inline-flex items-center gap-1 text-[11px] font-medium text-accent hover:underline underline-offset-2 transition-colors"
+            >
+              Ke Cabang {otherBranchLabel} ↗
+            </a>
           </div>
         </div>
 

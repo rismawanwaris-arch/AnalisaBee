@@ -41,6 +41,11 @@ function parsePublicOutletId(req: Request): number | undefined {
   return raw && Number.isInteger(raw) ? raw : undefined;
 }
 
+function parsePublicBranch(req: Request): "BANDUNG" | "CIMAHI" | undefined {
+  if (req.query.branch === "CIMAHI" || req.query.branch === "BANDUNG") return req.query.branch;
+  return undefined;
+}
+
 // Undefined = no category filter (mixes all three, the only behavior before
 // the Aksesoris/Petshop/SP-Voucher wallboard split existed). Same values as
 // the internal pointsFeature/parsePointsCategory in routes/points.ts — kept
@@ -57,7 +62,8 @@ function parsePublicCategory(req: Request): ReportCategory | undefined {
 publicPointsRouter.get("/api/public/points/dashboard", publicPointsLimiter, async (req, res) => {
   try {
     const { from, to, pointTarget, periodStartDay } = await resolvePublicPointsPeriod(req);
-    const data = await getPublicPointsDashboard(from, to, parsePublicOutletId(req), pointTarget, parsePublicCategory(req));
+    const branch = parsePublicBranch(req);
+    const data = await getPublicPointsDashboard(from, to, parsePublicOutletId(req), pointTarget, parsePublicCategory(req), branch);
     // periodStartDay lets the page figure out which calendar month the
     // *currently running* cycle actually belongs to (see EmployeePointsDashboardPage) —
     // not sensitive, it's the same cut-off day already implied by `from`/`to` below.
@@ -73,12 +79,13 @@ publicPointsRouter.get("/api/public/points/employee/:id", publicPointsLimiter, a
   if (!Number.isInteger(employeeId)) return res.status(400).json({ error: "ID tidak valid." });
   try {
     const { from, to } = await resolvePublicPointsPeriod(req);
+    const branch = parsePublicBranch(req);
     const breakdown = await getEmployeePointBreakdown(
       employeeId,
       from,
       to,
       parsePublicOutletId(req),
-      undefined,
+      branch,
       parsePublicCategory(req)
     );
     return res.json(breakdown);

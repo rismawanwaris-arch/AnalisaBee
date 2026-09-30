@@ -513,19 +513,24 @@ export interface PublicPointsDashboard {
  *  getLeaderboard (internal, network-wide only), this includes every active
  *  employee — even ones with 0 points this period — and can scope points to
  *  one outlet. An employee's displayed "outlet" is always their busiest one
- *  network-wide for the period (stable, not affected by the outlet OR
- *  category filter); when an outlet filter is active, the roster itself
- *  narrows to employees who actually sold something there in this period,
- *  since a wallboard for one outlet showing every network-wide employee at 0
- *  would be noise. `category` scopes to one report category (Aksesoris vs
- *  Petshop — see the internal /points split); omit to mix both, the only
- *  behavior before that split existed. */
+ *  *within the resolved scope* for the period (stable, not affected by the
+ *  outlet filter itself); when an outlet or branch filter is active, the
+ *  roster itself narrows to employees who actually sold something in that
+ *  scope this period, since a wallboard showing every other employee at 0
+ *  would be noise. `category` scopes to one report category (Aksesoris /
+ *  Petshop / SP-Voucher — see the internal /points split); omit to mix all
+ *  three, the only behavior before that split existed. `branch` scopes to
+ *  one cabang's outlets; omit for the pre-Cimahi-split, network-wide
+ *  behavior. Employee itself carries no branch column (it's an outlet
+ *  property), so branch scoping works the same way outlet scoping already
+ *  did — via which outlets the employee actually sold at this period. */
 export async function getPublicPointsDashboard(
   from: Date,
   to: Date,
   outletId: number | undefined,
   pointTarget: number,
-  category?: ReportCategory
+  category?: ReportCategory,
+  branch?: "BANDUNG" | "CIMAHI"
 ): Promise<PublicPointsDashboard> {
   await ensureDefaults();
 
@@ -534,6 +539,7 @@ export async function getPublicPointsDashboard(
     category ? getItemGroupsForCategory(category) : Promise.resolve(undefined),
   ]);
   const excludeClause = excludedIds.length > 0 ? { employeeId: { notIn: excludedIds } } : {};
+  const branchClause = branch ? { outlet: { branch } } : {};
 
   const [roster, salesAgg, outletAgg, outlets] = await Promise.all([
     prisma.employee.findMany({
@@ -545,19 +551,25 @@ export async function getPublicPointsDashboard(
       where: {
         tanggal: { gte: from, lte: to },
         ...excludeClause,
+        ...branchClause,
         ...(outletId ? { outletId } : {}),
         ...(categoryGroups ? { item: { itemGroup: { in: categoryGroups } } } : {}),
       },
       _sum: { qty: true },
     }),
-    // Deliberately NOT filtered by outletId — this is what makes an
-    // employee's displayed outlet stable across different outlet-board views.
+    // Deliberately NOT filtered by outletId (branch still applies) — this is
+    // what makes an employee's displayed outlet stable across different
+    // outlet-board views within the same branch.
     prisma.sale.groupBy({
       by: ["employeeId", "outletId"],
-      where: { tanggal: { gte: from, lte: to }, ...excludeClause },
+      where: { tanggal: { gte: from, lte: to }, ...excludeClause, ...branchClause },
       _count: { _all: true },
     }),
-    prisma.outlet.findMany({ where: { isHidden: false }, select: { id: true, name: true }, orderBy: { name: "asc" } }),
+    prisma.outlet.findMany({
+      where: { isHidden: false, ...(branch ? { branch } : {}) },
+      select: { id: true, name: true },
+      orderBy: { name: "asc" },
+    }),
   ]);
 
   const itemIds = [...new Set(salesAgg.map((s) => s.itemId))];
@@ -614,11 +626,13 @@ export async function getPublicPointsDashboard(
     stat.categories.set(category, catRow);
   }
 
-  // When viewing one outlet's board, only show employees who actually
-  // transacted there this period — otherwise every network-wide employee
-  // would clutter that outlet's wallboard sitting at 0.
+  // When viewing one outlet's board or a branch-specific board, only
+  // show employees who actually transacted there this period — otherwise
+  // employees from other branches/outlets would clutter that wallboard sitting at 0.
   const relevantRoster = outletId
     ? roster.filter((emp) => (outletCountsByEmployee.get(emp.id)?.get(outletId) ?? 0) > 0)
+    : branch
+    ? roster.filter((emp) => (outletCountsByEmployee.get(emp.id)?.size ?? 0) > 0)
     : roster;
 
   const rows: PublicPointsRow[] = relevantRoster.map((emp) => {

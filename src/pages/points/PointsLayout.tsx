@@ -24,7 +24,14 @@ export function PointsLayout({ branch = "BANDUNG" }: PointsLayoutProps = {}) {
   const isSp = branch === "BANDUNG" && pathname.startsWith("/points/sp");
   const titleSuffix =
     branch === "CIMAHI" ? " — Cimahi" : isPetshop ? " — Petshop (Bandung)" : isSp ? " — SP/Voucher (Bandung)" : " — Aksesoris (Bandung)";
-  const publicBoardHref = isPetshop ? "/papan-poin/petshop" : isSp ? "/papan-poin/sp" : "/papan-poin";
+  const publicBoardHref =
+    branch === "CIMAHI"
+      ? "/papan-poin/cimahi"
+      : isPetshop
+      ? "/papan-poin/petshop"
+      : isSp
+      ? "/papan-poin/sp"
+      : "/papan-poin";
 
   return (
     <div className="space-y-5">

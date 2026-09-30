@@ -148,31 +148,55 @@ export function LoginPage() {
           </form>
 
           {/* Karyawan tanpa akun login bisa langsung cek papan poin di sini —
-              halaman publik ini tidak butuh Username/Kata Sandi di atas.
-              Tiga papan terpisah (§6.6 BLUEPRINT.md) — Bandung menjual tiga
-              lini produk dari satu katalog. */}
-          <p className="text-[10px] font-semibold uppercase tracking-wider text-muted text-center">
-            🏆 Papan Poin Karyawan
-          </p>
-          <div className="grid grid-cols-3 gap-2">
-            {[
-              { href: "/papan-poin", label: "Aksesoris" },
-              { href: "/papan-poin/petshop", label: "Petshop" },
-              { href: "/papan-poin/sp", label: "SP/Voucher" },
-            ].map((board) => (
-              <a
-                key={board.href}
-                href={board.href}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="flex items-center justify-center gap-1 rounded-xl border border-border/80 bg-surface-subtle px-2 py-2.5 text-[11px] font-semibold text-foreground hover:bg-surface-hover/60 hover:border-accent/40 transition-all"
-              >
-                {board.label}
-                <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" className="shrink-0">
-                  <path d="M7 17L17 7M7 7h10v10" />
-                </svg>
-              </a>
-            ))}
+              halaman publik ini tidak butuh Username/Kata Sandi di atas. */}
+          <div className="space-y-2 pt-2 border-t border-border/50">
+            <p className="text-[10px] font-semibold uppercase tracking-wider text-muted text-center">
+              🏆 Papan Poin Karyawan
+            </p>
+            <div className="space-y-1.5">
+              <div className="text-[10px] font-medium text-muted">Cabang Bandung:</div>
+              <div className="grid grid-cols-3 gap-2">
+                {[
+                  { href: "/papan-poin", label: "Aksesoris" },
+                  { href: "/papan-poin/petshop", label: "Petshop" },
+                  { href: "/papan-poin/sp", label: "SP/Voucher" },
+                ].map((board) => (
+                  <a
+                    key={board.href}
+                    href={board.href}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="flex items-center justify-center gap-1 rounded-xl border border-border/80 bg-surface-subtle px-2 py-2 text-[11px] font-semibold text-foreground hover:bg-surface-hover/60 hover:border-accent/40 transition-all"
+                  >
+                    {board.label}
+                    <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" className="shrink-0">
+                      <path d="M7 17L17 7M7 7h10v10" />
+                    </svg>
+                  </a>
+                ))}
+              </div>
+              <div className="text-[10px] font-medium text-muted pt-1">Cabang Cimahi:</div>
+              <div className="grid grid-cols-3 gap-2">
+                {[
+                  { href: "/papan-poin/cimahi", label: "Aksesoris" },
+                  { href: "/papan-poin/cimahi/petshop", label: "Petshop" },
+                  { href: "/papan-poin/cimahi/sp", label: "SP/Voucher" },
+                ].map((board) => (
+                  <a
+                    key={board.href}
+                    href={board.href}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="flex items-center justify-center gap-1 rounded-xl border border-border/80 bg-surface-subtle px-2 py-2 text-[11px] font-semibold text-foreground hover:bg-surface-hover/60 hover:border-accent/40 transition-all"
+                  >
+                    {board.label}
+                    <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" className="shrink-0">
+                      <path d="M7 17L17 7M7 7h10v10" />
+                    </svg>
+                  </a>
+                ))}
+              </div>
+            </div>
           </div>
         </div>
 
