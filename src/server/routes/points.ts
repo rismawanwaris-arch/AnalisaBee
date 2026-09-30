@@ -48,12 +48,14 @@ async function resolvePointPeriod(req: Request): Promise<{ from: Date; to: Date 
 // Points settings (period cut-off, rate, targets) stay shared across both
 // cabang — only the leaderboard DATA is scoped by branch, not the incentive
 // policy itself. The resolver also branches on `?category=` (Bandung only —
-// Petshop and Aksesoris are separate menus/permissions there; Cimahi has no
-// such split yet, so any category on a Cimahi request is ignored for gating,
-// though the query itself still honours it if ever sent).
+// Petshop, Aksesoris and SP/Voucher are separate menus/permissions there;
+// Cimahi has no such split yet, so any category on a Cimahi request is
+// ignored for gating, though the query itself still honours it if ever sent).
 const pointsFeature = (req: Request): FeatureKey => {
   if (req.query.branch === "CIMAHI") return "points_cimahi";
-  return req.query.category === "PETSHOP" ? "points_petshop" : "points";
+  if (req.query.category === "PETSHOP") return "points_petshop";
+  if (req.query.category === "SP_VOUCHER") return "points_sp";
+  return "points";
 };
 
 // Always resolves to a concrete branch (defaulting to BANDUNG) — the admin
@@ -65,9 +67,12 @@ function parsePointsBranch(req: Request): "BANDUNG" | "CIMAHI" {
 }
 
 // Undefined = no category filter (mixes every category, same as before this
-// split existed) — only the Poin Aksesoris / Poin Petshop pages send one.
+// split existed) — only the Poin Aksesoris / Poin Petshop / Poin SP-Voucher
+// pages send one.
 function parsePointsCategory(req: Request): ReportCategory | undefined {
-  return req.query.category === "PETSHOP" || req.query.category === "AKSESORIS"
+  return req.query.category === "PETSHOP" ||
+    req.query.category === "AKSESORIS" ||
+    req.query.category === "SP_VOUCHER"
     ? req.query.category
     : undefined;
 }

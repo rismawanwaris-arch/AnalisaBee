@@ -123,6 +123,7 @@ export function Sidebar({ status }: { status: SystemStatus | null }) {
           { href: "/target", label: "Target Harian", feature: "target_bandung", icon: <><circle cx="12" cy="12" r="9" /><circle cx="12" cy="12" r="4.5" /><circle cx="12" cy="12" r="1" fill="currentColor" /></> },
           { href: "/points", label: "Poin Aksesoris", feature: "points", exact: true, icon: <path d="M12 2.5 14.6 9h6.4l-5.2 4 2 6.5L12 15.8 6.2 19.5l2-6.5-5.2-4h6.4Z" /> },
           { href: "/points/petshop", label: "Poin Petshop", feature: "points_petshop", icon: <path d="M12 2.5 14.6 9h6.4l-5.2 4 2 6.5L12 15.8 6.2 19.5l2-6.5-5.2-4h6.4Z" /> },
+          { href: "/points/sp", label: "Poin SP/Voucher", feature: "points_sp", icon: <path d="M12 2.5 14.6 9h6.4l-5.2 4 2 6.5L12 15.8 6.2 19.5l2-6.5-5.2-4h6.4Z" /> },
         ])}
         {/* Group: Cimahi */}
         {renderNavGroup("Cabang Cimahi", [

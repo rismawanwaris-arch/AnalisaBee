@@ -54,7 +54,13 @@ function currentPeriodMonthStr(periodStartDay: number): string {
 
 const MODE_LABEL: Record<Mode, string> = { day: "Per Hari", month: "Per Bulan", range: "Per Rentang" };
 
-type PointsCategory = "PETSHOP" | "AKSESORIS";
+type PointsCategory = "PETSHOP" | "AKSESORIS" | "SP_VOUCHER";
+
+const CATEGORY_PATH: Record<PointsCategory, string> = {
+  AKSESORIS: "/points",
+  PETSHOP: "/points/petshop",
+  SP_VOUCHER: "/points/sp",
+};
 
 interface PointsLeaderboardPageProps {
   branch?: "BANDUNG" | "CIMAHI";
@@ -67,7 +73,7 @@ interface PointsLeaderboardPageProps {
 export function PointsLeaderboardPage({ branch = "BANDUNG", category }: PointsLeaderboardPageProps = {}) {
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
-  const basePath = branch === "CIMAHI" ? "/cimahi/points" : category === "PETSHOP" ? "/points/petshop" : "/points";
+  const basePath = branch === "CIMAHI" ? "/cimahi/points" : CATEGORY_PATH[category ?? "AKSESORIS"];
 
   // Default to 1 (plain calendar month) until the real cut-off day loads —
   // matches prior behavior for the common case and self-corrects below once
@@ -181,7 +187,8 @@ export function PointsLeaderboardPage({ branch = "BANDUNG", category }: PointsLe
       if (!exportRes.ok) throw new Error("gagal memuat data export");
       const exportData: { rows: LeaderboardExportRow[] } = await exportRes.json();
 
-      const categoryLabel = category === "PETSHOP" ? " — Petshop" : category === "AKSESORIS" ? " — Aksesoris" : "";
+      const categoryLabel =
+        category === "PETSHOP" ? " — Petshop" : category === "SP_VOUCHER" ? " — SP/Voucher" : category === "AKSESORIS" ? " — Aksesoris" : "";
       const meta: (string | number)[][] = [
         [`Poin & Insentif Penjualan${categoryLabel}`],
         [`Periode: ${formatDate(data.from)} - ${formatDate(data.to)}`],

@@ -40,12 +40,21 @@ const RANK_BADGE = [
   "bg-orange-600/15 text-orange-600 dark:text-orange-400 border-orange-600/30",
 ];
 
+type PublicCategory = "PETSHOP" | "AKSESORIS" | "SP_VOUCHER";
+
+// Bandung sells accessories, petshop goods and SIM/voucher products, so
+// (like the internal /points split) the public wallboard is three separate
+// pages, not one mixed leaderboard.
+const CATEGORY_META: Record<PublicCategory, { title: string; subtitle: string; path: string }> = {
+  AKSESORIS: { title: "Aksesoris", subtitle: "aksesoris", path: "/papan-poin" },
+  PETSHOP: { title: "Petshop", subtitle: "petshop", path: "/papan-poin/petshop" },
+  SP_VOUCHER: { title: "SP/Voucher", subtitle: "SP/voucher", path: "/papan-poin/sp" },
+};
+
 interface EmployeePointsDashboardPageProps {
-  // Which board this is — Bandung sells both accessories and petshop goods,
-  // so (like the internal /points split) the public wallboard is two
-  // separate pages too, not one mixed leaderboard. Omit for the pre-split,
-  // combined behavior (kept only so the route can't 500 if ever hit bare).
-  category?: "PETSHOP" | "AKSESORIS";
+  // Which board this is. Omit for the pre-split, combined behavior (kept
+  // only so the route can't 500 if ever hit bare).
+  category?: PublicCategory;
 }
 
 // This page is intentionally standalone and public — no login, no
@@ -149,17 +158,24 @@ export function EmployeePointsDashboardPage({ category }: EmployeePointsDashboar
       <div className="max-w-5xl mx-auto space-y-5">
         <div className="text-center space-y-1">
           <h1 className="text-2xl font-bold tracking-tight text-foreground">
-            🏆 Papan Poin Karyawan{category === "PETSHOP" ? " — Petshop" : category === "AKSESORIS" ? " — Aksesoris" : ""}
+            🏆 Papan Poin Karyawan{category ? ` — ${CATEGORY_META[category].title}` : ""}
           </h1>
           <p className="text-xs text-muted">
-            Peringkat pencapaian poin penjualan {category === "PETSHOP" ? "petshop" : "aksesoris"}
+            Peringkat pencapaian poin penjualan {category ? CATEGORY_META[category].subtitle : ""}
           </p>
-          <a
-            href={category === "PETSHOP" ? "/papan-poin" : "/papan-poin/petshop"}
-            className="inline-block text-[11px] text-muted hover:text-accent underline underline-offset-2 transition-colors"
-          >
-            Lihat papan {category === "PETSHOP" ? "Aksesoris" : "Petshop"} →
-          </a>
+          <div className="flex items-center justify-center gap-3 flex-wrap">
+            {(Object.keys(CATEGORY_META) as PublicCategory[])
+              .filter((c) => c !== category)
+              .map((c) => (
+                <a
+                  key={c}
+                  href={CATEGORY_META[c].path}
+                  className="inline-block text-[11px] text-muted hover:text-accent underline underline-offset-2 transition-colors"
+                >
+                  Lihat papan {CATEGORY_META[c].title} →
+                </a>
+              ))}
+          </div>
         </div>
 
         {/* Filters */}

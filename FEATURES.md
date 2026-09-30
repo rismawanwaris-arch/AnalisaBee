@@ -65,15 +65,17 @@ paling tinggi), dipakai untuk keputusan jadwal shift pegawai.
 [`queries/hourly.ts`](src/lib/queries/hourly.ts) →
 [`routes/target.ts`](src/server/routes/target.ts) (`GET /api/hourly`).
 
-### Poin Aksesoris / Poin Petshop
-`/points` (Aksesoris) dan `/points/petshop` (Petshop) — leaderboard poin
-pegawai bulanan/mingguan/harian (periode custom, lihat §6.2), plus rincian
-per pegawai (item apa saja yang menyumbang poin). Cabang Bandung dipisah dua
-menu karena menjual dua lini produk dari satu katalog (§6.6) — batasnya
-memakai `ItemGroupMapping` yang sama dipakai Target Harian, bukan definisi
-kategori baru. Urutan resolusi poin per item: `ItemPointExclusion` →
-`ItemPoint` (pattern terpanjang menang) → `ItemGroupPointDefault` → 0 (§6.1).
-**Akses:** `points` (Aksesoris) / `points_petshop` (Petshop). **File:**
+### Poin Aksesoris / Poin Petshop / Poin SP-Voucher
+`/points` (Aksesoris), `/points/petshop` (Petshop), dan `/points/sp`
+(SP/Voucher) — leaderboard poin pegawai bulanan/mingguan/harian (periode
+custom, lihat §6.2), plus rincian per pegawai (item apa saja yang
+menyumbang poin). Cabang Bandung dipisah tiga menu karena menjual tiga lini
+produk dari satu katalog (§6.6) — batasnya memakai `ItemGroupMapping` yang
+sama dipakai Target Harian, bukan definisi kategori baru. Urutan resolusi
+poin per item: `ItemPointExclusion` → `ItemPoint` (pattern terpanjang
+menang) → `ItemGroupPointDefault` → 0 (§6.1).
+**Akses:** `points` (Aksesoris) / `points_petshop` (Petshop) / `points_sp`
+(SP/Voucher). **File:**
 [`PointsLeaderboardPage.tsx`](src/pages/points/PointsLeaderboardPage.tsx) →
 [`queries/points.ts`](src/lib/queries/points.ts) →
 [`routes/points.ts`](src/server/routes/points.ts).
@@ -249,8 +251,9 @@ domainnya masing-masing (`routes/accounts.ts`, `routes/roles.ts`,
 ## Halaman Publik (tanpa login)
 
 ### Papan Poin Karyawan
-`/papan-poin` (Aksesoris) dan `/papan-poin/petshop` (Petshop) — wallboard
-leaderboard poin untuk ditampilkan di tablet/TV outlet, **tanpa login**.
+`/papan-poin` (Aksesoris), `/papan-poin/petshop` (Petshop), dan
+`/papan-poin/sp` (SP/Voucher) — wallboard leaderboard poin untuk ditampilkan
+di tablet/TV outlet, **tanpa login**.
 Dibatasi rate limit (`publicPointsLimiter`, 60 req/menit/IP), dan **hanya**
 pernah mengembalikan data poin/ranking — nol omzet, nol laba, nol HPP (lihat
 komentar di [`publicPoints.ts`](src/server/routes/publicPoints.ts)). Desain

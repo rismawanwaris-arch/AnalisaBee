@@ -281,19 +281,35 @@ tetap menunjukkan omzet aslinya supaya bisa diputuskan mau disembunyikan atau
 tidak). Data penjualannya **tidak dihapus** — menampilkan lagi item itu
 langsung memunculkan kembali seluruh angkanya, tanpa perlu impor ulang.
 
-### 6.6 Poin Bandung terpisah per kategori: Aksesoris vs Petshop
+### 6.6 Poin Bandung terpisah per kategori: Aksesoris, Petshop, SP/Voucher
 
-Cabang Bandung menjual dua lini produk (aksesoris HP & petshop) dari satu
-katalog, jadi leaderboard poinnya dipisah jadi dua menu (`/points` = Aksesoris,
-`/points/petshop` = Petshop) dan dua feature key (`points`, `points_petshop`).
+Cabang Bandung menjual tiga lini produk (aksesoris HP, petshop, SP/voucher SIM
+card) dari satu katalog, jadi leaderboard poinnya dipisah jadi tiga menu
+(`/points` = Aksesoris, `/points/petshop` = Petshop, `/points/sp` =
+SP/Voucher) dan tiga feature key (`points`, `points_petshop`, `points_sp`).
 Batasnya memakai `ItemGroupMapping` yang sama dipakai Laporan Target Harian
-(§6.3) — **bukan** definisi kategori baru. Item dengan `itemGroup` yang belum
-dipetakan ke kategori mana pun (atau dipetakan ke `SP_VOUCHER`) tidak muncul di
-kedua leaderboard itu, persis seperti sebelum split ini ada. Cimahi belum
-dipisah serupa — satu leaderboard gabungan (`/cimahi/points`). Papan Poin
-publik (`/papan-poin`, `/papan-poin/petshop`) mengikuti pemisahan yang sama,
-tapi **target poin** (harian/mingguan/bulanan) masih satu nilai bersama untuk
-kedua kategori, belum dipisah.
+(§6.3) — **bukan** definisi kategori baru, jadi `ReportCategory` (`PETSHOP` |
+`AKSESORIS` | `SP_VOUCHER`) persis mencerminkan ketiga menu ini satu-satu.
+Item dengan `itemGroup` yang belum dipetakan ke kategori mana pun tidak muncul
+di ketiga leaderboard itu. Cimahi belum dipisah serupa — satu leaderboard
+gabungan (`/cimahi/points`). Papan Poin publik (`/papan-poin`,
+`/papan-poin/petshop`, `/papan-poin/sp`) mengikuti pemisahan yang sama, tapi
+**target poin** (harian/mingguan/bulanan) masih satu nilai bersama untuk
+ketiga kategori, belum dipisah.
+
+**Menambah kategori/menu poin baru** (pola yang sama persis dipakai untuk
+menambah `points_sp`): tambah `FeatureKey` baru di `features.ts` + label-nya;
+tambah cabang di `pointsFeature`/`parsePointsCategory`
+(`routes/points.ts`) dan `parsePublicCategory` (`routes/publicPoints.ts`);
+tambah path di `PATH_FEATURES`/`FEATURE_PATHS` (`AppLayout.tsx`) — **wajib**
+ditaruh sebelum sibling yang kurang spesifik (mis. `/points/sp` sebelum
+`/points`); tambah tab di `PointsLayout.tsx` dan entri di `CATEGORY_PATH`
+(`PointsLeaderboardPage.tsx`); tambah route `/points/<x>` dan
+`/papan-poin/<x>` di `App.tsx`; tambah entri di `CATEGORY_META`
+(`EmployeePointsDashboardPage.tsx`); tambah nav item di `Sidebar.tsx`. Query
+layer (`getLeaderboard`, `getPublicPointsDashboard`, dst di
+`queries/points.ts`) sudah generik menerima `category?: ReportCategory` —
+**tidak perlu diubah** untuk kategori baru.
 
 ---
 

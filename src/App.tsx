@@ -73,6 +73,7 @@ export function App() {
                   (Aksesoris) so existing bookmarks/tablets don't silently change. */}
               <Route path="/papan-poin" element={<EmployeePointsDashboardPage category="AKSESORIS" />} />
               <Route path="/papan-poin/petshop" element={<EmployeePointsDashboardPage category="PETSHOP" />} />
+              <Route path="/papan-poin/sp" element={<EmployeePointsDashboardPage category="SP_VOUCHER" />} />
 
               {/* Protected Application Routes */}
               <Route element={<AppLayout />}>
@@ -87,13 +88,14 @@ export function App() {
                   <Route path="pengaturan" element={<Navigate to="/settings?tab=target" replace />} />
                 </Route>
 
-                {/* Points & Incentives Section — Bandung splits into two
-                    category-scoped leaderboards (Aksesoris / Petshop) since
-                    both product lines are sold there; see FEATURE_KEYS
-                    "points" / "points_petshop". */}
+                {/* Points & Incentives Section — Bandung splits into three
+                    category-scoped leaderboards (Aksesoris / Petshop /
+                    SP-Voucher) since all three product lines are sold there;
+                    see FEATURE_KEYS "points" / "points_petshop" / "points_sp". */}
                 <Route path="/points" element={<PointsLayout />}>
                   <Route index element={<PointsLeaderboardPage category="AKSESORIS" />} />
                   <Route path="petshop" element={<PointsLeaderboardPage category="PETSHOP" />} />
+                  <Route path="sp" element={<PointsLeaderboardPage category="SP_VOUCHER" />} />
                   <Route path="pengaturan" element={<Navigate to="/settings?tab=points" replace />} />
                 </Route>
 

@@ -41,12 +41,15 @@ function parsePublicOutletId(req: Request): number | undefined {
   return raw && Number.isInteger(raw) ? raw : undefined;
 }
 
-// Undefined = no category filter (mixes both, the only behavior before the
-// Aksesoris/Petshop wallboard split existed). Same values as the internal
-// pointsFeature/parsePointsCategory in routes/points.ts — kept separate since
-// this route has no auth/feature-gating to hook a permission check into.
+// Undefined = no category filter (mixes all three, the only behavior before
+// the Aksesoris/Petshop/SP-Voucher wallboard split existed). Same values as
+// the internal pointsFeature/parsePointsCategory in routes/points.ts — kept
+// separate since this route has no auth/feature-gating to hook a permission
+// check into.
 function parsePublicCategory(req: Request): ReportCategory | undefined {
-  return req.query.category === "PETSHOP" || req.query.category === "AKSESORIS"
+  return req.query.category === "PETSHOP" ||
+    req.query.category === "AKSESORIS" ||
+    req.query.category === "SP_VOUCHER"
     ? req.query.category
     : undefined;
 }

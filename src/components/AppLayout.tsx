@@ -8,7 +8,8 @@ import { FEATURE_KEYS, type FeatureKey } from "../lib/features";
 
 // Longest/most-specific prefix first — "/items/categories" must be checked
 // before "/items", "/cimahi/target" before a hypothetical "/cimahi", and
-// "/points/petshop" before "/points" (its own, less-specific, sibling page).
+// "/points/petshop"/"/points/sp" before "/points" (its own, less-specific,
+// sibling page).
 const PATH_FEATURES: [string, FeatureKey][] = [
   ["/cimahi/target", "target_cimahi"],
   ["/cimahi/dashboard", "dashboard_cimahi"],
@@ -16,6 +17,7 @@ const PATH_FEATURES: [string, FeatureKey][] = [
   ["/items/categories", "item_categories"],
   ["/target", "target_bandung"],
   ["/points/petshop", "points_petshop"],
+  ["/points/sp", "points_sp"],
   ["/points", "points"],
   ["/items", "items"],
   ["/outlets", "outlets"],
@@ -32,6 +34,7 @@ const FEATURE_PATHS: Record<FeatureKey, string> = {
   target_bandung: "/target",
   points: "/points",
   points_petshop: "/points/petshop",
+  points_sp: "/points/sp",
   target_cimahi: "/cimahi/target",
   dashboard_cimahi: "/cimahi/dashboard",
   points_cimahi: "/cimahi/points",

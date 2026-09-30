@@ -8,18 +8,23 @@ export function PointsLayout({ branch = "BANDUNG" }: PointsLayoutProps = {}) {
   const location = useLocation();
   const pathname = location.pathname;
   const basePath = branch === "CIMAHI" ? "/cimahi/points" : "/points";
-  // Bandung splits into two category-scoped leaderboards (Aksesoris vs
-  // Petshop — see FEATURE_KEYS "points" / "points_petshop"); Cimahi doesn't
-  // have that split yet, so it keeps the single original tab.
+  // Bandung splits into three category-scoped leaderboards (Aksesoris,
+  // Petshop, SP/Voucher — see FEATURE_KEYS "points" / "points_petshop" /
+  // "points_sp"); Cimahi doesn't have that split yet, so it keeps the single
+  // original tab.
   const TABS =
     branch === "BANDUNG"
       ? [
           { href: "/points", label: "Aksesoris", exact: true },
           { href: "/points/petshop", label: "Petshop", exact: true },
+          { href: "/points/sp", label: "SP/Voucher", exact: true },
         ]
       : [{ href: basePath, label: "Leaderboard Pegawai", exact: true }];
   const isPetshop = branch === "BANDUNG" && pathname.startsWith("/points/petshop");
-  const titleSuffix = branch === "CIMAHI" ? " — Cimahi" : isPetshop ? " — Petshop (Bandung)" : " — Aksesoris (Bandung)";
+  const isSp = branch === "BANDUNG" && pathname.startsWith("/points/sp");
+  const titleSuffix =
+    branch === "CIMAHI" ? " — Cimahi" : isPetshop ? " — Petshop (Bandung)" : isSp ? " — SP/Voucher (Bandung)" : " — Aksesoris (Bandung)";
+  const publicBoardHref = isPetshop ? "/papan-poin/petshop" : isSp ? "/papan-poin/sp" : "/papan-poin";
 
   return (
     <div className="space-y-5">
@@ -52,7 +57,7 @@ export function PointsLayout({ branch = "BANDUNG" }: PointsLayoutProps = {}) {
             })}
           </nav>
           <a
-            href={isPetshop ? "/papan-poin/petshop" : "/papan-poin"}
+            href={publicBoardHref}
             target="_blank"
             rel="noopener noreferrer"
             className="inline-flex items-center gap-1.5 rounded-xl border border-border/80 bg-surface px-3 py-1.5 text-xs font-semibold text-foreground hover:bg-surface-hover transition-all shadow-2xs"
