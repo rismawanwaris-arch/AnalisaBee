@@ -48,6 +48,7 @@ const columns: Column<OutletRow>[] = [
     align: "right",
     accessor: (o) => o.qty,
     render: (o) => `${formatNumber(o.qty)} pcs`,
+    totalRender: (total) => `${formatNumber(total)} pcs`,
   },
   {
     key: "subtotal",
@@ -55,6 +56,7 @@ const columns: Column<OutletRow>[] = [
     align: "right",
     accessor: (o) => o.subtotal,
     render: (o) => formatRupiah(o.subtotal),
+    totalRender: (total) => formatRupiah(total),
   },
   {
     key: "labaRugi",
@@ -62,6 +64,7 @@ const columns: Column<OutletRow>[] = [
     align: "right",
     accessor: (o) => o.labaRugi,
     render: (o) => formatRupiah(o.labaRugi),
+    totalRender: (total) => formatRupiah(total),
   },
   {
     key: "transactionCount",
@@ -69,6 +72,7 @@ const columns: Column<OutletRow>[] = [
     align: "right",
     accessor: (o) => o.transactionCount,
     render: (o) => `${formatNumber(o.transactionCount)} struk`,
+    totalRender: (total) => `${formatNumber(total)} struk`,
   },
 ];
 
@@ -376,6 +380,7 @@ export function OutletsPage() {
           rowKey={(o) => o.id}
           defaultSortKey="subtotal"
           caption="Matrix Outlet"
+          showTotal
         />
       )}
     </div>

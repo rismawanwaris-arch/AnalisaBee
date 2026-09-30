@@ -7,6 +7,12 @@ export interface Column<T> {
   align?: "left" | "right";
   accessor: (row: T) => number | string;
   render: (row: T) => React.ReactNode;
+  /** Opt a column into the footer total row (`showTotal`) — sums
+   *  `accessor(row)` across every row currently shown, then formats it with
+   *  this. Only set this on a genuinely additive column (qty, omzet, jumlah
+   *  transaksi); never on an average/percentage/ratio column, since summing
+   *  those produces a meaningless number. */
+  totalRender?: (total: number) => React.ReactNode;
 }
 
 interface SortableTableProps<T> {
@@ -17,6 +23,9 @@ interface SortableTableProps<T> {
   defaultSortDir?: "asc" | "desc";
   emptyMessage?: string;
   caption?: string;
+  /** Adds a footer row summing every column that declares `totalRender`,
+   *  over whatever rows are currently shown (post-filter, any sort order). */
+  showTotal?: boolean;
 }
 
 export function SortableTable<T>({
@@ -27,6 +36,7 @@ export function SortableTable<T>({
   defaultSortDir = "desc",
   emptyMessage = "Belum ada data.",
   caption,
+  showTotal = false,
 }: SortableTableProps<T>) {
   const [sortKey, setSortKey] = useState(defaultSortKey);
   const [sortDir, setSortDir] = useState<"asc" | "desc">(defaultSortDir);
@@ -117,6 +127,28 @@ export function SortableTable<T>({
               </tr>
             ))}
           </tbody>
+          {showTotal && sorted.length > 0 && (
+            <tfoot>
+              <tr className="border-t-2 border-border/80 bg-surface-subtle/60">
+                {columns.map((col, idx) => (
+                  <td
+                    key={col.key}
+                    className={`px-4 py-2.5 font-bold ${
+                      col.align === "right"
+                        ? "text-right font-mono tabular-nums text-foreground"
+                        : "text-left text-foreground"
+                    }`}
+                  >
+                    {idx === 0
+                      ? "Total"
+                      : col.totalRender
+                        ? col.totalRender(sorted.reduce((sum, r) => sum + Number(col.accessor(r)), 0))
+                        : ""}
+                  </td>
+                ))}
+              </tr>
+            </tfoot>
+          )}
         </table>
       </div>
     </div>
