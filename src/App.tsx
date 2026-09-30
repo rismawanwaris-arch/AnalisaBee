@@ -126,7 +126,10 @@ export function App() {
                   <Route path="target/jam-operasional" element={<JamOperasionalPage branch="CIMAHI" />} />
                 </Route>
                 <Route path="/cimahi/points" element={<PointsLayout branch="CIMAHI" />}>
-                  <Route index element={<PointsLeaderboardPage branch="CIMAHI" />} />
+                  <Route index element={<PointsLeaderboardPage branch="CIMAHI" category="AKSESORIS" />} />
+                  <Route path="petshop" element={<PointsLeaderboardPage branch="CIMAHI" category="PETSHOP" />} />
+                  <Route path="sp" element={<PointsLeaderboardPage branch="CIMAHI" category="SP_VOUCHER" />} />
+                  <Route path="pengaturan" element={<Navigate to="/settings?tab=points" replace />} />
                 </Route>
 
                 {/* Activity Log */}

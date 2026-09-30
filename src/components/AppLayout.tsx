@@ -13,6 +13,8 @@ import { FEATURE_KEYS, type FeatureKey } from "../lib/features";
 const PATH_FEATURES: [string, FeatureKey][] = [
   ["/cimahi/target", "target_cimahi"],
   ["/cimahi/dashboard", "dashboard_cimahi"],
+  ["/cimahi/points/petshop", "points_cimahi_petshop"],
+  ["/cimahi/points/sp", "points_cimahi_sp"],
   ["/cimahi/points", "points_cimahi"],
   ["/items/categories", "item_categories"],
   ["/target", "target_bandung"],
@@ -38,6 +40,8 @@ const FEATURE_PATHS: Record<FeatureKey, string> = {
   target_cimahi: "/cimahi/target",
   dashboard_cimahi: "/cimahi/dashboard",
   points_cimahi: "/cimahi/points",
+  points_cimahi_petshop: "/cimahi/points/petshop",
+  points_cimahi_sp: "/cimahi/points/sp",
   items: "/items",
   item_categories: "/items/categories",
   outlets: "/outlets",

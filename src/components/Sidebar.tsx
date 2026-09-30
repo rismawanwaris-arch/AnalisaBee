@@ -15,6 +15,7 @@ interface NavItem {
   // when another nav item's href is a deeper path under this one (e.g.
   // "/points" vs "/points/petshop") so only one lights up at a time.
   exact?: boolean;
+  external?: boolean;
 }
 
 export function Sidebar({ status }: { status: SystemStatus | null }) {
@@ -38,25 +39,51 @@ export function Sidebar({ status }: { status: SystemStatus | null }) {
             : link.exact
             ? pathname === link.href
             : pathname?.startsWith(link.href);
-          return (
-            <Link key={link.href} to={link.href}
-              className={`flex items-center gap-2.5 rounded-lg px-2.5 py-2 text-xs font-medium transition-all ${
-                active ? "bg-accent/10 text-accent font-semibold shadow-xs" : "text-muted hover:bg-surface-hover hover:text-foreground"
-              }`}
-            >
+
+          const className = `flex items-center gap-2.5 rounded-lg px-2.5 py-2 text-xs font-medium transition-all ${
+            active && !link.external ? "bg-accent/10 text-accent font-semibold shadow-xs" : "text-muted hover:bg-surface-hover hover:text-foreground"
+          }`;
+
+          const content = (
+            <>
               <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"
                 strokeLinecap="round" strokeLinejoin="round"
-                className={`shrink-0 transition-colors ${active ? "text-accent stroke-[2.2]" : "text-muted"}`}
+                className={`shrink-0 transition-colors ${active && !link.external ? "text-accent stroke-[2.2]" : "text-muted"}`}
               >
                 {link.icon}
               </svg>
               <span className="truncate">{link.label}</span>
+              {link.external && (
+                <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" className="ml-auto text-muted/60 shrink-0">
+                  <path d="M7 17L17 7M7 7h10v10" />
+                </svg>
+              )}
               {link.masterOnly && (
                 <span className="ml-auto text-[9px] font-bold tracking-wide text-amber-600 dark:text-amber-400 bg-amber-500/10 border border-amber-500/20 rounded px-1 py-0.5">M</span>
               )}
-              {!link.masterOnly && active && (
+              {!link.masterOnly && !link.external && active && (
                 <span className="ml-auto w-1.5 h-1.5 rounded-full bg-accent" />
               )}
+            </>
+          );
+
+          if (link.external) {
+            return (
+              <a
+                key={link.href}
+                href={link.href}
+                target="_blank"
+                rel="noopener noreferrer"
+                className={className}
+              >
+                {content}
+              </a>
+            );
+          }
+
+          return (
+            <Link key={link.href} to={link.href} className={className}>
+              {content}
             </Link>
           );
         })}
@@ -124,12 +151,16 @@ export function Sidebar({ status }: { status: SystemStatus | null }) {
           { href: "/points", label: "Poin Aksesoris", feature: "points", exact: true, icon: <path d="M12 2.5 14.6 9h6.4l-5.2 4 2 6.5L12 15.8 6.2 19.5l2-6.5-5.2-4h6.4Z" /> },
           { href: "/points/petshop", label: "Poin Petshop", feature: "points_petshop", icon: <path d="M12 2.5 14.6 9h6.4l-5.2 4 2 6.5L12 15.8 6.2 19.5l2-6.5-5.2-4h6.4Z" /> },
           { href: "/points/sp", label: "Poin SP/Voucher", feature: "points_sp", icon: <path d="M12 2.5 14.6 9h6.4l-5.2 4 2 6.5L12 15.8 6.2 19.5l2-6.5-5.2-4h6.4Z" /> },
+          { href: "/papan-poin", label: "Papan Poin (TV)", external: true, icon: <><path d="M6 9H4.5a2.5 2.5 0 0 1 0-5H6" /><path d="M18 9h1.5a2.5 2.5 0 0 0 0-5H18" /><path d="M4 22h16" /><path d="M10 14.66V17c0 .55-.47.98-.97 1.21C7.85 18.75 7 20.24 7 22" /><path d="M14 14.66V17c0 .55.47.98.97 1.21C16.15 18.75 17 20.24 17 22" /><path d="M18 2H6v7a6 6 0 0 0 12 0V2Z" /></> },
         ])}
         {/* Group: Cimahi */}
         {renderNavGroup("Cabang Cimahi", [
           { href: "/cimahi/dashboard", label: "Dashboard", feature: "dashboard_cimahi", icon: <path d="M3 13.2h7.2V3H3v10.2Zm0 7.8h7.2v-5.4H3V21Zm10.8 0H21V10.8h-7.2V21Zm0-18v5.4H21V3h-7.2Z" /> },
           { href: "/cimahi/target", label: "Target Harian", feature: "target_cimahi", icon: <><circle cx="12" cy="12" r="9" /><circle cx="12" cy="12" r="4.5" /><circle cx="12" cy="12" r="1" fill="currentColor" /></> },
-          { href: "/cimahi/points", label: "Poin Penjualan", feature: "points_cimahi", icon: <path d="M12 2.5 14.6 9h6.4l-5.2 4 2 6.5L12 15.8 6.2 19.5l2-6.5-5.2-4h6.4Z" /> },
+          { href: "/cimahi/points", label: "Poin Aksesoris", feature: "points_cimahi", exact: true, icon: <path d="M12 2.5 14.6 9h6.4l-5.2 4 2 6.5L12 15.8 6.2 19.5l2-6.5-5.2-4h6.4Z" /> },
+          { href: "/cimahi/points/petshop", label: "Poin Petshop", feature: "points_cimahi_petshop", icon: <path d="M12 2.5 14.6 9h6.4l-5.2 4 2 6.5L12 15.8 6.2 19.5l2-6.5-5.2-4h6.4Z" /> },
+          { href: "/cimahi/points/sp", label: "Poin SP/Voucher", feature: "points_cimahi_sp", icon: <path d="M12 2.5 14.6 9h6.4l-5.2 4 2 6.5L12 15.8 6.2 19.5l2-6.5-5.2-4h6.4Z" /> },
+          { href: "/papan-poin/cimahi", label: "Papan Poin (TV)", external: true, icon: <><path d="M6 9H4.5a2.5 2.5 0 0 1 0-5H6" /><path d="M18 9h1.5a2.5 2.5 0 0 0 0-5H18" /><path d="M4 22h16" /><path d="M10 14.66V17c0 .55-.47.98-.97 1.21C7.85 18.75 7 20.24 7 22" /><path d="M14 14.66V17c0 .55.47.98.97 1.21C16.15 18.75 17 20.24 17 22" /><path d="M18 2H6v7a6 6 0 0 0 12 0V2Z" /></> },
         ])}
         {/* Group: Dimensi Analisis */}
         {renderNavGroup("Dimensi Analisis", [

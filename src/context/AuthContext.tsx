@@ -136,7 +136,12 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   }, [authenticated, clearSession]);
 
   const canAccess = useCallback(
-    (key: FeatureKey) => role === "master" || permissions === "all" || permissions.includes(key),
+    (key: FeatureKey) => {
+      if (role === "master" || permissions === "all") return true;
+      if (permissions.includes(key)) return true;
+      if ((key === "points_cimahi_petshop" || key === "points_cimahi_sp") && permissions.includes("points_cimahi")) return true;
+      return false;
+    },
     [role, permissions],
   );
 

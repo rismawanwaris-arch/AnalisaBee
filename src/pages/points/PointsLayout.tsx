@@ -8,10 +8,13 @@ export function PointsLayout({ branch = "BANDUNG" }: PointsLayoutProps = {}) {
   const location = useLocation();
   const pathname = location.pathname;
   const basePath = branch === "CIMAHI" ? "/cimahi/points" : "/points";
-  // Bandung splits into three category-scoped leaderboards (Aksesoris,
-  // Petshop, SP/Voucher — see FEATURE_KEYS "points" / "points_petshop" /
-  // "points_sp"); Cimahi doesn't have that split yet, so it keeps the single
-  // original tab.
+  const isPetshop =
+    (branch === "BANDUNG" && pathname.startsWith("/points/petshop")) ||
+    (branch === "CIMAHI" && pathname.startsWith("/cimahi/points/petshop"));
+  const isSp =
+    (branch === "BANDUNG" && pathname.startsWith("/points/sp")) ||
+    (branch === "CIMAHI" && pathname.startsWith("/cimahi/points/sp"));
+
   const TABS =
     branch === "BANDUNG"
       ? [
@@ -19,14 +22,32 @@ export function PointsLayout({ branch = "BANDUNG" }: PointsLayoutProps = {}) {
           { href: "/points/petshop", label: "Petshop", exact: true },
           { href: "/points/sp", label: "SP/Voucher", exact: true },
         ]
-      : [{ href: basePath, label: "Leaderboard Pegawai", exact: true }];
-  const isPetshop = branch === "BANDUNG" && pathname.startsWith("/points/petshop");
-  const isSp = branch === "BANDUNG" && pathname.startsWith("/points/sp");
+      : [
+          { href: "/cimahi/points", label: "Aksesoris", exact: true },
+          { href: "/cimahi/points/petshop", label: "Petshop", exact: true },
+          { href: "/cimahi/points/sp", label: "SP/Voucher", exact: true },
+        ];
+
   const titleSuffix =
-    branch === "CIMAHI" ? " — Cimahi" : isPetshop ? " — Petshop (Bandung)" : isSp ? " — SP/Voucher (Bandung)" : " — Aksesoris (Bandung)";
+    branch === "CIMAHI"
+      ? isPetshop
+        ? " — Petshop (Cimahi)"
+        : isSp
+        ? " — SP/Voucher (Cimahi)"
+        : " — Aksesoris (Cimahi)"
+      : isPetshop
+      ? " — Petshop (Bandung)"
+      : isSp
+      ? " — SP/Voucher (Bandung)"
+      : " — Aksesoris (Bandung)";
+
   const publicBoardHref =
     branch === "CIMAHI"
-      ? "/papan-poin/cimahi"
+      ? isPetshop
+        ? "/papan-poin/cimahi/petshop"
+        : isSp
+        ? "/papan-poin/cimahi/sp"
+        : "/papan-poin/cimahi"
       : isPetshop
       ? "/papan-poin/petshop"
       : isSp

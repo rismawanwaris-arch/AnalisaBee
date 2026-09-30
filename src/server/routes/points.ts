@@ -52,7 +52,11 @@ async function resolvePointPeriod(req: Request): Promise<{ from: Date; to: Date 
 // Cimahi has no such split yet, so any category on a Cimahi request is
 // ignored for gating, though the query itself still honours it if ever sent).
 const pointsFeature = (req: Request): FeatureKey => {
-  if (req.query.branch === "CIMAHI") return "points_cimahi";
+  if (req.query.branch === "CIMAHI") {
+    if (req.query.category === "PETSHOP") return "points_cimahi_petshop";
+    if (req.query.category === "SP_VOUCHER") return "points_cimahi_sp";
+    return "points_cimahi";
+  }
   if (req.query.category === "PETSHOP") return "points_petshop";
   if (req.query.category === "SP_VOUCHER") return "points_sp";
   return "points";

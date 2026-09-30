@@ -20,5 +20,8 @@ export async function resolveUserPermissions(session: SessionContext): Promise<P
 }
 
 export function hasFeature(perms: PermissionSet, key: FeatureKey): boolean {
-  return perms === "all" || perms.has(key);
+  if (perms === "all") return true;
+  if (perms.has(key)) return true;
+  if ((key === "points_cimahi_petshop" || key === "points_cimahi_sp") && perms.has("points_cimahi")) return true;
+  return false;
 }

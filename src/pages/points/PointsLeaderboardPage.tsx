@@ -73,7 +73,14 @@ interface PointsLeaderboardPageProps {
 export function PointsLeaderboardPage({ branch = "BANDUNG", category }: PointsLeaderboardPageProps = {}) {
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
-  const basePath = branch === "CIMAHI" ? "/cimahi/points" : CATEGORY_PATH[category ?? "AKSESORIS"];
+  const basePath =
+    branch === "CIMAHI"
+      ? category === "PETSHOP"
+        ? "/cimahi/points/petshop"
+        : category === "SP_VOUCHER"
+        ? "/cimahi/points/sp"
+        : "/cimahi/points"
+      : CATEGORY_PATH[category ?? "AKSESORIS"];
 
   // Default to 1 (plain calendar month) until the real cut-off day loads —
   // matches prior behavior for the common case and self-corrects below once
