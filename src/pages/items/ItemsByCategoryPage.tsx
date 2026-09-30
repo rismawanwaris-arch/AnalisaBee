@@ -52,6 +52,7 @@ const COLUMNS: Column<ItemRow>[] = [
     align: "right",
     accessor: (r) => r.qty,
     render: (r) => `${formatNumber(r.qty)} pcs`,
+    totalRender: (total) => `${formatNumber(total)} pcs`,
   },
   {
     key: "subtotal",
@@ -59,6 +60,7 @@ const COLUMNS: Column<ItemRow>[] = [
     align: "right",
     accessor: (r) => r.subtotal,
     render: (r) => formatRupiah(r.subtotal),
+    totalRender: (total) => formatRupiah(total),
   },
   {
     key: "labaRugi",
@@ -66,6 +68,7 @@ const COLUMNS: Column<ItemRow>[] = [
     align: "right",
     accessor: (r) => r.labaRugi,
     render: (r) => formatRupiah(r.labaRugi),
+    totalRender: (total) => formatRupiah(total),
   },
 ];
 
@@ -138,6 +141,18 @@ export function ItemsByCategoryPage() {
     return [...map.entries()]
       .map(([name, v]) => ({ name, ...v }))
       .sort((a, b) => b.subtotal - a.subtotal);
+  }, [filtered]);
+
+  const grandTotal = useMemo(() => {
+    return filtered.reduce(
+      (acc, r) => {
+        acc.qty += r.qty;
+        acc.subtotal += r.subtotal;
+        acc.labaRugi += r.labaRugi;
+        return acc;
+      },
+      { qty: 0, subtotal: 0, labaRugi: 0 }
+    );
   }, [filtered]);
 
   return (
@@ -249,6 +264,16 @@ export function ItemsByCategoryPage() {
               items={filtered.filter((r) => r.itemGroup === cat.name)}
             />
           ))}
+          {categorySummary.length > 0 && (
+            <div className="rounded-xl border border-border/80 bg-surface-subtle/70 px-4 py-3 flex flex-wrap items-center justify-between gap-3 text-xs font-bold text-foreground shadow-2xs">
+              <span className="uppercase tracking-wider">Total Keseluruhan ({formatNumber(filtered.length)} item)</span>
+              <div className="flex items-center gap-4 font-mono tabular-nums">
+                <span>{formatNumber(grandTotal.qty)} pcs</span>
+                <span>{formatRupiah(grandTotal.subtotal)}</span>
+                <span className="text-muted font-normal">laba {formatRupiah(grandTotal.labaRugi)}</span>
+              </div>
+            </div>
+          )}
         </div>
       ) : (
         /* Flat table view */
@@ -265,6 +290,7 @@ export function ItemsByCategoryPage() {
               rowKey={(r) => r.itemId}
               defaultSortKey="subtotal"
               caption="Item per Kategori"
+              showTotal
             />
           )}
         </>
@@ -329,6 +355,15 @@ function CategoryGroup({
                   </tr>
                 ))}
             </tbody>
+            <tfoot>
+              <tr className="border-t-2 border-border/80 bg-surface-subtle/70 font-bold">
+                <td className="px-4 py-2 text-foreground font-semibold">Total {name}</td>
+                <td className="px-4 py-2"></td>
+                <td className="px-4 py-2 font-mono text-right text-foreground">{formatNumber(total.qty)} pcs</td>
+                <td className="px-4 py-2 font-mono text-right text-foreground">{formatRupiah(total.subtotal)}</td>
+                <td className="px-4 py-2 font-mono text-right text-muted">{formatRupiah(total.labaRugi)}</td>
+              </tr>
+            </tfoot>
           </table>
         </div>
       )}
