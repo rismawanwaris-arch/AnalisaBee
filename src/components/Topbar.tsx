@@ -6,6 +6,7 @@ const TITLES: { prefix: string; label: string; section?: string }[] = [
   { prefix: "/dashboard", label: "Ringkasan Penjualan", section: "Dashboard" },
   { prefix: "/target", label: "Target Harian", section: "Laporan" },
   { prefix: "/points", label: "Poin Penjualan", section: "Insentif" },
+  { prefix: "/items/categories", label: "Kategori Item", section: "Master Data" },
   { prefix: "/items", label: "Item & SKU", section: "Master Data" },
   { prefix: "/outlets", label: "Performa Outlet", section: "Cabang" },
   { prefix: "/employees", label: "Performa Pegawai", section: "Staff" },

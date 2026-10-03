@@ -143,9 +143,18 @@ export function ItemsPage() {
     setAppliedRange({ from: currentPeriod.from, to: currentPeriod.to });
   }, [selectedId, currentPeriod.from, currentPeriod.to]);
 
+  useEffect(() => {
+    if (detail?.item && !query) {
+      setQuery(`${detail.item.name} (${detail.item.code})`);
+    }
+  }, [detail, query]);
+
   function selectItem(opt: ItemOption) {
     setQuery(`${opt.name} (${opt.code})`);
     setShowOptions(false);
+    setFrom(currentPeriod.from);
+    setTo(currentPeriod.to);
+    setAppliedRange({ from: currentPeriod.from, to: currentPeriod.to });
     navigate(`/items?id=${opt.id}`);
   }
 
