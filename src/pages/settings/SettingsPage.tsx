@@ -3,6 +3,7 @@ import { formatNumber, formatRupiah, TARGET_DECIMAL_STORAGE_KEY } from "@/lib/fo
 import { FEATURE_KEYS, FEATURE_LABELS, type FeatureKey } from "@/lib/features";
 import { ConfirmDeleteModal } from "@/components/ConfirmDeleteModal";
 import { MasterItemImport } from "@/components/MasterItemImport";
+import { PointRulesExcelImport } from "@/components/PointRulesExcelImport";
 
 type BusinessLine = "SERVER" | "TARTUN" | "PETSHOP" | "AKSESORIS" | "SP_VOUCHER";
 type ReportCategory = "PETSHOP" | "AKSESORIS" | "SP_VOUCHER";
@@ -230,11 +231,6 @@ export function SettingsPage() {
   const [itemError, setItemError] = useState<string | null>(null);
 
   const [showBulkModal, setShowBulkModal] = useState(false);
-  const [bulkStartDate, setBulkStartDate] = useState(() => new Date().toISOString().slice(0, 10));
-  const [bulkText, setBulkText] = useState("");
-  const [bulkError, setBulkError] = useState<string | null>(null);
-  const [bulkSuccess, setBulkSuccess] = useState<string | null>(null);
-  const [bulkBusy, setBulkBusy] = useState(false);
 
   const [groupRules, setGroupRules] = useState<GroupPointRule[]>([]);
   const [groupInput, setGroupInput] = useState("");
@@ -944,64 +940,6 @@ export function SettingsPage() {
     () => allEmployees.filter((e) => !excluded.some((x) => x.employeeId === e.id)),
     [allEmployees, excluded]
   );
-
-  function parseBulkItemsText(text: string): Array<{ pattern: string; points: number }> {
-    const lines = text.split("\n");
-    const results: Array<{ pattern: string; points: number }> = [];
-    for (const rawLine of lines) {
-      const line = rawLine.trim();
-      if (!line) continue;
-      const lower = line.toLowerCase();
-      if (lower.includes("nama barang") || lower.includes("point lama") || lower.includes("point baru")) {
-        continue;
-      }
-      const rawParts = line.split(/[\t,;]+/).map((p) => p.trim()).filter(Boolean);
-      if (rawParts.length >= 3) {
-        const pattern = rawParts[0];
-        const points = Number(rawParts[2]);
-        if (pattern && Number.isInteger(points) && points >= 0) {
-          results.push({ pattern, points });
-        }
-      } else if (rawParts.length === 2) {
-        const pattern = rawParts[0];
-        const points = Number(rawParts[1]);
-        if (pattern && Number.isInteger(points) && points >= 0) {
-          results.push({ pattern, points });
-        }
-      }
-    }
-    return results;
-  }
-
-  async function submitBulkItemPoints() {
-    setBulkError(null);
-    setBulkSuccess(null);
-    const parsed = parseBulkItemsText(bulkText);
-    if (parsed.length === 0) {
-      setBulkError("Tidak ditemukan data item dan poin yang valid. Pastikan format: Nama Item [tab/koma] Poin.");
-      return;
-    }
-    setBulkBusy(true);
-    try {
-      const res = await fetch("/api/points/items/bulk", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ startDate: bulkStartDate, items: parsed }),
-      });
-      const data = await res.json();
-      if (!res.ok) {
-        setBulkError(data.error ?? "Gagal menyimpan update massal.");
-        return;
-      }
-      setBulkSuccess(`Berhasil memperbarui ${data.count} aturan poin berlaku per ${bulkStartDate}!`);
-      setBulkText("");
-      await loadItemRules();
-    } catch {
-      setBulkError("Terjadi kesalahan jaringan.");
-    } finally {
-      setBulkBusy(false);
-    }
-  }
 
   function formatRuleEffectiveDate(startDate?: string): string {
     if (!startDate) return "Base / Awal";
@@ -2719,70 +2657,22 @@ export function SettingsPage() {
                 <button
                   type="button"
                   onClick={() => setShowBulkModal((prev) => !prev)}
-                  className="inline-flex items-center gap-1.5 rounded-lg border border-border/80 bg-surface-subtle text-foreground px-3.5 py-1.5 text-xs font-semibold hover:bg-surface-hover transition-all shadow-xs"
+                  className="inline-flex items-center gap-1.5 rounded-lg border border-accent/40 bg-accent/10 text-accent font-semibold px-3.5 py-1.5 text-xs hover:bg-accent/20 transition-all shadow-xs"
                 >
-                  📋 {showBulkModal ? "Tutup Form Massal" : "Update Massal (Excel)"}
+                  📊 {showBulkModal ? "Tutup Form Excel" : "Upload Excel / Update Massal"}
                 </button>
               </div>
             </div>
             {itemError && <p className="text-xs text-rose-600 dark:text-rose-400 font-medium">{itemError}</p>}
 
-            {/* ── Panel Update Poin Massal ─────────────────────── */}
+            {/* ── Sistem Upload Data Poin Excel ─────────────────────── */}
             {showBulkModal && (
-              <div className="rounded-xl border border-accent/30 bg-accent/5 p-4 space-y-3 transition-all">
-                <div className="flex flex-wrap items-center justify-between gap-2">
-                  <div>
-                    <h4 className="text-xs font-bold text-foreground flex items-center gap-1.5">
-                      <span>📋 Update Poin Massal (Salin &amp; Tempel dari Excel)</span>
-                    </h4>
-                    <p className="text-[11px] text-muted">
-                      Tempel teks langsung dari tabel Excel. Format baris: <code>Nama Barang &nbsp; [Poin Lama] &nbsp; Poin Baru</code> atau <code>Nama Barang &nbsp; Poin Baru</code>.
-                    </p>
-                  </div>
-                  <div className="flex items-center gap-2">
-                    <label htmlFor="bulk-startdate" className="text-[11px] font-semibold text-muted">
-                      Berlaku Mulai:
-                    </label>
-                    <input
-                      id="bulk-startdate"
-                      type="date"
-                      value={bulkStartDate}
-                      onChange={(e) => setBulkStartDate(e.target.value)}
-                      className="rounded-lg border border-border/80 bg-surface px-2.5 py-1 text-xs font-mono text-foreground focus:outline-none focus:ring-2 focus:ring-accent/20 focus:border-accent"
-                    />
-                  </div>
-                </div>
-
-                <textarea
-                  rows={6}
-                  value={bulkText}
-                  onChange={(e) => setBulkText(e.target.value)}
-                  placeholder={`Contoh tempelan dari Excel:\nBatok UI ME PC08 USB Type C\t50\t75\nTWS UFONE EB04\t50\t60\nTWS UFONE EB05\t30\t50`}
-                  className="w-full rounded-lg border border-border/80 bg-surface p-2.5 text-xs font-mono text-foreground placeholder:text-muted/60 focus:outline-none focus:ring-2 focus:ring-accent/20 focus:border-accent"
-                />
-
-                <div className="flex flex-wrap items-center justify-between gap-3 pt-1">
-                  <div className="text-xs text-muted">
-                    {bulkText.trim() ? (
-                      <span className="font-semibold text-accent">
-                        ✓ {parseBulkItemsText(bulkText).length} baris item valid terdeteksi
-                      </span>
-                    ) : (
-                      <span>Belum ada data yang ditempel</span>
-                    )}
-                  </div>
-                  <button
-                    type="button"
-                    disabled={bulkBusy || parseBulkItemsText(bulkText).length === 0}
-                    onClick={submitBulkItemPoints}
-                    className="inline-flex items-center gap-1.5 rounded-lg bg-accent text-accent-foreground px-4 py-1.5 text-xs font-semibold hover:bg-accent-hover disabled:opacity-50 disabled:cursor-not-allowed transition-all shadow-xs"
-                  >
-                    {bulkBusy ? "Menyimpan..." : `Simpan ${parseBulkItemsText(bulkText).length} Aturan Poin`}
-                  </button>
-                </div>
-                {bulkError && <p className="text-xs text-rose-600 dark:text-rose-400 font-medium">{bulkError}</p>}
-                {bulkSuccess && <p className="text-xs text-emerald-600 dark:text-emerald-400 font-medium">{bulkSuccess}</p>}
-              </div>
+              <PointRulesExcelImport
+                onSuccess={async () => {
+                  await loadItemRules();
+                }}
+                onClose={() => setShowBulkModal(false)}
+              />
             )}
 
             <div className="overflow-x-auto rounded-xl border border-border/80 shadow-xs max-h-96 overflow-y-auto">

@@ -30,6 +30,9 @@ import {
 import { type FeatureKey } from "../../lib/features";
 import type { ReportCategory } from "@/generated/prisma/client";
 import { requireFeature, requireMaster, cacheBriefly, parseDateParam, logActivity } from "../middleware";
+import { upload } from "../uploads";
+import * as XLSX from "xlsx";
+import { parseExcelPointRows } from "../../lib/parsePointExcel";
 
 export const pointsRouter = Router();
 
@@ -240,6 +243,47 @@ pointsRouter.post("/api/points/items/bulk", requireMaster, async (req, res) => {
     return res.status(500).json({ error: err.message });
   }
 });
+
+pointsRouter.post(
+  "/api/points/items/upload",
+  requireMaster,
+  upload.single("file"),
+  async (req, res) => {
+    try {
+      if (!req.file) return res.status(400).json({ error: "File Excel wajib diunggah." });
+      const startDate = req.body.startDate ? String(req.body.startDate).trim() : undefined;
+      const workbook = XLSX.read(req.file.buffer, { type: "buffer" });
+      const sheetName = workbook.SheetNames[0];
+      if (!sheetName) {
+        return res.status(400).json({ error: "File Excel tidak memiliki lembar kerja (sheet)." });
+      }
+      const sheet = workbook.Sheets[sheetName];
+      const rawRows: unknown[][] = XLSX.utils.sheet_to_json(sheet, { header: 1 });
+      const { items, errors } = parseExcelPointRows(rawRows);
+      if (items.length === 0) {
+        return res.status(400).json({
+          error: "Tidak ada baris data item dan poin yang valid ditemukan dalam file Excel.",
+          details: errors.map((e) => `Baris ${e.row}: ${e.reason}`),
+        });
+      }
+      const saved = await bulkUpsertItemPointRules(items, startDate);
+      await logActivity(
+        req,
+        "ITEM_RULE_UPLOAD",
+        `${saved.length} aturan poin diimpor dari "${req.file.originalname}"${startDate ? ` (mulai ${startDate})` : ""}`
+      );
+      return res.json({
+        ok: true,
+        count: saved.length,
+        filename: req.file.originalname,
+        errorsCount: errors.length,
+        errors,
+      });
+    } catch (err: any) {
+      return res.status(500).json({ error: err.message || "Gagal memproses file Excel." });
+    }
+  }
+);
 
 pointsRouter.delete("/api/points/items/:id", requireMaster, async (req, res) => {
   try {
