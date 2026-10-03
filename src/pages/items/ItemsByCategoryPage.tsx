@@ -77,8 +77,8 @@ export function ItemsByCategoryPage() {
   const [rows, setRows] = useState<ItemRow[]>([]);
   const [loading, setLoading] = useState(true);
 
-  const [from, setFrom] = useState("");
-  const [to, setTo] = useState("");
+  const [from, setFrom] = useState(() => currentPeriod.from);
+  const [to, setTo] = useState(() => currentPeriod.to);
 
   const periodInitialised = useRef(false);
   useEffect(() => {

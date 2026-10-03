@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { todayStr, yesterdayStr } from "./dateDefaults";
+import { todayStr, yesterdayStr, currentMonthRange } from "./dateDefaults";
 
 describe("dateDefaults", () => {
   beforeEach(() => {
@@ -23,5 +23,12 @@ describe("dateDefaults", () => {
   it("rolls yesterday back across a year boundary", () => {
     vi.setSystemTime(new Date(2026, 0, 1, 10, 0, 0)); // 1 Jan 2026
     expect(yesterdayStr()).toBe("2025-12-31");
+  });
+
+  it("returns start and end of current month", () => {
+    vi.setSystemTime(new Date(2026, 9, 3, 10, 0, 0)); // 3 Oct 2026
+    const { from, to } = currentMonthRange();
+    expect(from).toBe("2026-10-01");
+    expect(to).toBe("2026-10-31");
   });
 });

@@ -11,3 +11,15 @@ export function yesterdayStr(): string {
   d.setDate(d.getDate() - 1);
   return toDateStr(d);
 }
+
+export function currentMonthRange(): { from: string; to: string } {
+  const now = new Date();
+  const year = now.getFullYear();
+  const month = now.getMonth();
+  const from = new Date(year, month, 1);
+  const to = new Date(year, month + 1, 0);
+  return {
+    from: toDateStr(from),
+    to: toDateStr(to),
+  };
+}

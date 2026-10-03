@@ -13,6 +13,8 @@ import {
 import { StatCard } from "@/components/StatCard";
 import { formatDate, formatNumber, formatRupiah } from "@/lib/format";
 import { downloadCsv } from "@/lib/csv";
+import { todayStr } from "@/lib/dateDefaults";
+import { usePeriod } from "@/context/PeriodContext";
 
 type Branch = "BANDUNG" | "CIMAHI";
 
@@ -64,15 +66,30 @@ export function ItemsPage() {
   const [searchParams] = useSearchParams();
   const selectedId = searchParams.get("id");
 
+  const { currentPeriod, loaded: periodLoaded } = usePeriod();
+
   const [query, setQuery] = useState("");
   const [showOptions, setShowOptions] = useState(false);
-  const [from, setFrom] = useState("");
-  const [to, setTo] = useState("");
+  const [from, setFrom] = useState(() => currentPeriod.from);
+  const [to, setTo] = useState(() => currentPeriod.to);
   // "Terapkan" re-runs the detail query for the currently-selected item with
   // whatever from/to are typed right now — without this, typing a new date
   // would refetch on every keystroke instead of waiting for the click.
-  const [appliedRange, setAppliedRange] = useState({ from: "", to: "" });
+  const [appliedRange, setAppliedRange] = useState(() => ({
+    from: currentPeriod.from,
+    to: currentPeriod.to,
+  }));
   const boxRef = useRef<HTMLDivElement>(null);
+
+  const periodInitialised = useRef(false);
+  useEffect(() => {
+    if (periodLoaded && !periodInitialised.current) {
+      periodInitialised.current = true;
+      setFrom(currentPeriod.from);
+      setTo(currentPeriod.to);
+      setAppliedRange({ from: currentPeriod.from, to: currentPeriod.to });
+    }
+  }, [periodLoaded, currentPeriod.from, currentPeriod.to]);
 
   useEffect(() => {
     function onClickOutside(e: MouseEvent) {
@@ -119,13 +136,12 @@ export function ItemsPage() {
     enabled: !!selectedId,
   });
 
-  // A freshly-picked item (new selectedId) should show its full history by
-  // default, not whatever from/to happened to be left over from the last one.
+  // A freshly-picked item defaults to the current month period
   useEffect(() => {
-    setFrom("");
-    setTo("");
-    setAppliedRange({ from: "", to: "" });
-  }, [selectedId]);
+    setFrom(currentPeriod.from);
+    setTo(currentPeriod.to);
+    setAppliedRange({ from: currentPeriod.from, to: currentPeriod.to });
+  }, [selectedId, currentPeriod.from, currentPeriod.to]);
 
   function selectItem(opt: ItemOption) {
     setQuery(`${opt.name} (${opt.code})`);
@@ -252,6 +268,26 @@ export function ItemsPage() {
                   onChange={(e) => setTo(e.target.value)}
                   className="rounded-lg border border-border/80 bg-surface-subtle px-2.5 py-1 text-xs text-foreground focus:outline-none focus:ring-2 focus:ring-accent/20 focus:border-accent transition-all"
                 />
+              </div>
+              <div className="flex items-center gap-1.5 pb-0.5">
+                {[
+                  { label: "Hari Ini", from: todayStr(), to: todayStr() },
+                  { label: "Bulan Ini", from: currentPeriod.from, to: currentPeriod.to },
+                  { label: "Semua", from: "", to: "" },
+                ].map((s) => (
+                  <button
+                    key={s.label}
+                    type="button"
+                    onClick={() => {
+                      setFrom(s.from);
+                      setTo(s.to);
+                      setAppliedRange({ from: s.from, to: s.to });
+                    }}
+                    className="rounded-lg border border-border/80 bg-surface-subtle px-2.5 py-1 text-[11px] font-medium text-muted hover:text-foreground hover:bg-surface-hover transition-colors"
+                  >
+                    {s.label}
+                  </button>
+                ))}
               </div>
               <button
                 type="button"
