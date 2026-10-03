@@ -45,6 +45,9 @@ export async function ensureDefaults(branch: "BANDUNG" | "CIMAHI" = "BANDUNG"): 
         WHEN duplicate_object THEN NULL;
       END $$;
     `);
+    await prisma.$executeRawUnsafe(`ALTER TABLE "item_points" ADD COLUMN IF NOT EXISTS "startDate" DATE NOT NULL DEFAULT '2020-01-01';`);
+    await prisma.$executeRawUnsafe(`ALTER TABLE "item_points" DROP CONSTRAINT IF EXISTS "item_points_pattern_key";`);
+    await prisma.$executeRawUnsafe(`CREATE UNIQUE INDEX IF NOT EXISTS "item_points_pattern_startDate_key" ON "item_points"("pattern", "startDate");`);
   } catch {
     // ignore error if tables not yet created
   }
@@ -85,12 +88,13 @@ export async function ensureDefaults(branch: "BANDUNG" | "CIMAHI" = "BANDUNG"): 
     })
   );
 
+  const defaultBaseDate = new Date("2020-01-01T00:00:00.000Z");
   await Promise.all(
     DEFAULT_ITEM_POINTS.map((p) =>
       prisma.itemPoint.upsert({
-        where: { pattern: p.pattern },
+        where: { pattern_startDate: { pattern: p.pattern, startDate: defaultBaseDate } },
         update: {},
-        create: { pattern: p.pattern, points: p.points, isDefault: true },
+        create: { pattern: p.pattern, points: p.points, startDate: defaultBaseDate, isDefault: true },
       })
     )
   );

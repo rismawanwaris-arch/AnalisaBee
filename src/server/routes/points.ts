@@ -14,6 +14,7 @@ import {
   computeMonthPeriod,
   listItemPointRules,
   upsertItemPointRule,
+  bulkUpsertItemPointRules,
   deleteItemPointRule,
   listGroupPointDefaults,
   upsertGroupPointDefault,
@@ -197,16 +198,44 @@ pointsRouter.get("/api/points/items", requireMaster, async (req, res) => {
 
 pointsRouter.post("/api/points/items", requireMaster, async (req, res) => {
   try {
-    const { pattern, points } = req.body;
+    const { pattern, points, startDate } = req.body;
     const p = String(pattern || "").trim();
     const pts = Number(points);
     if (!p) return res.status(400).json({ error: "Pola item wajib diisi." });
     if (!Number.isInteger(pts) || pts < 0) {
       return res.status(400).json({ error: "Poin harus integer >= 0." });
     }
-    const rule = await upsertItemPointRule(p, pts);
-    await logActivity(req, "ITEM_RULE_ADD", `"${p}" = ${pts} poin`);
+    const rule = await upsertItemPointRule(p, pts, startDate);
+    await logActivity(req, "ITEM_RULE_ADD", `"${p}" = ${pts} poin${startDate ? ` (mulai ${startDate})` : ""}`);
     return res.json(rule);
+  } catch (err: any) {
+    return res.status(500).json({ error: err.message });
+  }
+});
+
+pointsRouter.post("/api/points/items/bulk", requireMaster, async (req, res) => {
+  try {
+    const { items, startDate } = req.body;
+    if (!Array.isArray(items) || items.length === 0) {
+      return res.status(400).json({ error: "Daftar item tidak boleh kosong." });
+    }
+    const validatedItems: Array<{ pattern: string; points: number }> = [];
+    for (const item of items) {
+      const p = String(item.pattern || "").trim();
+      const pts = Number(item.points);
+      if (!p || !Number.isInteger(pts) || pts < 0) continue;
+      validatedItems.push({ pattern: p, points: pts });
+    }
+    if (validatedItems.length === 0) {
+      return res.status(400).json({ error: "Tidak ada baris item yang valid." });
+    }
+    const saved = await bulkUpsertItemPointRules(validatedItems, startDate);
+    await logActivity(
+      req,
+      "ITEM_RULE_BULK_ADD",
+      `${saved.length} aturan poin diperbarui${startDate ? ` (mulai ${startDate})` : ""}`
+    );
+    return res.json({ ok: true, count: saved.length });
   } catch (err: any) {
     return res.status(500).json({ error: err.message });
   }

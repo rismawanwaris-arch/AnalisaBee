@@ -199,11 +199,15 @@ model Item {
 // Takes priority over ItemGroupPointDefault.
 model ItemPoint {
   id        Int      @id @default(autoincrement())
-  pattern   String   @unique
+  pattern   String
   points    Int
+  startDate DateTime @default(now()) @db.Date
   isDefault Boolean  @default(false)
   updatedAt DateTime @updatedAt
 
+  @@unique([pattern, startDate])
+  @@index([pattern])
+  @@index([startDate])
   @@map("item_points")
 }
 

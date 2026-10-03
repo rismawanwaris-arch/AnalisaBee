@@ -57,6 +57,41 @@ describe("computeItemPoints", () => {
     ]);
     expect(result.get(4)).toBe(0);
   });
+
+  it("resolves points according to effective startDate (Option A: date-versioned rules)", () => {
+    const itemBatok = [{ id: 10, name: "Batok UI ME PC08 USB Type C White", itemGroup: "ACC CAMPURAN NEW" }];
+    const versionedRules = [
+      { pattern: "Batok UI ME PC08 USB Type C", points: 50, startDate: "2020-01-01" },
+      { pattern: "Batok UI ME PC08 USB Type C", points: 75, startDate: "2026-10-02" },
+    ];
+
+    // Transaction on 2026-10-01 (before update): should get 50 points
+    const resultBefore = computeItemPoints(itemBatok, versionedRules, groupDefaults, [], "2026-10-01");
+    expect(resultBefore.get(10)).toBe(50);
+
+    // Transaction on 2026-10-02 (on update date): should get 75 points
+    const resultOnDate = computeItemPoints(itemBatok, versionedRules, groupDefaults, [], "2026-10-02");
+    expect(resultOnDate.get(10)).toBe(75);
+
+    // Transaction on 2026-10-15 (after update date): should get 75 points
+    const resultAfter = computeItemPoints(itemBatok, versionedRules, groupDefaults, [], "2026-10-15");
+    expect(resultAfter.get(10)).toBe(75);
+  });
+
+  it("handles chained historical updates and picks the latest effective rule", () => {
+    const itemTws = [{ id: 11, name: "TWS UFONE EB05 Black", itemGroup: "ACC CAMPURAN NEW" }];
+    const chainRules = [
+      { pattern: "TWS UFONE EB05", points: 30, startDate: "2026-01-01" },
+      { pattern: "TWS UFONE EB05", points: 50, startDate: "2026-10-02" },
+      { pattern: "TWS UFONE EB05", points: 65, startDate: "2026-11-01" },
+    ];
+
+    expect(computeItemPoints(itemTws, chainRules, [], [], "2026-09-30").get(11)).toBe(30);
+    expect(computeItemPoints(itemTws, chainRules, [], [], "2026-10-02").get(11)).toBe(50);
+    expect(computeItemPoints(itemTws, chainRules, [], [], "2026-10-25").get(11)).toBe(50);
+    expect(computeItemPoints(itemTws, chainRules, [], [], "2026-11-01").get(11)).toBe(65);
+    expect(computeItemPoints(itemTws, chainRules, [], [], "2026-12-10").get(11)).toBe(65);
+  });
 });
 
 describe("computeMonthPeriod", () => {

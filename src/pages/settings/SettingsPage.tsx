@@ -71,6 +71,7 @@ interface ItemPointRule {
   id: number;
   pattern: string;
   points: number;
+  startDate?: string;
   isDefault: boolean;
 }
 interface GroupPointRule {
@@ -225,7 +226,15 @@ export function SettingsPage() {
   const [itemRules, setItemRules] = useState<ItemPointRule[]>([]);
   const [patternInput, setPatternInput] = useState("");
   const [pointsInput, setPointsInput] = useState("10");
+  const [startDateInput, setStartDateInput] = useState(() => new Date().toISOString().slice(0, 10));
   const [itemError, setItemError] = useState<string | null>(null);
+
+  const [showBulkModal, setShowBulkModal] = useState(false);
+  const [bulkStartDate, setBulkStartDate] = useState(() => new Date().toISOString().slice(0, 10));
+  const [bulkText, setBulkText] = useState("");
+  const [bulkError, setBulkError] = useState<string | null>(null);
+  const [bulkSuccess, setBulkSuccess] = useState<string | null>(null);
+  const [bulkBusy, setBulkBusy] = useState(false);
 
   const [groupRules, setGroupRules] = useState<GroupPointRule[]>([]);
   const [groupInput, setGroupInput] = useState("");
@@ -936,6 +945,74 @@ export function SettingsPage() {
     [allEmployees, excluded]
   );
 
+  function parseBulkItemsText(text: string): Array<{ pattern: string; points: number }> {
+    const lines = text.split("\n");
+    const results: Array<{ pattern: string; points: number }> = [];
+    for (const rawLine of lines) {
+      const line = rawLine.trim();
+      if (!line) continue;
+      const lower = line.toLowerCase();
+      if (lower.includes("nama barang") || lower.includes("point lama") || lower.includes("point baru")) {
+        continue;
+      }
+      const rawParts = line.split(/[\t,;]+/).map((p) => p.trim()).filter(Boolean);
+      if (rawParts.length >= 3) {
+        const pattern = rawParts[0];
+        const points = Number(rawParts[2]);
+        if (pattern && Number.isInteger(points) && points >= 0) {
+          results.push({ pattern, points });
+        }
+      } else if (rawParts.length === 2) {
+        const pattern = rawParts[0];
+        const points = Number(rawParts[1]);
+        if (pattern && Number.isInteger(points) && points >= 0) {
+          results.push({ pattern, points });
+        }
+      }
+    }
+    return results;
+  }
+
+  async function submitBulkItemPoints() {
+    setBulkError(null);
+    setBulkSuccess(null);
+    const parsed = parseBulkItemsText(bulkText);
+    if (parsed.length === 0) {
+      setBulkError("Tidak ditemukan data item dan poin yang valid. Pastikan format: Nama Item [tab/koma] Poin.");
+      return;
+    }
+    setBulkBusy(true);
+    try {
+      const res = await fetch("/api/points/items/bulk", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ startDate: bulkStartDate, items: parsed }),
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        setBulkError(data.error ?? "Gagal menyimpan update massal.");
+        return;
+      }
+      setBulkSuccess(`Berhasil memperbarui ${data.count} aturan poin berlaku per ${bulkStartDate}!`);
+      setBulkText("");
+      await loadItemRules();
+    } catch {
+      setBulkError("Terjadi kesalahan jaringan.");
+    } finally {
+      setBulkBusy(false);
+    }
+  }
+
+  function formatRuleEffectiveDate(startDate?: string): string {
+    if (!startDate) return "Base / Awal";
+    const str = startDate.slice(0, 10);
+    if (str <= "2020-01-01") return "Base / Awal";
+    const [y, m, d] = str.split("-");
+    const months = ["Jan", "Feb", "Mar", "Apr", "Mei", "Jun", "Jul", "Agu", "Sep", "Okt", "Nov", "Des"];
+    const mIdx = Number(m) - 1;
+    return `${d} ${months[mIdx] || m} ${y}`;
+  }
+
   async function addItemRule() {
     setItemError(null);
     const pattern = patternInput.trim();
@@ -952,7 +1029,7 @@ export function SettingsPage() {
       const res = await fetch("/api/points/items", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ pattern, points }),
+        body: JSON.stringify({ pattern, points, startDate: startDateInput }),
       });
       const data = await res.json();
       if (!res.ok) {
@@ -2583,9 +2660,14 @@ export function SettingsPage() {
         </button>
         {openSections.has("poin-per-item") && (
           <div className="px-5 pb-5 pt-4 space-y-4 border-t border-border/60">
+            <div className="rounded-lg bg-blue-500/10 border border-blue-500/20 p-3 text-xs text-blue-700 dark:text-blue-300 leading-relaxed">
+              <span className="font-semibold">💡 Sistem Poin Berbasis Tanggal Efektif:</span> Anda dapat memperbarui poin untuk item tertentu pada tanggal tertentu. Penjualan sebelum tanggal update akan tetap menggunakan poin lama, sedangkan penjualan pada atau setelah tanggal tersebut otomatis menggunakan poin baru.
+            </div>
+
             <p className="text-xs text-muted leading-relaxed">
               Pola pencocokan nama item POS secara case-insensitive dan mencakup semua varian warna (contoh: <code>&quot;TWS Robot Airbuds T70E&quot;</code>). Jika ada pola bertumpuk, pola yang lebih spesifik / panjang akan diutamakan.
             </p>
+
             <div className="flex flex-wrap items-end gap-3 pt-1">
               <div className="flex-1 min-w-56">
                 <label htmlFor="settings-item-pattern" className="block text-[11px] font-semibold uppercase tracking-wider text-muted mb-1">
@@ -2600,7 +2682,7 @@ export function SettingsPage() {
                   className="w-full rounded-lg border border-border/80 bg-surface-subtle px-3 py-1.5 text-xs text-foreground focus:outline-none focus:ring-2 focus:ring-accent/20 focus:border-accent transition-all"
                 />
               </div>
-              <div className="w-32">
+              <div className="w-28">
                 <label htmlFor="settings-item-points" className="block text-[11px] font-semibold uppercase tracking-wider text-muted mb-1">
                   Poin / pcs
                 </label>
@@ -2614,20 +2696,101 @@ export function SettingsPage() {
                   className="w-full rounded-lg border border-border/80 bg-surface-subtle px-3 py-1.5 text-xs font-mono text-foreground focus:outline-none focus:ring-2 focus:ring-accent/20 focus:border-accent transition-all"
                 />
               </div>
-              <button
-                type="button"
-                onClick={addItemRule}
-                className="inline-flex items-center gap-1.5 rounded-lg bg-accent text-accent-foreground px-4 py-1.5 text-xs font-semibold hover:bg-accent-hover transition-all shadow-xs"
-              >
-                + Tambah Aturan
-              </button>
+              <div className="w-36">
+                <label htmlFor="settings-item-startdate" className="block text-[11px] font-semibold uppercase tracking-wider text-muted mb-1">
+                  Berlaku Mulai
+                </label>
+                <input
+                  id="settings-item-startdate"
+                  type="date"
+                  value={startDateInput}
+                  onChange={(e) => setStartDateInput(e.target.value)}
+                  className="w-full rounded-lg border border-border/80 bg-surface-subtle px-2.5 py-1.5 text-xs font-mono text-foreground focus:outline-none focus:ring-2 focus:ring-accent/20 focus:border-accent transition-all"
+                />
+              </div>
+              <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  onClick={addItemRule}
+                  className="inline-flex items-center gap-1.5 rounded-lg bg-accent text-accent-foreground px-4 py-1.5 text-xs font-semibold hover:bg-accent-hover transition-all shadow-xs"
+                >
+                  + Tambah Aturan
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setShowBulkModal((prev) => !prev)}
+                  className="inline-flex items-center gap-1.5 rounded-lg border border-border/80 bg-surface-subtle text-foreground px-3.5 py-1.5 text-xs font-semibold hover:bg-surface-hover transition-all shadow-xs"
+                >
+                  📋 {showBulkModal ? "Tutup Form Massal" : "Update Massal (Excel)"}
+                </button>
+              </div>
             </div>
             {itemError && <p className="text-xs text-rose-600 dark:text-rose-400 font-medium">{itemError}</p>}
+
+            {/* ── Panel Update Poin Massal ─────────────────────── */}
+            {showBulkModal && (
+              <div className="rounded-xl border border-accent/30 bg-accent/5 p-4 space-y-3 transition-all">
+                <div className="flex flex-wrap items-center justify-between gap-2">
+                  <div>
+                    <h4 className="text-xs font-bold text-foreground flex items-center gap-1.5">
+                      <span>📋 Update Poin Massal (Salin &amp; Tempel dari Excel)</span>
+                    </h4>
+                    <p className="text-[11px] text-muted">
+                      Tempel teks langsung dari tabel Excel. Format baris: <code>Nama Barang &nbsp; [Poin Lama] &nbsp; Poin Baru</code> atau <code>Nama Barang &nbsp; Poin Baru</code>.
+                    </p>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <label htmlFor="bulk-startdate" className="text-[11px] font-semibold text-muted">
+                      Berlaku Mulai:
+                    </label>
+                    <input
+                      id="bulk-startdate"
+                      type="date"
+                      value={bulkStartDate}
+                      onChange={(e) => setBulkStartDate(e.target.value)}
+                      className="rounded-lg border border-border/80 bg-surface px-2.5 py-1 text-xs font-mono text-foreground focus:outline-none focus:ring-2 focus:ring-accent/20 focus:border-accent"
+                    />
+                  </div>
+                </div>
+
+                <textarea
+                  rows={6}
+                  value={bulkText}
+                  onChange={(e) => setBulkText(e.target.value)}
+                  placeholder={`Contoh tempelan dari Excel:\nBatok UI ME PC08 USB Type C\t50\t75\nTWS UFONE EB04\t50\t60\nTWS UFONE EB05\t30\t50`}
+                  className="w-full rounded-lg border border-border/80 bg-surface p-2.5 text-xs font-mono text-foreground placeholder:text-muted/60 focus:outline-none focus:ring-2 focus:ring-accent/20 focus:border-accent"
+                />
+
+                <div className="flex flex-wrap items-center justify-between gap-3 pt-1">
+                  <div className="text-xs text-muted">
+                    {bulkText.trim() ? (
+                      <span className="font-semibold text-accent">
+                        ✓ {parseBulkItemsText(bulkText).length} baris item valid terdeteksi
+                      </span>
+                    ) : (
+                      <span>Belum ada data yang ditempel</span>
+                    )}
+                  </div>
+                  <button
+                    type="button"
+                    disabled={bulkBusy || parseBulkItemsText(bulkText).length === 0}
+                    onClick={submitBulkItemPoints}
+                    className="inline-flex items-center gap-1.5 rounded-lg bg-accent text-accent-foreground px-4 py-1.5 text-xs font-semibold hover:bg-accent-hover disabled:opacity-50 disabled:cursor-not-allowed transition-all shadow-xs"
+                  >
+                    {bulkBusy ? "Menyimpan..." : `Simpan ${parseBulkItemsText(bulkText).length} Aturan Poin`}
+                  </button>
+                </div>
+                {bulkError && <p className="text-xs text-rose-600 dark:text-rose-400 font-medium">{bulkError}</p>}
+                {bulkSuccess && <p className="text-xs text-emerald-600 dark:text-emerald-400 font-medium">{bulkSuccess}</p>}
+              </div>
+            )}
+
             <div className="overflow-x-auto rounded-xl border border-border/80 shadow-xs max-h-96 overflow-y-auto">
               <table className="w-full text-xs">
                 <thead className="bg-surface-subtle/80 text-muted text-left sticky top-0 border-b border-border/80">
                   <tr>
                     <th className="px-4 py-2 font-semibold text-[11px] uppercase">Nama / Pola Item</th>
+                    <th className="px-4 py-2 font-semibold text-[11px] uppercase">Berlaku Mulai</th>
                     <th className="px-4 py-2 font-semibold text-[11px] uppercase text-right">Poin / pcs</th>
                     <th className="px-4 py-2 font-semibold text-[11px] uppercase text-right">Aksi</th>
                   </tr>
@@ -2635,7 +2798,7 @@ export function SettingsPage() {
                 <tbody className="divide-y divide-border/60 font-mono">
                   {itemRules.length === 0 && (
                     <tr>
-                      <td colSpan={3} className="px-4 py-6 text-center text-muted font-sans">
+                      <td colSpan={4} className="px-4 py-6 text-center text-muted font-sans">
                         Belum ada aturan khusus item.
                       </td>
                     </tr>
@@ -2649,6 +2812,11 @@ export function SettingsPage() {
                             bawaan
                           </span>
                         )}
+                      </td>
+                      <td className="px-4 py-2 font-sans text-muted">
+                        <span className="inline-flex items-center px-2 py-0.5 rounded text-[11px] font-mono bg-surface-subtle border border-border/60">
+                          {formatRuleEffectiveDate(r.startDate)}
+                        </span>
                       </td>
                       <td className="px-4 py-2 text-right text-accent font-bold">+{formatNumber(r.points)}</td>
                       <td className="px-4 py-2 text-right">

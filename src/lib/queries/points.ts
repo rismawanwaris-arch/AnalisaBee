@@ -15,17 +15,50 @@ async function getItemGroupsForCategory(category: ReportCategory): Promise<strin
   return rows.map((r) => r.itemGroup);
 }
 
-export async function listItemPointRules() {
-  await ensureDefaults();
-  return prisma.itemPoint.findMany({ orderBy: { pattern: "asc" } });
+export function toDateStr(d: Date | string): string {
+  if (typeof d === "string") {
+    return d.slice(0, 10);
+  }
+  return d.toISOString().slice(0, 10);
 }
 
-export async function upsertItemPointRule(pattern: string, points: number) {
+export async function listItemPointRules() {
+  await ensureDefaults();
+  return prisma.itemPoint.findMany({ orderBy: [{ pattern: "asc" }, { startDate: "desc" }] });
+}
+
+export async function upsertItemPointRule(pattern: string, points: number, startDate?: string | Date) {
+  const dateObj = startDate ? new Date(startDate) : new Date();
+  const dateStr = toDateStr(dateObj);
+  const cleanDate = new Date(`${dateStr}T00:00:00.000Z`);
+
   return prisma.itemPoint.upsert({
-    where: { pattern },
+    where: { pattern_startDate: { pattern, startDate: cleanDate } },
     update: { points, isDefault: false },
-    create: { pattern, points, isDefault: false },
+    create: { pattern, points, startDate: cleanDate, isDefault: false },
   });
+}
+
+export async function bulkUpsertItemPointRules(
+  items: Array<{ pattern: string; points: number }>,
+  startDate?: string | Date
+) {
+  const dateObj = startDate ? new Date(startDate) : new Date();
+  const dateStr = toDateStr(dateObj);
+  const cleanDate = new Date(`${dateStr}T00:00:00.000Z`);
+
+  const results = [];
+  for (const item of items) {
+    const trimmed = item.pattern.trim();
+    if (!trimmed) continue;
+    const res = await prisma.itemPoint.upsert({
+      where: { pattern_startDate: { pattern: trimmed, startDate: cleanDate } },
+      update: { points: item.points, isDefault: false },
+      create: { pattern: trimmed, points: item.points, startDate: cleanDate, isDefault: false },
+    });
+    results.push(res);
+  }
+  return results;
 }
 
 export async function deleteItemPointRule(id: number) {
@@ -105,69 +138,137 @@ export interface ItemPointBreakdownRow {
   totalPoints: number;
 }
 
-interface PointItemInput {
+export interface PointItemInput {
   id: number;
   name: string;
   itemGroup: string | null;
 }
-interface PointRuleInput {
+export interface PointRuleInput {
   pattern: string;
   points: number;
+  startDate?: Date | string | null;
 }
-interface GroupDefaultInput {
+export interface GroupDefaultInput {
   itemGroup: string;
   points: number;
 }
-interface ExclusionInput {
+export interface ExclusionInput {
   pattern: string;
+}
+
+export function createPointResolver(
+  items: PointItemInput[],
+  rules: PointRuleInput[],
+  groupDefaults: GroupDefaultInput[],
+  exclusions: ExclusionInput[]
+) {
+  const itemMap = new Map(items.map((i) => [i.id, i]));
+  const groupPointByGroup = new Map(groupDefaults.map((g) => [g.itemGroup, g.points]));
+  const exclusionPatterns = exclusions.map((e) => e.pattern.toUpperCase());
+
+  type RuleWithDate = { pattern: string; points: number; dateStr: string };
+  const rulesByPattern = new Map<string, RuleWithDate[]>();
+  for (const r of rules) {
+    const pUpper = r.pattern.toUpperCase();
+    const dateStr = r.startDate ? toDateStr(r.startDate) : "1970-01-01";
+    const list = rulesByPattern.get(pUpper) ?? [];
+    list.push({ pattern: r.pattern, points: r.points, dateStr });
+    rulesByPattern.set(pUpper, list);
+  }
+  for (const list of rulesByPattern.values()) {
+    list.sort((a, b) => b.dateStr.localeCompare(a.dateStr));
+  }
+
+  const uniquePatternsDesc = [...rulesByPattern.keys()].sort((a, b) => b.length - a.length);
+  const cache = new Map<string, number>();
+
+  return function resolve(itemId: number, saleDate?: Date | string | null): number {
+    const dateStr = saleDate ? toDateStr(saleDate) : toDateStr(new Date());
+    const cacheKey = `${itemId}:${dateStr}`;
+    const cached = cache.get(cacheKey);
+    if (cached !== undefined) return cached;
+
+    const item = itemMap.get(itemId);
+    if (!item) {
+      cache.set(cacheKey, 0);
+      return 0;
+    }
+
+    const upperName = item.name.toUpperCase();
+    if (exclusionPatterns.some((p) => upperName.includes(p))) {
+      cache.set(cacheKey, 0);
+      return 0;
+    }
+
+    for (const pattern of uniquePatternsDesc) {
+      if (upperName.includes(pattern)) {
+        const variants = rulesByPattern.get(pattern)!;
+        const active = variants.find((v) => v.dateStr <= dateStr);
+        if (active) {
+          cache.set(cacheKey, active.points);
+          return active.points;
+        }
+      }
+    }
+
+    if (item.itemGroup && groupPointByGroup.has(item.itemGroup)) {
+      const pts = groupPointByGroup.get(item.itemGroup)!;
+      cache.set(cacheKey, pts);
+      return pts;
+    }
+
+    cache.set(cacheKey, 0);
+    return 0;
+  };
 }
 
 /** Pure resolution algorithm, split out from its Prisma fetches so it can be
  * unit-tested without a database. Priority: an ItemPointExclusion match
  * always wins (forces 0, no matter what) > an explicit ItemPoint pattern
- * match (longest/most-specific pattern wins) > the item's
+ * match (longest/most-specific pattern wins, latest startDate <= asOfDate) > the item's
  * ItemGroupPointDefault fallback > 0. */
 export function computeItemPoints(
   items: PointItemInput[],
   rules: PointRuleInput[],
   groupDefaults: GroupDefaultInput[],
-  exclusions: ExclusionInput[]
+  exclusions: ExclusionInput[],
+  asOfDate?: Date | string
 ): Map<number, number> {
-  const sortedRules = [...rules].sort((a, b) => b.pattern.length - a.pattern.length);
-  const groupPointByGroup = new Map(groupDefaults.map((g) => [g.itemGroup, g.points]));
-  const exclusionPatterns = exclusions.map((e) => e.pattern.toUpperCase());
-
+  const resolver = createPointResolver(items, rules, groupDefaults, exclusions);
   const result = new Map<number, number>();
   for (const item of items) {
-    const upperName = item.name.toUpperCase();
-    if (exclusionPatterns.some((p) => upperName.includes(p))) {
-      result.set(item.id, 0);
-      continue;
-    }
-    const matchedRule = sortedRules.find((r) => upperName.includes(r.pattern.toUpperCase()));
-    if (matchedRule) {
-      result.set(item.id, matchedRule.points);
-    } else if (item.itemGroup && groupPointByGroup.has(item.itemGroup)) {
-      result.set(item.id, groupPointByGroup.get(item.itemGroup)!);
-    } else {
-      result.set(item.id, 0);
-    }
+    result.set(item.id, resolver(item.id, asOfDate));
   }
   return result;
 }
 
-/** Resolves point values only for the given itemIds — avoids loading all items. */
-export async function resolveItemPointsForIds(itemIds: number[]): Promise<Map<number, number>> {
+export async function getItemPointResolver(itemIds: number[]) {
   const [items, rules, groupDefaults, exclusions] = await Promise.all([
     prisma.item.findMany({
       where: { id: { in: itemIds } },
       select: { id: true, name: true, itemGroup: true },
     }),
-    prisma.itemPoint.findMany(),
+    prisma.itemPoint.findMany({ orderBy: { startDate: "desc" } }),
     prisma.itemGroupPointDefault.findMany(),
     prisma.itemPointExclusion.findMany(),
   ]);
-  return computeItemPoints(items, rules, groupDefaults, exclusions);
+  return {
+    items,
+    resolver: createPointResolver(items, rules, groupDefaults, exclusions),
+  };
+}
+
+/** Resolves point values only for the given itemIds — avoids loading all items. */
+export async function resolveItemPointsForIds(
+  itemIds: number[],
+  asOfDate?: Date | string
+): Promise<Map<number, number>> {
+  const { resolver } = await getItemPointResolver(itemIds);
+  const result = new Map<number, number>();
+  for (const id of itemIds) {
+    result.set(id, resolver(id, asOfDate));
+  }
+  return result;
 }
 
 export interface PointPeriodSetting {
@@ -306,9 +407,9 @@ export async function getLeaderboard(
     category ? getItemGroupsForCategory(category) : Promise.resolve(undefined),
   ]);
 
-  // Aggregate at DB level — avoids pulling every sale row into memory
+  // Aggregate at DB level — group by item, employee, and tanggal
   const salesAgg = await prisma.sale.groupBy({
-    by: ["itemId", "employeeId"],
+    by: ["itemId", "employeeId", "tanggal"],
     where: {
       tanggal: { gte: from, lte: to },
       ...(excludedIds.length > 0 ? { employeeId: { notIn: excludedIds } } : {}),
@@ -321,8 +422,8 @@ export async function getLeaderboard(
   const itemIds = [...new Set(salesAgg.map((s) => s.itemId))];
   const empIds = [...new Set(salesAgg.map((s) => s.employeeId))];
 
-  const [pointsByItem, employees] = await Promise.all([
-    resolveItemPointsForIds(itemIds),
+  const [{ resolver }, employees] = await Promise.all([
+    getItemPointResolver(itemIds),
     prisma.employee.findMany({
       where: { id: { in: empIds } },
       select: { id: true, name: true },
@@ -332,7 +433,7 @@ export async function getLeaderboard(
 
   const byEmployee = new Map<number, EmployeeLeaderboardRow>();
   for (const s of salesAgg) {
-    const pointsPerUnit = pointsByItem.get(s.itemId) ?? 0;
+    const pointsPerUnit = resolver(s.itemId, s.tanggal);
     if (pointsPerUnit === 0) continue;
     const qty = s._sum.qty ?? 0;
     const earned = pointsPerUnit * qty;
@@ -374,7 +475,7 @@ export async function getLeaderboardExport(
   ]);
 
   const salesAgg = await prisma.sale.groupBy({
-    by: ["itemId", "employeeId"],
+    by: ["itemId", "employeeId", "tanggal"],
     where: {
       tanggal: { gte: from, lte: to },
       ...(excludedIds.length > 0 ? { employeeId: { notIn: excludedIds } } : {}),
@@ -387,47 +488,66 @@ export async function getLeaderboardExport(
   const itemIds = [...new Set(salesAgg.map((s) => s.itemId))];
   const empIds = [...new Set(salesAgg.map((s) => s.employeeId))];
 
-  const [pointsByItem, employees, items] = await Promise.all([
-    resolveItemPointsForIds(itemIds),
+  const [{ items, resolver }, employees] = await Promise.all([
+    getItemPointResolver(itemIds),
     prisma.employee.findMany({ where: { id: { in: empIds } }, select: { id: true, name: true } }),
-    prisma.item.findMany({ where: { id: { in: itemIds } }, select: { id: true, name: true, itemGroup: true } }),
   ]);
   const empNameById = new Map(employees.map((e) => [e.id, e.name]));
   const itemById = new Map(items.map((i) => [i.id, i]));
 
-  const byEmployee = new Map<number, LeaderboardExportRow>();
+  const byEmployee = new Map<number, {
+    row: EmployeeLeaderboardRow;
+    itemsMap: Map<string, ItemPointBreakdownRow>;
+  }>();
+
   for (const s of salesAgg) {
-    const pointsPerUnit = pointsByItem.get(s.itemId) ?? 0;
+    const pointsPerUnit = resolver(s.itemId, s.tanggal);
     if (pointsPerUnit === 0) continue;
     const qty = s._sum.qty ?? 0;
     const earned = pointsPerUnit * qty;
     const item = itemById.get(s.itemId);
-    const line: ItemPointBreakdownRow = {
-      itemId: s.itemId,
-      itemName: item?.name ?? "Tidak diketahui",
-      itemGroup: item?.itemGroup ?? null,
-      qty,
-      pointsPerUnit,
-      totalPoints: earned,
-    };
-    const existing = byEmployee.get(s.employeeId);
-    if (existing) {
-      existing.totalPoints += earned;
-      existing.pointItemsQty += qty;
-      existing.items.push(line);
+    const itemKey = `${s.itemId}:${pointsPerUnit}`;
+
+    let empData = byEmployee.get(s.employeeId);
+    if (!empData) {
+      empData = {
+        row: {
+          employeeId: s.employeeId,
+          employeeName: empNameById.get(s.employeeId) ?? "—",
+          totalPoints: 0,
+          pointItemsQty: 0,
+        },
+        itemsMap: new Map(),
+      };
+      byEmployee.set(s.employeeId, empData);
+    }
+    empData.row.totalPoints += earned;
+    empData.row.pointItemsQty += qty;
+
+    const existingLine = empData.itemsMap.get(itemKey);
+    if (existingLine) {
+      existingLine.qty += qty;
+      existingLine.totalPoints += earned;
     } else {
-      byEmployee.set(s.employeeId, {
-        employeeId: s.employeeId,
-        employeeName: empNameById.get(s.employeeId) ?? "—",
+      empData.itemsMap.set(itemKey, {
+        itemId: s.itemId,
+        itemName: item?.name ?? "Tidak diketahui",
+        itemGroup: item?.itemGroup ?? null,
+        qty,
+        pointsPerUnit,
         totalPoints: earned,
-        pointItemsQty: qty,
-        items: [line],
       });
     }
   }
 
-  const rows = [...byEmployee.values()].sort((a, b) => b.totalPoints - a.totalPoints);
-  for (const r of rows) r.items.sort((a, b) => b.totalPoints - a.totalPoints);
+  const rows: LeaderboardExportRow[] = [...byEmployee.values()].map((d) => {
+    const sortedItems = [...d.itemsMap.values()].sort((a, b) => b.totalPoints - a.totalPoints);
+    return {
+      ...d.row,
+      items: sortedItems,
+    };
+  }).sort((a, b) => b.totalPoints - a.totalPoints);
+
   return { rows, from: from.toISOString(), to: to.toISOString() };
 }
 
@@ -443,9 +563,9 @@ export async function getEmployeePointBreakdown(
 
   const categoryGroups = category ? await getItemGroupsForCategory(category) : undefined;
 
-  // Aggregate at DB level — group by item, not individual sale rows
+  // Aggregate at DB level — group by itemId and tanggal
   const salesAgg = await prisma.sale.groupBy({
-    by: ["itemId"],
+    by: ["itemId", "tanggal"],
     where: {
       employeeId,
       tanggal: { gte: from, lte: to },
@@ -456,33 +576,37 @@ export async function getEmployeePointBreakdown(
     _sum: { qty: true },
   });
 
-  const itemIds = salesAgg.map((s) => s.itemId);
+  const itemIds = [...new Set(salesAgg.map((s) => s.itemId))];
 
-  const [pointsByItem, items] = await Promise.all([
-    resolveItemPointsForIds(itemIds),
-    prisma.item.findMany({
-      where: { id: { in: itemIds } },
-      select: { id: true, name: true, itemGroup: true },
-    }),
-  ]);
+  const { items, resolver } = await getItemPointResolver(itemIds);
   const itemById = new Map(items.map((i) => [i.id, i]));
 
-  return salesAgg
-    .flatMap((s) => {
-      const pointsPerUnit = pointsByItem.get(s.itemId) ?? 0;
-      if (pointsPerUnit === 0) return [];
-      const qty = s._sum.qty ?? 0;
-      const item = itemById.get(s.itemId);
-      return [{
+  const breakdownMap = new Map<string, ItemPointBreakdownRow>();
+  for (const s of salesAgg) {
+    const pointsPerUnit = resolver(s.itemId, s.tanggal);
+    if (pointsPerUnit === 0) continue;
+    const qty = s._sum.qty ?? 0;
+    const item = itemById.get(s.itemId);
+    const key = `${s.itemId}:${pointsPerUnit}`;
+    const earned = pointsPerUnit * qty;
+
+    const existing = breakdownMap.get(key);
+    if (existing) {
+      existing.qty += qty;
+      existing.totalPoints += earned;
+    } else {
+      breakdownMap.set(key, {
         itemId: s.itemId,
         itemName: item?.name ?? "Tidak diketahui",
         itemGroup: item?.itemGroup ?? null,
         qty,
         pointsPerUnit,
-        totalPoints: pointsPerUnit * qty,
-      }] satisfies ItemPointBreakdownRow[];
-    })
-    .sort((a, b) => b.totalPoints - a.totalPoints);
+        totalPoints: earned,
+      });
+    }
+  }
+
+  return [...breakdownMap.values()].sort((a, b) => b.totalPoints - a.totalPoints);
 }
 
 export interface CategoryPointRow {
@@ -547,7 +671,7 @@ export async function getPublicPointsDashboard(
       select: { id: true, name: true },
     }),
     prisma.sale.groupBy({
-      by: ["itemId", "employeeId"],
+      by: ["itemId", "employeeId", "tanggal"],
       where: {
         tanggal: { gte: from, lte: to },
         ...excludeClause,
@@ -573,9 +697,8 @@ export async function getPublicPointsDashboard(
   ]);
 
   const itemIds = [...new Set(salesAgg.map((s) => s.itemId))];
-  const [pointsByItem, items] = await Promise.all([
-    resolveItemPointsForIds(itemIds),
-    prisma.item.findMany({ where: { id: { in: itemIds } }, select: { id: true, name: true } }),
+  const [{ items, resolver }] = await Promise.all([
+    getItemPointResolver(itemIds),
   ]);
   const itemById = new Map(items.map((i) => [i.id, i]));
   const outletNameById = new Map(outlets.map((o) => [o.id, o.name]));
@@ -607,7 +730,7 @@ export async function getPublicPointsDashboard(
     { totalPoints: number; pointItemsQty: number; categories: Map<string, CategoryPointRow> }
   >();
   for (const s of salesAgg) {
-    const pointsPerUnit = pointsByItem.get(s.itemId) ?? 0;
+    const pointsPerUnit = resolver(s.itemId, s.tanggal);
     if (pointsPerUnit === 0) continue;
     const qty = s._sum.qty ?? 0;
     const earned = pointsPerUnit * qty;
