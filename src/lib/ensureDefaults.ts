@@ -48,6 +48,7 @@ export async function ensureDefaults(branch: "BANDUNG" | "CIMAHI" = "BANDUNG"): 
     await prisma.$executeRawUnsafe(`ALTER TABLE "item_points" ADD COLUMN IF NOT EXISTS "startDate" DATE NOT NULL DEFAULT '2020-01-01';`);
     await prisma.$executeRawUnsafe(`ALTER TABLE "item_points" DROP CONSTRAINT IF EXISTS "item_points_pattern_key";`);
     await prisma.$executeRawUnsafe(`CREATE UNIQUE INDEX IF NOT EXISTS "item_points_pattern_startDate_key" ON "item_points"("pattern", "startDate");`);
+    await prisma.$executeRawUnsafe(`ALTER TABLE "point_settings" ADD COLUMN IF NOT EXISTS "hiddenMenuItems" TEXT[] NOT NULL DEFAULT '{}';`);
   } catch {
     // ignore error if tables not yet created
   }

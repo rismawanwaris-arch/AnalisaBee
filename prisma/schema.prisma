@@ -255,6 +255,8 @@ model PointSettings {
   // Poin wallboard). Configurable here instead of hardcoded so it can be
   // changed without a code deploy if the incentive rate is ever revised.
   pointRupiahRate    Int @default(100)
+  // List of sidebar menu hrefs hidden by the administrator
+  hiddenMenuItems    String[] @default([])
 
   @@map("point_settings")
 }

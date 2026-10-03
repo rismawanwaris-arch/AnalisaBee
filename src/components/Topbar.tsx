@@ -1,6 +1,7 @@
 import { Link, useLocation, useNavigate } from "react-router-dom";
 import { ThemeToggle } from "./ThemeToggle";
 import { useAuth } from "../context/AuthContext";
+import { useMenuVisibility } from "../context/MenuVisibilityContext";
 
 const TITLES: { prefix: string; label: string; section?: string }[] = [
   { prefix: "/dashboard", label: "Ringkasan Penjualan", section: "Dashboard" },
@@ -30,6 +31,7 @@ export function Topbar() {
   const pathname = location.pathname;
   const navigate = useNavigate();
   const { logout } = useAuth();
+  const { isHidden } = useMenuVisibility();
 
   const current = TITLES.find((t) => pathname.startsWith(t.prefix)) ?? {
     label: "AnalisaBEe",
@@ -91,7 +93,7 @@ export function Topbar() {
 
       {/* Mobile Horizontal Navigation Tabs */}
       <nav className="md:hidden flex gap-1.5 overflow-x-auto px-4 pb-2.5 pt-1 no-scrollbar border-t border-border/40">
-        {MOBILE_LINKS.map((l) => {
+        {MOBILE_LINKS.filter((l) => !isHidden(l.href)).map((l) => {
           const active =
             l.href === "/dashboard"
               ? pathname === "/dashboard" || pathname === "/"

@@ -4,6 +4,8 @@ import { FEATURE_KEYS, FEATURE_LABELS, type FeatureKey } from "@/lib/features";
 import { ConfirmDeleteModal } from "@/components/ConfirmDeleteModal";
 import { MasterItemImport } from "@/components/MasterItemImport";
 import { PointRulesExcelImport } from "@/components/PointRulesExcelImport";
+import { useMenuVisibility } from "@/context/MenuVisibilityContext";
+import { SIDEBAR_MENU_GROUPS, ALL_SIDEBAR_MENUS } from "@/lib/sidebarMenus";
 
 type BusinessLine = "SERVER" | "TARTUN" | "PETSHOP" | "AKSESORIS" | "SP_VOUCHER";
 type ReportCategory = "PETSHOP" | "AKSESORIS" | "SP_VOUCHER";
@@ -316,6 +318,82 @@ export function SettingsPage() {
   const [employeeFilter, setEmployeeFilter] = useState("");
   const [itemVisFilter, setItemVisFilter] = useState("");
   const [visibilityBusyId, setVisibilityBusyId] = useState<string | null>(null);
+
+  // ========================================================
+  // 3b. STATE FOR SIDEBAR MENU VISIBILITY
+  // ========================================================
+  const {
+    hiddenMenus,
+    isHidden: isMenuHidden,
+    toggleMenu: toggleSidebarMenu,
+    setHiddenMenus: setSidebarHiddenMenus,
+    resetToDefault: resetSidebarMenus,
+    isSaving: menuVisibilitySaving,
+  } = useMenuVisibility();
+  const [menuVisFilter, setMenuVisFilter] = useState("");
+  const [menuVisGroupFilter, setMenuVisGroupFilter] = useState<string>("ALL");
+  const [menuVisToast, setMenuVisToast] = useState<string | null>(null);
+
+  const filteredMenuGroups = useMemo(() => {
+    const q = menuVisFilter.trim().toLowerCase();
+    return SIDEBAR_MENU_GROUPS.map((group) => {
+      if (menuVisGroupFilter !== "ALL" && group.name !== menuVisGroupFilter) {
+        return null;
+      }
+      const items = group.items.filter((item) => {
+        if (!q) return true;
+        return (
+          item.label.toLowerCase().includes(q) ||
+          item.href.toLowerCase().includes(q) ||
+          (item.description && item.description.toLowerCase().includes(q))
+        );
+      });
+      if (items.length === 0) return null;
+      return { ...group, items };
+    }).filter(Boolean) as typeof SIDEBAR_MENU_GROUPS;
+  }, [menuVisFilter, menuVisGroupFilter]);
+
+  async function handleToggleMenuVis(href: string) {
+    try {
+      await toggleSidebarMenu(href);
+    } catch (err: any) {
+      alert(err.message || "Gagal mengubah visibilitas menu.");
+    }
+  }
+
+  async function handleResetMenuVis() {
+    try {
+      await resetSidebarMenus();
+      setMenuVisToast("Semua menu sidebar kini ditampilkan.");
+      setTimeout(() => setMenuVisToast(null), 3000);
+    } catch (err: any) {
+      alert(err.message || "Gagal mereset visibilitas menu.");
+    }
+  }
+
+  async function handleBulkToggleGroup(groupName: string, hide: boolean) {
+    const group = SIDEBAR_MENU_GROUPS.find((g) => g.name === groupName);
+    if (!group) return;
+    const groupHrefs = group.items.filter((i) => !i.required).map((i) => i.href);
+    let next: string[];
+    if (hide) {
+      next = Array.from(new Set([...hiddenMenus, ...groupHrefs]));
+    } else {
+      const set = new Set(groupHrefs);
+      next = hiddenMenus.filter((h) => !set.has(h));
+    }
+    try {
+      await setSidebarHiddenMenus(next);
+      setMenuVisToast(
+        hide
+          ? `Semua menu di "${groupName}" disembunyikan.`
+          : `Semua menu di "${groupName}" ditampilkan.`
+      );
+      setTimeout(() => setMenuVisToast(null), 3000);
+    } catch (err: any) {
+      alert(err.message || "Gagal mengubah grup menu.");
+    }
+  }
 
   const loadAllItemsVis = useCallback(async () => {
     try {
@@ -3257,6 +3335,242 @@ export function SettingsPage() {
                   })}
                 </tbody>
               </table>
+            </div>
+          </div>
+        )}
+      </div>
+
+      {/* ── 12. Visibilitas Menu Sidebar ──────────────────────── */}
+      <div className="rounded-xl border border-border/80 bg-surface shadow-xs overflow-hidden">
+        <button
+          type="button"
+          onClick={() => toggleSection("visibilitas-menu")}
+          className="w-full flex items-center justify-between gap-3 px-5 py-3.5 text-left hover:bg-surface-hover/50 transition-colors"
+        >
+          <div className="flex items-center gap-2.5 min-w-0 flex-wrap">
+            <span className="w-2.5 h-2.5 rounded-full bg-indigo-500 shrink-0" />
+            <span className="text-sm font-bold uppercase tracking-wider text-foreground">
+              Kustomisasi Menu Sidebar
+            </span>
+            <span className="text-[11px] font-mono text-emerald-600 dark:text-emerald-400 bg-emerald-500/10 border border-emerald-500/20 rounded px-2 py-0.5">
+              {ALL_SIDEBAR_MENUS.length - hiddenMenus.length} tampil
+            </span>
+            {hiddenMenus.length > 0 && (
+              <span className="text-[11px] font-mono text-rose-600 dark:text-rose-400 bg-rose-500/10 border border-rose-500/20 rounded px-2 py-0.5">
+                {hiddenMenus.length} disembunyikan
+              </span>
+            )}
+            {menuVisibilitySaving && (
+              <span className="text-[10px] text-muted animate-pulse">Menyimpan...</span>
+            )}
+          </div>
+          <svg
+            width="16"
+            height="16"
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            strokeWidth="2.5"
+            className={`shrink-0 text-muted transition-transform duration-200 ${
+              openSections.has("visibilitas-menu") ? "rotate-180" : ""
+            }`}
+          >
+            <polyline points="6 9 12 15 18 9" />
+          </svg>
+        </button>
+
+        {openSections.has("visibilitas-menu") && (
+          <div className="px-5 pb-5 pt-4 space-y-4 border-t border-border/60">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+              <p className="text-xs text-muted leading-relaxed">
+                Tampilkan atau sembunyikan menu pada bilah samping (sidebar). Menu yang disembunyikan akan langsung hilang dari navigasi semua pengguna. Menu <strong>Pengaturan</strong> selalu terkunci aktif agar admin tidak kehilangan akses.
+              </p>
+              {hiddenMenus.length > 0 && (
+                <button
+                  type="button"
+                  onClick={handleResetMenuVis}
+                  className="shrink-0 text-xs font-semibold text-accent hover:underline inline-flex items-center gap-1"
+                >
+                  <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
+                    <path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8" />
+                    <path d="M3 3v5h5" />
+                  </svg>
+                  Tampilkan Semua Menu
+                </button>
+              )}
+            </div>
+
+            {menuVisToast && (
+              <div className="rounded-lg bg-emerald-500/10 border border-emerald-500/20 px-3 py-2 text-xs text-emerald-600 dark:text-emerald-400 flex items-center justify-between">
+                <span>✓ {menuVisToast}</span>
+                <button type="button" onClick={() => setMenuVisToast(null)} className="text-muted hover:text-foreground">✕</button>
+              </div>
+            )}
+
+            {/* Filter and group chips */}
+            <div className="flex flex-wrap items-center justify-between gap-3 pt-1">
+              <input
+                type="text"
+                value={menuVisFilter}
+                onChange={(e) => setMenuVisFilter(e.target.value)}
+                placeholder="Cari nama menu atau tautan..."
+                className="w-full max-w-xs rounded-lg border border-border/80 bg-surface-subtle px-3 py-1.5 text-xs text-foreground placeholder:text-muted/60 focus:outline-none focus:ring-2 focus:ring-accent/20 focus:border-accent transition-all"
+              />
+
+              <div className="flex items-center gap-1.5 flex-wrap">
+                <span className="text-[11px] text-muted mr-1">Grup:</span>
+                {[
+                  { id: "ALL", label: "Semua" },
+                  { id: "Cabang Bandung", label: "Bandung" },
+                  { id: "Cabang Cimahi", label: "Cimahi" },
+                  { id: "Dimensi Analisis", label: "Dimensi Analisis" },
+                  { id: "Manajemen Data & Sistem", label: "Manajemen" },
+                ].map((chip) => (
+                  <button
+                    key={chip.id}
+                    type="button"
+                    onClick={() => setMenuVisGroupFilter(chip.id)}
+                    className={`rounded-lg px-2.5 py-1 text-[11px] font-medium transition-colors ${
+                      menuVisGroupFilter === chip.id
+                        ? "bg-accent text-accent-foreground shadow-2xs font-semibold"
+                        : "bg-surface-subtle border border-border/70 text-muted hover:text-foreground hover:bg-surface-hover"
+                    }`}
+                  >
+                    {chip.label}
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            {/* Grouped menu lists */}
+            <div className="space-y-4 pt-1">
+              {filteredMenuGroups.length === 0 ? (
+                <div className="rounded-xl border border-border/80 p-8 text-center text-xs text-muted">
+                  Tidak ada menu yang sesuai dengan pencarian "{menuVisFilter}".
+                </div>
+              ) : (
+                filteredMenuGroups.map((group) => {
+                  const nonRequiredInGroup = group.items.filter((i) => !i.required);
+                  const hiddenCountInGroup = nonRequiredInGroup.filter((i) => isMenuHidden(i.href)).length;
+                  const allHiddenInGroup = nonRequiredInGroup.length > 0 && hiddenCountInGroup === nonRequiredInGroup.length;
+
+                  return (
+                    <div key={group.name} className="rounded-xl border border-border/80 bg-surface overflow-hidden shadow-2xs">
+                      <div className="flex items-center justify-between px-4 py-2.5 bg-surface-subtle/80 border-b border-border/70">
+                        <div className="flex items-center gap-2">
+                          <span className="text-xs font-bold text-foreground uppercase tracking-wider">{group.name}</span>
+                          <span className="text-[10px] font-mono text-muted bg-surface px-1.5 py-0.5 rounded border border-border/50">
+                            {group.items.length - hiddenCountInGroup}/{group.items.length} Tampil
+                          </span>
+                        </div>
+                        {nonRequiredInGroup.length > 0 && (
+                          <div className="flex items-center gap-1.5">
+                            <button
+                              type="button"
+                              onClick={() => handleBulkToggleGroup(group.name, !allHiddenInGroup)}
+                              className="text-[11px] font-medium text-muted hover:text-foreground bg-surface hover:bg-surface-hover border border-border/70 rounded px-2 py-0.5 transition-colors"
+                            >
+                              {allHiddenInGroup ? "Tampilkan Semua di Grup Ini" : "Sembunyikan Semua di Grup Ini"}
+                            </button>
+                          </div>
+                        )}
+                      </div>
+
+                      <div className="divide-y divide-border/60">
+                        {group.items.map((item) => {
+                          const hidden = isMenuHidden(item.href);
+                          return (
+                            <div
+                              key={item.href}
+                              className={`flex items-center justify-between px-4 py-3 gap-3 transition-colors ${
+                                hidden ? "bg-surface-subtle/40 opacity-75" : "hover:bg-surface-hover/50"
+                              }`}
+                            >
+                              <div className="min-w-0 flex-1">
+                                <div className="flex items-center gap-2 flex-wrap">
+                                  <span className="text-xs font-semibold text-foreground">{item.label}</span>
+                                  <span className="text-[11px] font-mono text-muted">{item.href}</span>
+                                  {item.external && (
+                                    <span className="text-[10px] font-medium bg-blue-500/10 text-blue-600 dark:text-blue-400 border border-blue-500/20 px-1.5 py-0.2 rounded">
+                                      Layar TV
+                                    </span>
+                                  )}
+                                  {item.masterOnly && (
+                                    <span className="text-[10px] font-medium bg-amber-500/10 text-amber-600 dark:text-amber-400 border border-amber-500/20 px-1.5 py-0.2 rounded">
+                                      Master Only
+                                    </span>
+                                  )}
+                                  {item.required && (
+                                    <span className="text-[10px] font-medium bg-indigo-500/10 text-indigo-600 dark:text-indigo-400 border border-indigo-500/20 px-1.5 py-0.2 rounded">
+                                      Wajib Tampil
+                                    </span>
+                                  )}
+                                </div>
+                                {item.description && (
+                                  <p className="text-[11px] text-muted mt-0.5 leading-snug">{item.description}</p>
+                                )}
+                              </div>
+
+                              <div className="flex items-center gap-3 shrink-0">
+                                <span
+                                  className={`inline-block px-2 py-0.5 rounded-full text-[10px] font-semibold border ${
+                                    item.required
+                                      ? "bg-indigo-500/10 text-indigo-600 dark:text-indigo-400 border-indigo-500/20"
+                                      : hidden
+                                      ? "bg-rose-500/10 text-rose-600 dark:text-rose-400 border-rose-500/20"
+                                      : "bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border-emerald-500/20"
+                                  }`}
+                                >
+                                  {item.required ? "Terkunci" : hidden ? "Disembunyikan" : "Aktif Tampil"}
+                                </span>
+
+                                {item.required ? (
+                                  <button
+                                    type="button"
+                                    disabled
+                                    className="inline-flex items-center gap-1 rounded-lg px-2.5 py-1 text-xs font-semibold bg-surface-subtle text-muted/60 border border-border/40 cursor-not-allowed"
+                                    title="Menu ini tidak dapat disembunyikan agar pengaturan tetap dapat diakses."
+                                  >
+                                    Terkunci
+                                  </button>
+                                ) : (
+                                  <button
+                                    type="button"
+                                    onClick={() => handleToggleMenuVis(item.href)}
+                                    className={`inline-flex items-center gap-1.5 rounded-lg px-3 py-1 text-xs font-semibold transition-all shadow-2xs ${
+                                      hidden
+                                        ? "bg-emerald-600 text-white hover:bg-emerald-700"
+                                        : "bg-surface-subtle hover:bg-rose-600 hover:text-white text-muted hover:border-transparent border border-border/80"
+                                    }`}
+                                  >
+                                    {hidden ? (
+                                      <>
+                                        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
+                                          <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z" />
+                                          <circle cx="12" cy="12" r="3" />
+                                        </svg>
+                                        <span>Tampilkan</span>
+                                      </>
+                                    ) : (
+                                      <>
+                                        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
+                                          <path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19m-6.72-1.07a3 3 0 1 1-4.24-4.24" />
+                                          <line x1="1" y1="1" x2="23" y2="23" />
+                                        </svg>
+                                        <span>Sembunyikan</span>
+                                      </>
+                                    )}
+                                  </button>
+                                )}
+                              </div>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    </div>
+                  );
+                })
+              )}
             </div>
           </div>
         )}

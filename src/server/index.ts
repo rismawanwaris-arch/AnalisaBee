@@ -41,6 +41,7 @@ import { mappingsRouter } from "./routes/mappings";
 import { importsRouter } from "./routes/imports";
 import { masterItemsRouter } from "./routes/masterItems";
 import { activityLogRouter } from "./routes/activityLog";
+import { menuVisibilityRouter } from "./routes/menuVisibility";
 
 const app = express();
 
@@ -135,6 +136,7 @@ app.use(mappingsRouter);
 app.use(importsRouter);
 app.use(masterItemsRouter);
 app.use(activityLogRouter);
+app.use(menuVisibilityRouter);
 
 // ==========================================
 // PRODUCTION STATIC SPA SERVING

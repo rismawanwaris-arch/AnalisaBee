@@ -3,6 +3,7 @@ import type { ReactNode } from "react";
 import { formatNumber } from "@/lib/format";
 import type { SystemStatus } from "@/lib/queries/systemStatus";
 import { useAuth } from "@/context/AuthContext";
+import { useMenuVisibility } from "@/context/MenuVisibilityContext";
 import type { FeatureKey } from "@/lib/features";
 
 interface NavItem {
@@ -22,11 +23,13 @@ export function Sidebar({ status }: { status: SystemStatus | null }) {
   const location = useLocation();
   const pathname = location.pathname;
   const { role, canAccess } = useAuth();
+  const { isHidden } = useMenuVisibility();
 
   function renderNavGroup(label: string, items: NavItem[]) {
     const visible = items.filter((item) => {
       if (item.masterOnly && role !== "master") return false;
       if (item.feature && !canAccess(item.feature)) return false;
+      if (isHidden(item.href)) return false;
       return true;
     });
     if (visible.length === 0) return null;

@@ -3,6 +3,7 @@ import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { AuthProvider } from "./context/AuthContext";
 import { PeriodProvider } from "./context/PeriodContext";
+import { MenuVisibilityProvider } from "./context/MenuVisibilityContext";
 import { ThemeProvider } from "./context/ThemeContext";
 import { AppLayout } from "./components/AppLayout";
 import { LoginPage } from "./pages/LoginPage";
@@ -59,7 +60,8 @@ export function App() {
     <ThemeProvider>
       <AuthProvider>
         <PeriodProvider>
-        <BrowserRouter>
+          <MenuVisibilityProvider>
+            <BrowserRouter>
           <Suspense fallback={<PageLoader />}>
             <Routes>
               {/* Public Login Route */}
@@ -144,6 +146,7 @@ export function App() {
             </Routes>
           </Suspense>
         </BrowserRouter>
+          </MenuVisibilityProvider>
         </PeriodProvider>
       </AuthProvider>
     </ThemeProvider>
