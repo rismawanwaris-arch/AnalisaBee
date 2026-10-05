@@ -2,13 +2,11 @@ import { prisma } from "@/lib/prisma";
 import { ensureDefaults } from "@/lib/ensureDefaults";
 import type { ReportCategory } from "@/generated/prisma/client";
 
-// Lets the leaderboard/export/breakdown queries scope points to one report
-// category (PETSHOP vs AKSESORIS) — reuses the same ItemGroupMapping the
-// daily target report is built from, so "which category is this item" never
-// has a second definition to drift out of sync. Returns the raw itemGroup
-// strings mapped to that category, for an `itemGroup: { in: [...] }` filter.
+// Lets the leaderboard/export/breakdown/wallboard queries scope points to one report
+// category (PETSHOP vs AKSESORIS vs SP_VOUCHER) using PointGroupMapping specifically configured
+// for points & papan poin (independent from Target Harian's ItemGroupMapping).
 async function getItemGroupsForCategory(category: ReportCategory): Promise<string[]> {
-  const rows = await prisma.itemGroupMapping.findMany({
+  const rows = await prisma.pointGroupMapping.findMany({
     where: { category },
     select: { itemGroup: true },
   });

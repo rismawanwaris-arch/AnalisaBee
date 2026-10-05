@@ -32,7 +32,7 @@ async function insertChunked<T>(
 // stray dynamic value and SQL injection if a future change ever wires one in.
 const RESETTABLE_TABLES = new Set([
   "outlets", "employees", "items", "import_batches", "sales", "tartun_daily", "server_daily",
-  "targets", "outlet_aliases", "item_group_mappings", "item_points", "item_point_exclusions",
+  "targets", "outlet_aliases", "item_group_mappings", "point_group_mappings", "item_points", "item_point_exclusions",
   "item_group_point_defaults", "points_exclusions", "custom_roles",
 ]);
 
@@ -176,6 +176,7 @@ export async function exportSettingsBackup() {
     targets,
     outletAliases,
     itemGroupMappings,
+    pointGroupMappings,
     itemPoints,
     itemPointExclusions,
     itemGroupPointDefaults,
@@ -186,6 +187,7 @@ export async function exportSettingsBackup() {
     prisma.target.findMany(),
     prisma.outletAlias.findMany(),
     prisma.itemGroupMapping.findMany(),
+    prisma.pointGroupMapping.findMany(),
     prisma.itemPoint.findMany(),
     prisma.itemPointExclusion.findMany(),
     prisma.itemGroupPointDefault.findMany(),
@@ -202,6 +204,7 @@ export async function exportSettingsBackup() {
       targets: targets.length,
       outletAliases: outletAliases.length,
       itemGroupMappings: itemGroupMappings.length,
+      pointGroupMappings: pointGroupMappings.length,
       itemPoints: itemPoints.length,
       itemPointExclusions: itemPointExclusions.length,
       itemGroupPointDefaults: itemGroupPointDefaults.length,
@@ -211,6 +214,7 @@ export async function exportSettingsBackup() {
     targets,
     outletAliases,
     itemGroupMappings,
+    pointGroupMappings,
     itemPoints,
     itemPointExclusions,
     itemGroupPointDefaults,
@@ -227,6 +231,9 @@ export async function restoreSettingsBackup(payload: any): Promise<void> {
   const targets: any[] = payload.targets;
   const outletAliases: any[] = payload.outletAliases;
   const itemGroupMappings: any[] = payload.itemGroupMappings;
+  const pointGroupMappings: any[] = Array.isArray(payload.pointGroupMappings)
+    ? payload.pointGroupMappings
+    : payload.itemGroupMappings; // fallback to itemGroupMappings for older backups
   const itemPoints: any[] = payload.itemPoints;
   const itemPointExclusions: any[] = payload.itemPointExclusions;
   const itemGroupPointDefaults: any[] = payload.itemGroupPointDefaults;
@@ -247,6 +254,7 @@ export async function restoreSettingsBackup(payload: any): Promise<void> {
         await tx.outletAlias.deleteMany();
         await tx.target.deleteMany();
         await tx.itemGroupMapping.deleteMany();
+        await tx.pointGroupMapping.deleteMany();
         await tx.itemPoint.deleteMany();
         await tx.itemPointExclusion.deleteMany();
         await tx.itemGroupPointDefault.deleteMany();
@@ -257,6 +265,7 @@ export async function restoreSettingsBackup(payload: any): Promise<void> {
         if (customRoles.length) await insertChunked(customRoles, (c) => tx.customRole.createMany({ data: c }));
         if (targets.length) await insertChunked(targets, (c) => tx.target.createMany({ data: c }));
         if (itemGroupMappings.length) await insertChunked(itemGroupMappings, (c) => tx.itemGroupMapping.createMany({ data: c }));
+        if (pointGroupMappings.length) await insertChunked(pointGroupMappings, (c) => tx.pointGroupMapping.createMany({ data: c }));
         if (itemPoints.length) await insertChunked(itemPoints, (c) => tx.itemPoint.createMany({ data: c }));
         if (itemPointExclusions.length) await insertChunked(itemPointExclusions, (c) => tx.itemPointExclusion.createMany({ data: c }));
         if (itemGroupPointDefaults.length) await insertChunked(itemGroupPointDefaults, (c) => tx.itemGroupPointDefault.createMany({ data: c }));
@@ -267,7 +276,7 @@ export async function restoreSettingsBackup(payload: any): Promise<void> {
       { timeout: 5 * 60 * 1000, maxWait: 30 * 1000 },
     );
 
-    for (const table of ["targets", "outlet_aliases", "item_group_mappings", "item_points", "item_point_exclusions", "item_group_point_defaults", "points_exclusions", "custom_roles"]) {
+    for (const table of ["targets", "outlet_aliases", "item_group_mappings", "point_group_mappings", "item_points", "item_point_exclusions", "item_group_point_defaults", "points_exclusions", "custom_roles"]) {
       await resetSequence(table);
     }
   } catch (err) {

@@ -52,6 +52,50 @@ mappingsRouter.delete("/api/mappings/item-group/:id", requireMaster, async (req,
   }
 });
 
+// ── Point Group Mappings (Poin & Papan Poin) ──
+mappingsRouter.get("/api/mappings/point-group", requireMaster, async (req, res) => {
+  try {
+    const list = await prisma.pointGroupMapping.findMany({
+      orderBy: [{ isDefault: "asc" }, { itemGroup: "asc" }],
+    });
+    return res.json(list);
+  } catch (err: any) {
+    return res.status(500).json({ error: err.message });
+  }
+});
+
+mappingsRouter.post("/api/mappings/point-group", requireMaster, async (req, res) => {
+  try {
+    const { itemGroup, category } = req.body;
+    const group = String(itemGroup || "").trim();
+    if (!group) return res.status(400).json({ error: "Item Group wajib diisi." });
+    const validCats: ReportCategory[] = ["PETSHOP", "AKSESORIS", "SP_VOUCHER"];
+    if (!validCats.includes(category)) {
+      return res.status(400).json({ error: "Kategori tidak valid." });
+    }
+
+    const mapping = await prisma.pointGroupMapping.upsert({
+      where: { itemGroup: group },
+      update: { category, isDefault: false },
+      create: { itemGroup: group, category, isDefault: false },
+    });
+    await logActivity(req, "POINT_GROUP_MAPPING_ADD", `"${group}" → ${category}`);
+    return res.json(mapping);
+  } catch (err: any) {
+    return res.status(500).json({ error: err.message });
+  }
+});
+
+mappingsRouter.delete("/api/mappings/point-group/:id", requireMaster, async (req, res) => {
+  try {
+    await prisma.pointGroupMapping.delete({ where: { id: Number(req.params.id) } });
+    await logActivity(req, "POINT_GROUP_MAPPING_DELETE", `id=${req.params.id}`);
+    return res.json({ ok: true });
+  } catch (err: any) {
+    return res.status(500).json({ error: err.message });
+  }
+});
+
 mappingsRouter.get("/api/mappings/outlet-alias", requireMaster, async (req, res) => {
   try {
     const list = await prisma.outletAlias.findMany({

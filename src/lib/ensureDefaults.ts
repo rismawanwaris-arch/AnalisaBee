@@ -49,6 +49,15 @@ export async function ensureDefaults(branch: "BANDUNG" | "CIMAHI" = "BANDUNG"): 
     await prisma.$executeRawUnsafe(`ALTER TABLE "item_points" DROP CONSTRAINT IF EXISTS "item_points_pattern_key";`);
     await prisma.$executeRawUnsafe(`CREATE UNIQUE INDEX IF NOT EXISTS "item_points_pattern_startDate_key" ON "item_points"("pattern", "startDate");`);
     await prisma.$executeRawUnsafe(`ALTER TABLE "point_settings" ADD COLUMN IF NOT EXISTS "hiddenMenuItems" TEXT[] NOT NULL DEFAULT '{}';`);
+    await prisma.$executeRawUnsafe(`
+      CREATE TABLE IF NOT EXISTS "point_group_mappings" (
+        "id" SERIAL PRIMARY KEY,
+        "itemGroup" TEXT NOT NULL UNIQUE,
+        "category" "ReportCategory" NOT NULL,
+        "isDefault" BOOLEAN NOT NULL DEFAULT false,
+        "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP
+      );
+    `);
   } catch {
     // ignore error if tables not yet created
   }
@@ -66,6 +75,16 @@ export async function ensureDefaults(branch: "BANDUNG" | "CIMAHI" = "BANDUNG"): 
   await Promise.all(
     Object.entries(DEFAULT_GROUP_MAP).map(([itemGroup, category]) =>
       prisma.itemGroupMapping.upsert({
+        where: { itemGroup },
+        update: {},
+        create: { itemGroup, category, isDefault: true },
+      })
+    )
+  );
+
+  await Promise.all(
+    Object.entries(DEFAULT_GROUP_MAP).map(([itemGroup, category]) =>
+      prisma.pointGroupMapping.upsert({
         where: { itemGroup },
         update: {},
         create: { itemGroup, category, isDefault: true },

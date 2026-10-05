@@ -38,3 +38,20 @@ export async function createItemGroupMapping(itemGroup: string, category: Report
 export async function deleteItemGroupMapping(id: number) {
   await prisma.itemGroupMapping.delete({ where: { id } });
 }
+
+export async function listPointGroupMappings() {
+  await ensureDefaults();
+  return prisma.pointGroupMapping.findMany({ orderBy: { itemGroup: "asc" } });
+}
+
+export async function createPointGroupMapping(itemGroup: string, category: ReportCategory) {
+  return prisma.pointGroupMapping.upsert({
+    where: { itemGroup },
+    update: { category, isDefault: false },
+    create: { itemGroup, category, isDefault: false },
+  });
+}
+
+export async function deletePointGroupMapping(id: number) {
+  await prisma.pointGroupMapping.delete({ where: { id } });
+}

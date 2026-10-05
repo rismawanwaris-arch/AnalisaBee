@@ -119,6 +119,18 @@ model ItemGroupMapping {
   @@map("item_group_mappings")
 }
 
+// Maps a raw POS "Item Group" value specifically for points leaderboard & TV display
+// (Petshop / Aksesoris / SP-Voucher). Independent from ItemGroupMapping used by daily target.
+model PointGroupMapping {
+  id         Int             @id @default(autoincrement())
+  itemGroup  String          @unique
+  category   ReportCategory
+  isDefault  Boolean         @default(false)
+  createdAt  DateTime        @default(now())
+
+  @@map("point_group_mappings")
+}
+
 // Daily cash-withdrawal (Tarik Tunai) admin-fee summary per outlet. The
 // source export is already a one-row-per-outlet daily aggregate, so a
 // re-import for the same date+outlet updates the row instead of accumulating

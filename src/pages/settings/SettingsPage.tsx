@@ -184,6 +184,11 @@ export function SettingsPage() {
   const [groupTo, setGroupTo] = useState<ReportCategory>("AKSESORIS");
   const [groupError, setGroupError] = useState<string | null>(null);
 
+  const [pointGroups, setPointGroups] = useState<GroupRow[]>([]);
+  const [pointGroupFrom, setPointGroupFrom] = useState("");
+  const [pointGroupTo, setPointGroupTo] = useState<ReportCategory>("AKSESORIS");
+  const [pointGroupError, setPointGroupError] = useState<string | null>(null);
+
   const loadTargets = useCallback(async () => {
     try {
       const [resBdg, resCmh] = await Promise.all([
@@ -218,6 +223,15 @@ export function SettingsPage() {
     try {
       const res = await fetch("/api/mappings/item-group");
       if (res.ok) setGroups(await res.json());
+    } catch {
+      // ignore
+    }
+  }, []);
+
+  const loadPointGroups = useCallback(async () => {
+    try {
+      const res = await fetch("/api/mappings/point-group");
+      if (res.ok) setPointGroups(await res.json());
     } catch {
       // ignore
     }
@@ -500,6 +514,7 @@ export function SettingsPage() {
     loadTargets();
     loadAliases();
     loadGroups();
+    loadPointGroups();
     loadItemRules();
     loadGroupRules();
     loadPeriodSetting();
@@ -515,6 +530,7 @@ export function SettingsPage() {
     loadTargets,
     loadAliases,
     loadGroups,
+    loadPointGroups,
     loadItemRules,
     loadGroupRules,
     loadPeriodSetting,
@@ -825,7 +841,7 @@ export function SettingsPage() {
       if (settingsFileInputRef.current) settingsFileInputRef.current.value = "";
       // The restored scope can touch almost every section on this page.
       await Promise.all([
-        loadTargets(), loadAliases(), loadGroups(), loadItemRules(), loadGroupRules(),
+        loadTargets(), loadAliases(), loadGroups(), loadPointGroups(), loadItemRules(), loadGroupRules(),
         loadPeriodSetting(), loadExcluded(), loadItemExclusions(), loadAllOutlets(),
         loadAllEmployees(), loadAllItemsVis(), loadUsers(), loadRoles(),
       ]);
@@ -946,6 +962,40 @@ export function SettingsPage() {
     try {
       await fetch(`/api/mappings/item-group/${id}`, { method: "DELETE" });
       await loadGroups();
+    } catch {
+      // ignore
+    }
+  }
+
+  async function addPointGroup() {
+    setPointGroupError(null);
+    const itemGroup = pointGroupFrom.trim();
+    if (!itemGroup) {
+      setPointGroupError("Isi nama Item Group terlebih dahulu.");
+      return;
+    }
+    try {
+      const res = await fetch("/api/mappings/point-group", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ itemGroup, category: pointGroupTo }),
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        setPointGroupError(data.error ?? "Gagal menyimpan.");
+        return;
+      }
+      setPointGroupFrom("");
+      await loadPointGroups();
+    } catch {
+      setPointGroupError("Terjadi kesalahan jaringan.");
+    }
+  }
+
+  async function deletePointGroup(id: number) {
+    try {
+      await fetch(`/api/mappings/point-group/${id}`, { method: "DELETE" });
+      await loadPointGroups();
     } catch {
       // ignore
     }
@@ -2204,13 +2254,13 @@ export function SettingsPage() {
         )}
       </div>
 
-      {/* ── 2. Pemetaan Kategori Item Group POS ──────────────── */}
+      {/* ── 2. Pemetaan Kategori POS — Target Harian ──────────────── */}
       <div className="rounded-xl border border-border/80 bg-surface shadow-xs overflow-hidden">
         <button type="button" onClick={() => toggleSection("kategori-group")}
           className="w-full flex items-center justify-between gap-3 px-5 py-3.5 text-left hover:bg-surface-hover/50 transition-colors">
           <div className="flex items-center gap-2.5 min-w-0">
             <span className="w-2.5 h-2.5 rounded-full bg-emerald-500 shrink-0" />
-            <span className="text-sm font-bold uppercase tracking-wider text-foreground">Pemetaan Kategori Item Group POS</span>
+            <span className="text-sm font-bold uppercase tracking-wider text-foreground">Pemetaan Kategori POS — Target Harian</span>
             <span className="text-[11px] font-mono text-muted bg-surface-subtle border border-border/60 rounded px-2 py-0.5">{groups.length} mapping</span>
           </div>
           <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"
@@ -2221,7 +2271,7 @@ export function SettingsPage() {
         {openSections.has("kategori-group") && (
           <div className="px-5 pb-5 pt-4 space-y-4 border-t border-border/60">
             <p className="text-xs text-muted leading-relaxed">
-              Memetakan nilai <strong>Item Group</strong> mentah dari file POS ke dalam salah satu dari 3 kategori laporan: <strong>Petshop</strong>, <strong>Aksesoris</strong>, atau <strong>SP / Voucher</strong>.
+              Memetakan nilai <strong>Item Group</strong> mentah dari file POS khusus untuk laporan <strong>Target Harian</strong>: <strong>Petshop</strong>, <strong>Aksesoris</strong>, atau <strong>SP / Voucher</strong>.
             </p>
             <div className="flex flex-wrap items-end gap-3 pt-1">
               <div className="flex-1 min-w-56">
@@ -2239,7 +2289,7 @@ export function SettingsPage() {
               </div>
               <div className="w-48">
                 <label htmlFor="mapping-group-to" className="block text-[11px] font-semibold uppercase tracking-wider text-muted mb-1">
-                  Kategori Laporan
+                  Kategori Target Harian
                 </label>
                 <select
                   id="mapping-group-to"
@@ -2268,7 +2318,7 @@ export function SettingsPage() {
                 <thead className="bg-surface-subtle/80 text-muted text-left sticky top-0 border-b border-border/80">
                   <tr>
                     <th className="px-4 py-2 font-semibold text-[11px] uppercase">Item Group POS</th>
-                    <th className="px-4 py-2 font-semibold text-[11px] uppercase">Kategori Laporan</th>
+                    <th className="px-4 py-2 font-semibold text-[11px] uppercase">Kategori Target</th>
                     <th className="px-4 py-2 font-semibold text-[11px] uppercase text-right">Aksi</th>
                   </tr>
                 </thead>
@@ -2276,7 +2326,7 @@ export function SettingsPage() {
                   {groups.length === 0 && (
                     <tr>
                       <td colSpan={3} className="px-4 py-6 text-center text-muted">
-                        Belum ada mapping grup item.
+                        Belum ada mapping grup item untuk Target Harian.
                       </td>
                     </tr>
                   )}
@@ -2295,6 +2345,111 @@ export function SettingsPage() {
                         <button
                           type="button"
                           onClick={() => deleteGroup(g.id)}
+                          className="text-xs font-semibold text-rose-600 dark:text-rose-400 hover:underline"
+                        >
+                          Hapus
+                        </button>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        )}
+      </div>
+
+      {/* ── 2b. Pemetaan Kategori POS — Poin & Papan Poin ──────────────── */}
+      <div className="rounded-xl border border-border/80 bg-surface shadow-xs overflow-hidden">
+        <button type="button" onClick={() => toggleSection("kategori-group-points")}
+          className="w-full flex items-center justify-between gap-3 px-5 py-3.5 text-left hover:bg-surface-hover/50 transition-colors">
+          <div className="flex items-center gap-2.5 min-w-0">
+            <span className="w-2.5 h-2.5 rounded-full bg-teal-500 shrink-0" />
+            <span className="text-sm font-bold uppercase tracking-wider text-foreground">Pemetaan Kategori POS — Poin &amp; Papan Poin</span>
+            <span className="text-[11px] font-mono text-muted bg-surface-subtle border border-border/60 rounded px-2 py-0.5">{pointGroups.length} mapping</span>
+          </div>
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"
+            className={`shrink-0 text-muted transition-transform duration-200 ${openSections.has("kategori-group-points") ? "rotate-180" : ""}`}>
+            <polyline points="6 9 12 15 18 9" />
+          </svg>
+        </button>
+        {openSections.has("kategori-group-points") && (
+          <div className="px-5 pb-5 pt-4 space-y-4 border-t border-border/60">
+            <p className="text-xs text-muted leading-relaxed">
+              Memetakan nilai <strong>Item Group</strong> mentah dari file POS khusus untuk perhitungan <strong>Poin Penjualan &amp; Papan Poin (TV)</strong>: <strong>Petshop</strong>, <strong>Aksesoris</strong>, atau <strong>SP / Voucher</strong>. Item Group yang tidak didaftarkan di sini tidak akan masuk ke dalam kategori poin tersebut.
+            </p>
+            <div className="flex flex-wrap items-end gap-3 pt-1">
+              <div className="flex-1 min-w-56">
+                <label htmlFor="mapping-point-group-from" className="block text-[11px] font-semibold uppercase tracking-wider text-muted mb-1">
+                  Item Group POS
+                </label>
+                <input
+                  id="mapping-point-group-from"
+                  type="text"
+                  value={pointGroupFrom}
+                  onChange={(e) => setPointGroupFrom(e.target.value)}
+                  placeholder="Contoh: PETSHOP MAKANAN KUCING"
+                  className="w-full rounded-lg border border-border/80 bg-surface-subtle px-3 py-1.5 text-xs text-foreground focus:outline-none focus:ring-2 focus:ring-accent/20 focus:border-accent transition-all"
+                />
+              </div>
+              <div className="w-48">
+                <label htmlFor="mapping-point-group-to" className="block text-[11px] font-semibold uppercase tracking-wider text-muted mb-1">
+                  Kategori Poin
+                </label>
+                <select
+                  id="mapping-point-group-to"
+                  value={pointGroupTo}
+                  onChange={(e) => setPointGroupTo(e.target.value as ReportCategory)}
+                  className="w-full rounded-lg border border-border/80 bg-surface-subtle px-3 py-1.5 text-xs text-foreground focus:outline-none focus:ring-2 focus:ring-accent/20 focus:border-accent transition-all"
+                >
+                  {CATEGORIES.map((c) => (
+                    <option key={c} value={c}>
+                      {LINE_LABELS[c]}
+                    </option>
+                  ))}
+                </select>
+              </div>
+              <button
+                type="button"
+                onClick={addPointGroup}
+                className="inline-flex items-center gap-1.5 rounded-lg bg-accent text-accent-foreground px-4 py-1.5 text-xs font-semibold hover:bg-accent-hover transition-all shadow-xs"
+              >
+                + Tambah Mapping
+              </button>
+            </div>
+            {pointGroupError && <p className="text-xs text-rose-600 dark:text-rose-400 font-medium">{pointGroupError}</p>}
+            <div className="overflow-x-auto rounded-xl border border-border/80 shadow-xs max-h-72 overflow-y-auto">
+              <table className="w-full text-xs">
+                <thead className="bg-surface-subtle/80 text-muted text-left sticky top-0 border-b border-border/80">
+                  <tr>
+                    <th className="px-4 py-2 font-semibold text-[11px] uppercase">Item Group POS</th>
+                    <th className="px-4 py-2 font-semibold text-[11px] uppercase">Kategori Poin</th>
+                    <th className="px-4 py-2 font-semibold text-[11px] uppercase text-right">Aksi</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-border/60">
+                  {pointGroups.length === 0 && (
+                    <tr>
+                      <td colSpan={3} className="px-4 py-6 text-center text-muted">
+                        Belum ada mapping grup item untuk poin.
+                      </td>
+                    </tr>
+                  )}
+                  {pointGroups.map((g) => (
+                    <tr key={g.id} className="hover:bg-surface-hover/70 transition-colors">
+                      <td className="px-4 py-2 font-medium text-foreground">
+                        {g.itemGroup}{" "}
+                        {g.isDefault && (
+                          <span className="text-[10px] text-accent bg-accent/10 px-1.5 py-0.5 rounded border border-accent/20 ml-1.5">
+                            bawaan
+                          </span>
+                        )}
+                      </td>
+                      <td className="px-4 py-2 font-semibold text-foreground">{LINE_LABELS[g.category]}</td>
+                      <td className="px-4 py-2 text-right">
+                        <button
+                          type="button"
+                          onClick={() => deletePointGroup(g.id)}
                           className="text-xs font-semibold text-rose-600 dark:text-rose-400 hover:underline"
                         >
                           Hapus
