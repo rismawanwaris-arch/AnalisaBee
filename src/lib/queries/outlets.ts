@@ -114,11 +114,29 @@ export async function getOutletList(includeHidden = false, branch?: "BANDUNG" | 
     .sort((a, b) => b.subtotal - a.subtotal);
 }
 
-export async function getOutletDetail(outletId: number) {
+export async function getOutletDetail(outletId: number, filters: OutletSummaryFilters = {}) {
   const outlet = await prisma.outlet.findUnique({ where: { id: outletId } });
   if (!outlet) return null;
 
-  const saleWhere = { outletId, ...EXCLUDE_HIDDEN_ITEMS };
+  // Same filters as getOutletSummary (subtotalMin/Max are outlet-level
+  // aggregates and don't apply to the per-outlet breakdown).
+  const saleWhere: Prisma.SaleWhereInput = {
+    outletId,
+    item: {
+      isHidden: false,
+      ...(filters.itemGroup ? { itemGroup: filters.itemGroup } : {}),
+      ...(filters.brand ? { brand: filters.brand } : {}),
+      ...(filters.itemKeyword ? { name: { contains: filters.itemKeyword, mode: "insensitive" } } : {}),
+    },
+  };
+  if (filters.from || filters.to) {
+    saleWhere.tanggal = {
+      ...(filters.from ? { gte: filters.from } : {}),
+      ...(filters.to ? { lte: filters.to } : {}),
+    };
+  }
+  if (filters.itemId) saleWhere.itemId = filters.itemId;
+  if (filters.employeeId) saleWhere.employeeId = filters.employeeId;
   const [totals, byItem, byDate, byItemEmployee] = await Promise.all([
     prisma.sale.aggregate({
       where: saleWhere,

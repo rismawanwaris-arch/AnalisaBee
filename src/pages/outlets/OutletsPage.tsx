@@ -31,17 +31,18 @@ function startOfWeekStr(): string {
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
 }
 
-const columns: Column<OutletRow>[] = [
+const makeColumns = (qs: string): Column<OutletRow>[] => [
   {
     key: "name",
     label: "Outlet",
     accessor: (o) => o.name,
     render: (o) => (
-      <Link to={`/outlets/${o.id}`} className="hover:text-accent hover:underline font-medium text-foreground">
+      <Link to={`/outlets/${o.id}${qs}`} className="hover:text-accent hover:underline font-medium text-foreground">
         {o.name}
       </Link>
     ),
   },
+
   {
     key: "qty",
     label: "Qty Terjual",
@@ -183,6 +184,22 @@ export function OutletsPage() {
   const filtered = outletSearch.trim()
     ? outlets.filter((o) => o.name.toLowerCase().includes(outletSearch.toLowerCase()))
     : outlets;
+
+  const detailQs = useMemo(() => {
+    const p = new URLSearchParams();
+    if (from) p.set("from", from);
+    if (to) p.set("to", to);
+    if (selectedItem) {
+      p.set("itemId", String(selectedItem.id));
+      p.set("itemName", selectedItem.name);
+    }
+    if (employeeId) p.set("employeeId", employeeId);
+    if (itemGroup) p.set("itemGroup", itemGroup);
+    if (brand) p.set("itemKeyword", brand);
+    const s = p.toString();
+    return s ? `?${s}` : "";
+  }, [from, to, selectedItem, employeeId, itemGroup, brand]);
+  const columns = useMemo(() => makeColumns(detailQs), [detailQs]);
 
   const hasFilter = outletSearch || selectedItem || employeeId || subtotalMin || subtotalMax
     || itemGroup || brandInput || from !== currentPeriod.from || to !== currentPeriod.to;

@@ -82,7 +82,17 @@ outletsRouter.get("/api/outlets/:id", requireFeature("outlets"), async (req, res
   try {
     const id = Number(req.params.id);
     if (Number.isNaN(id)) return res.status(400).json({ error: "ID tidak valid" });
-    const detail = await getOutletDetail(id);
+    const q = req.query;
+    const str = (v: unknown) => (typeof v === "string" && v.trim() ? v.trim() : undefined);
+    const detail = await getOutletDetail(id, {
+      from: parseDateParam(q.from),
+      to: parseDateParam(q.to),
+      itemId: q.itemId ? Number(q.itemId) : undefined,
+      employeeId: q.employeeId ? Number(q.employeeId) : undefined,
+      itemGroup: str(q.itemGroup),
+      brand: str(q.brand),
+      itemKeyword: str(q.itemKeyword),
+    });
     if (!detail) return res.status(404).json({ error: "Outlet tidak ditemukan" });
     return res.json(detail);
   } catch (err: any) {

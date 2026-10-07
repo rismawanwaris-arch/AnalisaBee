@@ -1,5 +1,5 @@
-import { useEffect, useState } from "react";
-import { Link, useParams } from "react-router-dom";
+import { useEffect, useMemo, useState } from "react";
+import { Link, useParams, useSearchParams } from "react-router-dom";
 import { StatCard } from "@/components/StatCard";
 import { TrendChart } from "@/components/TrendChart";
 import { formatNumber, formatRupiah } from "@/lib/format";
@@ -54,17 +54,36 @@ function EmployeeList({ employees }: { employees: OutletDetail["topItems"][numbe
 
 export function OutletDetailPage() {
   const { id } = useParams<{ id: string }>();
+  const [searchParams] = useSearchParams();
   const [detail, setDetail] = useState<OutletDetail | null>(null);
   const [loading, setLoading] = useState(true);
+
+  // Filters carried over from the Performa Outlet list (period, item, brand
+  // keyword, category, employee) so the breakdown matches what was filtered.
+  const apiQuery = useMemo(() => {
+    const p = new URLSearchParams();
+    for (const k of ["from", "to", "itemId", "employeeId", "itemGroup", "itemKeyword"]) {
+      const v = searchParams.get(k);
+      if (v) p.set(k, v);
+    }
+    const s = p.toString();
+    return s ? `?${s}` : "";
+  }, [searchParams]);
+  const filterLabels = [
+    searchParams.get("itemName") && `item: ${searchParams.get("itemName")}`,
+    searchParams.get("itemGroup") && `kategori: ${searchParams.get("itemGroup")}`,
+    searchParams.get("itemKeyword") && `merk/kata kunci: ${searchParams.get("itemKeyword")}`,
+    searchParams.get("from") && `${searchParams.get("from")} s/d ${searchParams.get("to") ?? "…"}`,
+  ].filter(Boolean) as string[];
 
   useEffect(() => {
     if (!id) return;
     setLoading(true);
-    fetch(`/api/outlets/${id}`)
+    fetch(`/api/outlets/${id}${apiQuery}`)
       .then((r) => (r.ok ? r.json() : null))
       .then((data) => setDetail(data))
       .finally(() => setLoading(false));
-  }, [id]);
+  }, [id, apiQuery]);
 
   if (loading) {
     return (
@@ -100,6 +119,9 @@ export function OutletDetailPage() {
             <span className="w-2.5 h-2.5 rounded-full bg-accent" />
             <h1 className="text-xl font-bold text-foreground tracking-tight">{detail.outlet.name}</h1>
           </div>
+          {filterLabels.length > 0 && (
+            <p className="text-[11px] text-muted mt-1">Filter aktif: {filterLabels.join(" · ")}</p>
+          )}
         </div>
       </div>
 
