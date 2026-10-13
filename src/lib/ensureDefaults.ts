@@ -121,6 +121,15 @@ export async function ensureDefaults(branch: "BANDUNG" | "CIMAHI" = "BANDUNG"): 
       )
     );
   } else {
+    // Clean up legacy duplicate-wording rules that conflicted with their canonical counterparts
+    await prisma.itemPoint.deleteMany({
+      where: {
+        OR: [
+          { pattern: { equals: "FURLOVE CAN KITTEN SALMON IN JELLY", mode: "insensitive" }, points: 3 },
+          { pattern: { equals: "PASIR IMPORT LUMINA 5L", mode: "insensitive" }, points: 10 },
+        ],
+      },
+    });
     const { deduplicateItemPointRules } = await import("@/lib/queries/points");
     await deduplicateItemPointRules();
   }
