@@ -40,6 +40,15 @@ export async function deduplicateItemPointRules(filterPatternUpper?: string): Pr
   removedCount: number;
   mergedPatternsCount: number;
 }> {
+  let removedDefaultsCount = 0;
+  if (!filterPatternUpper) {
+    const customCount = await prisma.itemPoint.count({ where: { isDefault: false } });
+    if (customCount > 0) {
+      const delDefaults = await prisma.itemPoint.deleteMany({ where: { isDefault: true } });
+      removedDefaultsCount = delDefaults.count;
+    }
+  }
+
   const allRules = await prisma.itemPoint.findMany({
     orderBy: [{ startDate: "asc" }, { updatedAt: "desc" }, { id: "desc" }],
   });
@@ -133,7 +142,10 @@ export async function deduplicateItemPointRules(filterPatternUpper?: string): Pr
     });
   }
 
-  return { removedCount: idsToDelete.length, mergedPatternsCount };
+  return {
+    removedCount: idsToDelete.length + removedDefaultsCount,
+    mergedPatternsCount: mergedPatternsCount + removedDefaultsCount,
+  };
 }
 
 export async function listItemPointRules() {
