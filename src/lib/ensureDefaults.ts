@@ -108,16 +108,22 @@ export async function ensureDefaults(branch: "BANDUNG" | "CIMAHI" = "BANDUNG"): 
     })
   );
 
-  const defaultBaseDate = new Date("2020-01-01T00:00:00.000Z");
-  await Promise.all(
-    DEFAULT_ITEM_POINTS.map((p) =>
-      prisma.itemPoint.upsert({
-        where: { pattern_startDate: { pattern: p.pattern, startDate: defaultBaseDate } },
-        update: {},
-        create: { pattern: p.pattern, points: p.points, startDate: defaultBaseDate, isDefault: true },
-      })
-    )
-  );
+  const existingItemPointCount = await prisma.itemPoint.count();
+  if (existingItemPointCount === 0) {
+    const defaultBaseDate = new Date("2020-01-01T00:00:00.000Z");
+    await Promise.all(
+      DEFAULT_ITEM_POINTS.map((p) =>
+        prisma.itemPoint.upsert({
+          where: { pattern_startDate: { pattern: p.pattern, startDate: defaultBaseDate } },
+          update: {},
+          create: { pattern: p.pattern, points: p.points, startDate: defaultBaseDate, isDefault: true },
+        })
+      )
+    );
+  } else {
+    const { deduplicateItemPointRules } = await import("@/lib/queries/points");
+    await deduplicateItemPointRules();
+  }
 
   await Promise.all(
     DEFAULT_GROUP_POINTS.map((g) =>

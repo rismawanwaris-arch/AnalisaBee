@@ -245,6 +245,8 @@ export function SettingsPage() {
   const [pointsInput, setPointsInput] = useState("10");
   const [startDateInput, setStartDateInput] = useState(() => new Date().toISOString().slice(0, 10));
   const [itemError, setItemError] = useState<string | null>(null);
+  const [itemRuleFilter, setItemRuleFilter] = useState("");
+  const [dedupToast, setDedupToast] = useState<string | null>(null);
 
   const [showBulkModal, setShowBulkModal] = useState(false);
 
@@ -1110,14 +1112,68 @@ export function SettingsPage() {
     }
   }
 
-  async function deleteItemRule(id: number) {
+  async function deleteItemRule(id: number, allForPattern = true) {
     try {
-      await fetch(`/api/points/items/${id}`, { method: "DELETE" });
+      await fetch(`/api/points/items/${id}?allForPattern=${allForPattern ? "true" : "false"}`, {
+        method: "DELETE",
+      });
       await loadItemRules();
     } catch {
       // ignore
     }
   }
+
+  async function handleDeduplicateItemRules() {
+    setDedupToast(null);
+    try {
+      const res = await fetch("/api/points/items/deduplicate", { method: "POST" });
+      if (res.ok) {
+        const data = await res.json();
+        await loadItemRules();
+        setDedupToast(
+          data.removedCount > 0
+            ? `✓ ${data.removedCount} baris poin ganda berhasil dibersihkan (${data.mergedPatternsCount} item dirapikan).`
+            : "✓ Data sudah bersih, tidak ditemukan poin ganda yang redundan."
+        );
+        setTimeout(() => setDedupToast(null), 4000);
+      }
+    } catch {
+      // ignore
+    }
+  }
+
+  const groupedItemRules = useMemo(() => {
+    const map = new Map<string, ItemPointRule[]>();
+    for (const r of itemRules) {
+      const key = r.pattern.trim().replace(/\s+/g, " ").toUpperCase();
+      const list = map.get(key) ?? [];
+      list.push(r);
+      map.set(key, list);
+    }
+    const groups: Array<{
+      key: string;
+      active: ItemPointRule;
+      history: ItemPointRule[];
+    }> = [];
+    for (const [key, list] of map.entries()) {
+      const sorted = [...list].sort((a, b) =>
+        (b.startDate ?? "1970-01-01").localeCompare(a.startDate ?? "1970-01-01")
+      );
+      groups.push({
+        key,
+        active: sorted[0],
+        history: sorted.slice(1),
+      });
+    }
+    groups.sort((a, b) => a.key.localeCompare(b.key));
+    return groups;
+  }, [itemRules]);
+
+  const filteredGroupedItemRules = useMemo(() => {
+    const q = itemRuleFilter.trim().toLowerCase();
+    if (!q) return groupedItemRules;
+    return groupedItemRules.filter((g) => g.active.pattern.toLowerCase().includes(q));
+  }, [groupedItemRules, itemRuleFilter]);
 
   async function addItemExclusion() {
     setItemExclusionError(null);
@@ -2822,7 +2878,7 @@ export function SettingsPage() {
           <div className="flex items-center gap-2.5 min-w-0">
             <span className="w-2.5 h-2.5 rounded-full bg-blue-500 shrink-0" />
             <span className="text-sm font-bold uppercase tracking-wider text-foreground">Poin Khusus per Item / SKU</span>
-            <span className="text-[11px] font-mono text-muted bg-surface-subtle border border-border/60 rounded px-2 py-0.5">{itemRules.length} aturan</span>
+            <span className="text-[11px] font-mono text-muted bg-surface-subtle border border-border/60 rounded px-2 py-0.5">{groupedItemRules.length} item</span>
           </div>
           <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"
             className={`shrink-0 text-muted transition-transform duration-200 ${openSections.has("poin-per-item") ? "rotate-180" : ""}`}>
@@ -2832,7 +2888,7 @@ export function SettingsPage() {
         {openSections.has("poin-per-item") && (
           <div className="px-5 pb-5 pt-4 space-y-4 border-t border-border/60">
             <div className="rounded-lg bg-blue-500/10 border border-blue-500/20 p-3 text-xs text-blue-700 dark:text-blue-300 leading-relaxed">
-              <span className="font-semibold">💡 Sistem Poin Berbasis Tanggal Efektif:</span> Anda dapat memperbarui poin untuk item tertentu pada tanggal tertentu. Penjualan sebelum tanggal update akan tetap menggunakan poin lama, sedangkan penjualan pada atau setelah tanggal tersebut otomatis menggunakan poin baru.
+              <span className="font-semibold">💡 Satu Poin Aktif per Item + Riwayat Otomatis:</span> Setiap item hanya menampilkan <strong>1 poin aktif</strong> di daftar. Jika Anda mengganti poin suatu item pada tanggal tertentu, sistem otomatis mengingat tanggal penggantiannya (penjualan sebelum tanggal tersebut tetap dihitung memakai poin lama, sedangkan mulai tanggal tersebut memakai poin baru). Jika poin yang diinput sama dengan poin sebelumnya, sistem otomatis mengabaikannya agar tidak terjadi duplikat.
             </div>
 
             <p className="text-xs text-muted leading-relaxed">
@@ -2879,13 +2935,13 @@ export function SettingsPage() {
                   className="w-full rounded-lg border border-border/80 bg-surface-subtle px-2.5 py-1.5 text-xs font-mono text-foreground focus:outline-none focus:ring-2 focus:ring-accent/20 focus:border-accent transition-all"
                 />
               </div>
-              <div className="flex items-center gap-2">
+              <div className="flex flex-wrap items-center gap-2">
                 <button
                   type="button"
                   onClick={addItemRule}
                   className="inline-flex items-center gap-1.5 rounded-lg bg-accent text-accent-foreground px-4 py-1.5 text-xs font-semibold hover:bg-accent-hover transition-all shadow-xs"
                 >
-                  + Tambah Aturan
+                  + Simpan Aturan
                 </button>
                 <button
                   type="button"
@@ -2894,9 +2950,18 @@ export function SettingsPage() {
                 >
                   📊 {showBulkModal ? "Tutup Form Excel" : "Upload Excel / Update Massal"}
                 </button>
+                <button
+                  type="button"
+                  onClick={handleDeduplicateItemRules}
+                  className="inline-flex items-center gap-1.5 rounded-lg border border-border/80 bg-surface-subtle text-foreground font-semibold px-3 py-1.5 text-xs hover:bg-surface-hover transition-all shadow-xs"
+                  title="Bersihkan baris tanggal ganda yang nilai poinnya sama persis"
+                >
+                  🧹 Rapikan Duplikat
+                </button>
               </div>
             </div>
             {itemError && <p className="text-xs text-rose-600 dark:text-rose-400 font-medium">{itemError}</p>}
+            {dedupToast && <p className="text-xs text-emerald-600 dark:text-emerald-400 font-semibold">{dedupToast}</p>}
 
             {/* ── Sistem Upload Data Poin Excel ─────────────────────── */}
             {showBulkModal && (
@@ -2908,26 +2973,41 @@ export function SettingsPage() {
               />
             )}
 
+            <div className="flex items-center justify-between gap-3 pt-1">
+              <input
+                type="text"
+                value={itemRuleFilter}
+                onChange={(e) => setItemRuleFilter(e.target.value)}
+                placeholder="Cari nama item di daftar poin..."
+                className="w-full max-w-xs rounded-lg border border-border/80 bg-surface-subtle px-3 py-1.5 text-xs text-foreground placeholder:text-muted/60 focus:outline-none focus:ring-2 focus:ring-accent/20 focus:border-accent"
+              />
+              <span className="text-[11px] text-muted font-mono">
+                Menampilkan {filteredGroupedItemRules.length} dari {groupedItemRules.length} item
+              </span>
+            </div>
+
             <div className="overflow-x-auto rounded-xl border border-border/80 shadow-xs max-h-96 overflow-y-auto">
               <table className="w-full text-xs">
                 <thead className="bg-surface-subtle/80 text-muted text-left sticky top-0 border-b border-border/80">
                   <tr>
                     <th className="px-4 py-2 font-semibold text-[11px] uppercase">Nama / Pola Item</th>
-                    <th className="px-4 py-2 font-semibold text-[11px] uppercase">Berlaku Mulai</th>
-                    <th className="px-4 py-2 font-semibold text-[11px] uppercase text-right">Poin / pcs</th>
+                    <th className="px-4 py-2 font-semibold text-[11px] uppercase">Berlaku Mulai &amp; Riwayat</th>
+                    <th className="px-4 py-2 font-semibold text-[11px] uppercase text-right">Poin Aktif / pcs</th>
                     <th className="px-4 py-2 font-semibold text-[11px] uppercase text-right">Aksi</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-border/60 font-mono">
-                  {itemRules.length === 0 && (
+                  {filteredGroupedItemRules.length === 0 && (
                     <tr>
                       <td colSpan={4} className="px-4 py-6 text-center text-muted font-sans">
-                        Belum ada aturan khusus item.
+                        {groupedItemRules.length === 0
+                          ? "Belum ada aturan khusus item."
+                          : "Tidak ada item yang cocok dengan pencarian."}
                       </td>
                     </tr>
                   )}
-                  {itemRules.map((r) => (
-                    <tr key={r.id} className="hover:bg-surface-hover/70 transition-colors">
+                  {filteredGroupedItemRules.map(({ key, active: r, history }) => (
+                    <tr key={key} className="hover:bg-surface-hover/70 transition-colors">
                       <td className="px-4 py-2 font-sans font-medium text-foreground">
                         {r.pattern}{" "}
                         {r.isDefault && (
@@ -2937,19 +3017,56 @@ export function SettingsPage() {
                         )}
                       </td>
                       <td className="px-4 py-2 font-sans text-muted">
-                        <span className="inline-flex items-center px-2 py-0.5 rounded text-[11px] font-mono bg-surface-subtle border border-border/60">
-                          {formatRuleEffectiveDate(r.startDate)}
-                        </span>
+                        <div className="flex flex-wrap items-center gap-1.5">
+                          <span className="inline-flex items-center px-2 py-0.5 rounded text-[11px] font-mono bg-surface-subtle border border-border/60 text-foreground">
+                            {formatRuleEffectiveDate(r.startDate)}
+                          </span>
+                          {history.length > 0 && (
+                            <span className="inline-flex flex-wrap items-center gap-1 text-[11px] text-amber-700 dark:text-amber-300 bg-amber-500/10 border border-amber-500/20 rounded px-2 py-0.5">
+                              <span>Riwayat sebelumnya:</span>
+                              {history.map((h, idx) => (
+                                <span key={h.id} className="inline-flex items-center gap-1 font-mono">
+                                  {idx > 0 && <span>←</span>}
+                                  <span>
+                                    +{formatNumber(h.points)} ({formatRuleEffectiveDate(h.startDate)})
+                                  </span>
+                                  <button
+                                    type="button"
+                                    onClick={() => deleteItemRule(h.id, false)}
+                                    title="Hapus riwayat poin lama ini"
+                                    className="text-rose-500 hover:text-rose-700 font-bold px-0.5"
+                                  >
+                                    ×
+                                  </button>
+                                </span>
+                              ))}
+                            </span>
+                          )}
+                        </div>
                       </td>
                       <td className="px-4 py-2 text-right text-accent font-bold">+{formatNumber(r.points)}</td>
                       <td className="px-4 py-2 text-right">
-                        <button
-                          type="button"
-                          onClick={() => deleteItemRule(r.id)}
-                          className="text-xs font-semibold text-rose-600 dark:text-rose-400 hover:underline font-sans"
-                        >
-                          Hapus
-                        </button>
+                        <div className="inline-flex items-center justify-end gap-3 font-sans">
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setPatternInput(r.pattern);
+                              setPointsInput(String(r.points));
+                              const el = document.getElementById("settings-item-points");
+                              el?.focus();
+                            }}
+                            className="text-xs font-semibold text-accent hover:underline"
+                          >
+                            Ubah
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => deleteItemRule(r.id, true)}
+                            className="text-xs font-semibold text-rose-600 dark:text-rose-400 hover:underline"
+                          >
+                            Hapus
+                          </button>
+                        </div>
                       </td>
                     </tr>
                   ))}

@@ -20,47 +20,219 @@ export function toDateStr(d: Date | string): string {
   return d.toISOString().slice(0, 10);
 }
 
+export function normalizeItemPattern(pattern: string): string {
+  return pattern.trim().replace(/\s+/g, " ");
+}
+
+/**
+ * Compacts and deduplicates ItemPoint rules in the database:
+ * 1. Groups rules case-insensitively by normalized pattern.
+ * 2. If multiple rules exist on the exact same startDate (e.g. different casing),
+ *    keeps the most recently updated non-default rule and deletes the rest.
+ * 3. Walks chronologically (startDate ASC) for each item: if a newer rule has
+ *    the exact same `points` value as the rule immediately preceding it, the
+ *    newer rule is redundant (no point change occurred) and is deleted.
+ *    Rules where `points` actually changed on a new date are preserved so
+ *    historical sales calculations remain accurate.
+ * 4. Unifies the pattern string across all remaining history entries of the same item.
+ */
+export async function deduplicateItemPointRules(filterPatternUpper?: string): Promise<{
+  removedCount: number;
+  mergedPatternsCount: number;
+}> {
+  const allRules = await prisma.itemPoint.findMany({
+    orderBy: [{ startDate: "asc" }, { updatedAt: "desc" }, { id: "desc" }],
+  });
+
+  const groups = new Map<string, typeof allRules>();
+  for (const r of allRules) {
+    const key = normalizeItemPattern(r.pattern).toUpperCase();
+    if (filterPatternUpper && key !== filterPatternUpper) continue;
+    const list = groups.get(key) ?? [];
+    list.push(r);
+    groups.set(key, list);
+  }
+
+  const idsToDelete: number[] = [];
+  const patternUpdates: Array<{ id: number; pattern: string }> = [];
+  let mergedPatternsCount = 0;
+
+  for (const [, rows] of groups) {
+    if (rows.length === 0) continue;
+
+    // Pick canonical display name: prefer latest non-default, or latest overall
+    const sortedByLatest = [...rows].sort((a, b) => {
+      if (a.isDefault !== b.isDefault) return a.isDefault ? 1 : -1;
+      const dateCmp = b.startDate.getTime() - a.startDate.getTime();
+      if (dateCmp !== 0) return dateCmp;
+      const updCmp = b.updatedAt.getTime() - a.updatedAt.getTime();
+      if (updCmp !== 0) return updCmp;
+      return b.id - a.id;
+    });
+    const canonicalPattern = normalizeItemPattern(sortedByLatest[0].pattern);
+
+    // 1. Deduplicate rules that share the exact same startDate (e.g. casing variants)
+    const byDate = new Map<string, (typeof rows)[number]>();
+    for (const r of rows) {
+      const dStr = toDateStr(r.startDate);
+      const existing = byDate.get(dStr);
+      if (!existing) {
+        byDate.set(dStr, r);
+      } else {
+        // Keep the one that is non-default or more recently updated
+        const preferNew =
+          (existing.isDefault && !r.isDefault) ||
+          (existing.isDefault === r.isDefault && r.updatedAt.getTime() > existing.updatedAt.getTime());
+        if (preferNew) {
+          idsToDelete.push(existing.id);
+          byDate.set(dStr, r);
+        } else {
+          idsToDelete.push(r.id);
+        }
+      }
+    }
+
+    // 2. Sort unique-date rules chronologically (oldest to newest) and remove consecutive identical points
+    const chronological = [...byDate.values()].sort(
+      (a, b) => a.startDate.getTime() - b.startDate.getTime()
+    );
+    const kept: typeof chronological = [];
+    for (const r of chronological) {
+      if (kept.length === 0) {
+        kept.push(r);
+      } else {
+        const prev = kept[kept.length - 1];
+        if (r.points === prev.points) {
+          // Point value did not change on this date — redundant duplicate row
+          idsToDelete.push(r.id);
+        } else {
+          kept.push(r);
+        }
+      }
+    }
+
+    if (rows.length > kept.length) {
+      mergedPatternsCount++;
+    }
+
+    for (const k of kept) {
+      if (k.pattern !== canonicalPattern) {
+        patternUpdates.push({ id: k.id, pattern: canonicalPattern });
+      }
+    }
+  }
+
+  if (idsToDelete.length > 0) {
+    await prisma.itemPoint.deleteMany({ where: { id: { in: idsToDelete } } });
+  }
+
+  for (const upd of patternUpdates) {
+    await prisma.itemPoint.update({
+      where: { id: upd.id },
+      data: { pattern: upd.pattern },
+    });
+  }
+
+  return { removedCount: idsToDelete.length, mergedPatternsCount };
+}
+
 export async function listItemPointRules() {
   await ensureDefaults();
   return prisma.itemPoint.findMany({ orderBy: [{ pattern: "asc" }, { startDate: "desc" }] });
 }
 
 export async function upsertItemPointRule(pattern: string, points: number, startDate?: string | Date) {
+  const cleanPattern = normalizeItemPattern(pattern);
+  const patternUpper = cleanPattern.toUpperCase();
   const dateObj = startDate ? new Date(startDate) : new Date();
   const dateStr = toDateStr(dateObj);
   const cleanDate = new Date(`${dateStr}T00:00:00.000Z`);
 
-  return prisma.itemPoint.upsert({
-    where: { pattern_startDate: { pattern, startDate: cleanDate } },
-    update: { points, isDefault: false },
-    create: { pattern, points, startDate: cleanDate, isDefault: false },
+  // Find existing rules matching this pattern case-insensitively
+  const existingAll = await prisma.itemPoint.findMany({
+    where: { pattern: { equals: cleanPattern, mode: "insensitive" } },
+    orderBy: { startDate: "asc" },
   });
+
+  const canonicalPattern = existingAll.length > 0 ? normalizeItemPattern(existingAll[existingAll.length - 1].pattern) : cleanPattern;
+
+  // Check if there is already a rule on this exact date
+  const sameDateRule = existingAll.find((r) => toDateStr(r.startDate) === dateStr);
+  let targetRule;
+  if (sameDateRule) {
+    targetRule = await prisma.itemPoint.update({
+      where: { id: sameDateRule.id },
+      data: { points, isDefault: false },
+    });
+  } else {
+    // Check the rule active at or immediately before cleanDate
+    const rulesBefore = existingAll.filter((r) => toDateStr(r.startDate) < dateStr);
+    const activeBefore = rulesBefore.length > 0 ? rulesBefore[rulesBefore.length - 1] : null;
+
+    if (activeBefore && activeBefore.points === points) {
+      // Point value is identical to the already-active rule — do not create a duplicate date entry
+      targetRule = activeBefore;
+    } else if (!activeBefore && existingAll.length > 0 && existingAll[0].points === points) {
+      // Earlier date with the same point value as the earliest rule: move the earliest rule's startDate back
+      targetRule = await prisma.itemPoint.update({
+        where: { id: existingAll[0].id },
+        data: { startDate: cleanDate, isDefault: false },
+      });
+    } else {
+      targetRule = await prisma.itemPoint.upsert({
+        where: { pattern_startDate: { pattern: canonicalPattern, startDate: cleanDate } },
+        update: { points, isDefault: false },
+        create: { pattern: canonicalPattern, points, startDate: cleanDate, isDefault: false },
+      });
+    }
+  }
+
+  // Compact any consecutive duplicate point values for this pattern
+  await deduplicateItemPointRules(patternUpper);
+
+  const remaining = await prisma.itemPoint.findMany({
+    where: { pattern: { equals: canonicalPattern, mode: "insensitive" } },
+    orderBy: { startDate: "desc" },
+  });
+  return remaining[0] ?? targetRule;
 }
 
 export async function bulkUpsertItemPointRules(
   items: Array<{ pattern: string; points: number }>,
   startDate?: string | Date
 ) {
-  const dateObj = startDate ? new Date(startDate) : new Date();
-  const dateStr = toDateStr(dateObj);
-  const cleanDate = new Date(`${dateStr}T00:00:00.000Z`);
+  // Deduplicate within the input batch itself (last occurrence wins if same pattern appears twice in Excel)
+  const dedupedInput = new Map<string, { pattern: string; points: number }>();
+  for (const item of items) {
+    const clean = normalizeItemPattern(item.pattern);
+    if (!clean) continue;
+    dedupedInput.set(clean.toUpperCase(), { pattern: clean, points: item.points });
+  }
 
   const results = [];
-  for (const item of items) {
-    const trimmed = item.pattern.trim();
-    if (!trimmed) continue;
-    const res = await prisma.itemPoint.upsert({
-      where: { pattern_startDate: { pattern: trimmed, startDate: cleanDate } },
-      update: { points: item.points, isDefault: false },
-      create: { pattern: trimmed, points: item.points, startDate: cleanDate, isDefault: false },
-    });
+  for (const item of dedupedInput.values()) {
+    const res = await upsertItemPointRule(item.pattern, item.points, startDate);
     results.push(res);
   }
   return results;
 }
 
-export async function deleteItemPointRule(id: number) {
-  await prisma.itemPoint.delete({ where: { id } });
+export async function deleteItemPointRule(id: number, allForPattern = false) {
+  const existing = await prisma.itemPoint.findUnique({ where: { id } });
+  if (!existing) return;
+
+  if (allForPattern) {
+    const allMatching = await prisma.itemPoint.findMany({
+      where: { pattern: { equals: normalizeItemPattern(existing.pattern), mode: "insensitive" } },
+      select: { id: true },
+    });
+    await prisma.itemPoint.deleteMany({
+      where: { id: { in: allMatching.map((r) => r.id) } },
+    });
+  } else {
+    await prisma.itemPoint.delete({ where: { id } });
+    await deduplicateItemPointRules(normalizeItemPattern(existing.pattern).toUpperCase());
+  }
 }
 
 export async function listGroupPointDefaults() {

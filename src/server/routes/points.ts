@@ -16,6 +16,7 @@ import {
   upsertItemPointRule,
   bulkUpsertItemPointRules,
   deleteItemPointRule,
+  deduplicateItemPointRules,
   listGroupPointDefaults,
   upsertGroupPointDefault,
   deleteGroupPointDefault,
@@ -285,10 +286,27 @@ pointsRouter.post(
   }
 );
 
+pointsRouter.post("/api/points/items/deduplicate", requireMaster, async (req, res) => {
+  try {
+    const result = await deduplicateItemPointRules();
+    if (result.removedCount > 0) {
+      await logActivity(
+        req,
+        "ITEM_RULE_DEDUP",
+        `${result.removedCount} baris poin duplikat dibersihkan (${result.mergedPatternsCount} item)`
+      );
+    }
+    return res.json({ ok: true, ...result });
+  } catch (err: any) {
+    return res.status(500).json({ error: err.message });
+  }
+});
+
 pointsRouter.delete("/api/points/items/:id", requireMaster, async (req, res) => {
   try {
-    await deleteItemPointRule(Number(req.params.id));
-    await logActivity(req, "ITEM_RULE_DELETE", `id=${req.params.id}`);
+    const allForPattern = req.query.allForPattern === "true";
+    await deleteItemPointRule(Number(req.params.id), allForPattern);
+    await logActivity(req, "ITEM_RULE_DELETE", `id=${req.params.id}${allForPattern ? " (semua riwayat)" : ""}`);
     return res.json({ ok: true });
   } catch (err: any) {
     return res.status(500).json({ error: err.message });
