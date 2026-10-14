@@ -9,6 +9,8 @@ import {
   listPurchasedOutlets,
   importPurchases,
   deletePurchaseInvoice,
+  listPurchaseBatches,
+  deletePurchaseBatch,
   type PurchaseFilters,
 } from "../../lib/queries/purchases";
 import { parsePurchaseBuffer, parsePurchaseText } from "../../lib/parsePurchases";
@@ -126,7 +128,7 @@ purchasesRouter.post(
         });
       }
 
-      const summary = await importPurchases(parsed.invoices, filename);
+      const summary = await importPurchases(parsed.invoices, filename, parsed.errors.length);
 
       await logActivity(
         req,
@@ -145,6 +147,35 @@ purchasesRouter.post(
     }
   }
 );
+
+// Upload history (Riwayat Batch Import Pembelian)
+purchasesRouter.get("/api/purchases/batches", requireFeature("purchases"), async (_req: Request, res: Response) => {
+  try {
+    return res.json(await listPurchaseBatches());
+  } catch (err: any) {
+    return res.status(500).json({ error: err.message || "Gagal memuat riwayat import pembelian." });
+  }
+});
+
+// Delete a whole upload batch (cascade-deletes its invoices + items)
+purchasesRouter.delete("/api/purchases/batches/:id", requireMaster, async (req: Request, res: Response) => {
+  try {
+    const id = parseInt(String(req.params.id), 10);
+    if (isNaN(id)) return res.status(400).json({ error: "ID batch tidak valid." });
+
+    const deleted = await deletePurchaseBatch(id);
+    if (!deleted) return res.status(404).json({ error: "Batch import pembelian tidak ditemukan." });
+
+    await logActivity(
+      req,
+      "PURCHASE_BATCH_DELETE",
+      `Hapus batch "${deleted.filename}" (${deleted.invoiceCount} nota)`
+    );
+    return res.json({ ok: true, ...deleted });
+  } catch (err: any) {
+    return res.status(500).json({ error: err.message || "Gagal menghapus batch import pembelian." });
+  }
+});
 
 // Delete an invoice
 purchasesRouter.delete("/api/purchases/invoices/:id", requireMaster, async (req: Request, res: Response) => {

@@ -4,6 +4,7 @@ import { ConfirmDeleteModal } from "@/components/ConfirmDeleteModal";
 import { ImportPreviewPanel, type ImportPreview } from "@/components/ImportPreviewPanel";
 import { TartunServerImport } from "@/components/TartunServerImport";
 import { SalesReturnImport } from "@/components/SalesReturnImport";
+import { PurchaseBatchHistory } from "@/components/PurchaseBatchHistory";
 
 interface ImportSummary {
   importId: number;
@@ -274,7 +275,7 @@ export function ImportPage() {
 
       <div>
         <div className="flex items-center justify-between mb-3">
-          <h2 className="text-sm font-bold text-foreground uppercase tracking-wider">Riwayat Batch Import</h2>
+          <h2 className="text-sm font-bold text-foreground uppercase tracking-wider">Riwayat Batch Import Penjualan &amp; Retur</h2>
           <span className="text-[11px] font-mono text-muted bg-surface border border-border/80 rounded px-2 py-0.5">
             {history.length} batch
           </span>
@@ -343,6 +344,8 @@ export function ImportPage() {
           )}
         </div>
       </div>
+
+      <PurchaseBatchHistory />
 
       <ConfirmDeleteModal
         open={deleteTarget !== null}

@@ -97,21 +97,81 @@ function buildWhereClause(filters: PurchaseFilters) {
   }
   if (filters.search) {
     const q = filters.search.trim();
+    const tokens = q.split(/\s+/).filter(Boolean);
     where.OR = [
       { invoiceNumber: { contains: q, mode: "insensitive" } },
       { vendor: { contains: q, mode: "insensitive" } },
       { outletName: { contains: q, mode: "insensitive" } },
-      { items: { some: { itemName: { contains: q, mode: "insensitive" } } } },
+      {
+        items: {
+          some: {
+            AND: tokens.map((token) => ({
+              OR: [
+                { itemName: { contains: token, mode: "insensitive" } },
+                { itemCode: { contains: token, mode: "insensitive" } },
+              ],
+            })),
+          },
+        },
+      },
     ];
   }
+  return where;
+}
+
+function buildItemWhereClause(filters: PurchaseFilters) {
+  const invoiceWhere: any = {};
+  if (filters.from || filters.to) {
+    invoiceWhere.date = {};
+    if (filters.from) invoiceWhere.date.gte = filters.from;
+    if (filters.to) invoiceWhere.date.lte = filters.to;
+  }
+  if (filters.vendor) {
+    invoiceWhere.vendor = filters.vendor;
+  }
+  if (filters.outletName) {
+    invoiceWhere.outletName = filters.outletName;
+  }
+
+  const where: any = {
+    invoice: invoiceWhere,
+  };
+
+  if (filters.search) {
+    const q = filters.search.trim();
+    const tokens = q.split(/\s+/).filter(Boolean);
+
+    if (tokens.length > 0) {
+      const itemTokensMatch = {
+        AND: tokens.map((token) => ({
+          OR: [
+            { itemName: { contains: token, mode: "insensitive" } },
+            { itemCode: { contains: token, mode: "insensitive" } },
+          ],
+        })),
+      };
+
+      where.OR = [
+        itemTokensMatch,
+        {
+          invoice: {
+            ...invoiceWhere,
+            invoiceNumber: { contains: q, mode: "insensitive" },
+          },
+        },
+      ];
+    }
+  }
+
   return where;
 }
 
 export async function getPurchaseSummary(filters: PurchaseFilters = {}): Promise<PurchaseKpiSummary> {
   await ensureDefaults();
   const where = buildWhereClause(filters);
+  const itemWhere = buildItemWhereClause(filters);
 
-  const [invoices, totalQtyAgg] = await Promise.all([
+  const [invoices, totalQtyAgg, distinctItems] = await Promise.all([
     prisma.purchaseInvoice.findMany({
       where,
       select: {
@@ -120,11 +180,13 @@ export async function getPurchaseSummary(filters: PurchaseFilters = {}): Promise
       },
     }),
     prisma.purchaseItem.aggregate({
-      where: {
-        invoice: where,
-      },
+      where: itemWhere,
       _sum: { qty: true },
-      _count: { itemCode: true },
+    }),
+    prisma.purchaseItem.findMany({
+      where: itemWhere,
+      select: { itemCode: true },
+      distinct: ["itemCode"],
     }),
   ]);
 
@@ -140,7 +202,7 @@ export async function getPurchaseSummary(filters: PurchaseFilters = {}): Promise
     invoiceCount: invoices.length,
     vendorCount: vendors.size,
     totalQty: Number(totalQtyAgg._sum.qty ?? 0),
-    distinctItemCount: totalQtyAgg._count.itemCode,
+    distinctItemCount: distinctItems.length,
   };
 }
 
@@ -307,10 +369,10 @@ export async function getTopPurchasedItems(
   limit = 20
 ): Promise<TopPurchasedItemRow[]> {
   await ensureDefaults();
-  const where = buildWhereClause(filters);
+  const where = buildItemWhereClause(filters);
 
   const rawItems = await prisma.purchaseItem.findMany({
-    where: { invoice: where },
+    where,
     select: {
       itemCode: true,
       itemName: true,
@@ -395,7 +457,8 @@ export async function listPurchasedOutlets(): Promise<string[]> {
 
 export async function importPurchases(
   invoices: ParsedPurchaseInvoice[],
-  filename = "import_pembelian"
+  filename = "import_pembelian",
+  errorRowCount = 0
 ): Promise<{
   batchId: number;
   totalInvoices: number;
@@ -403,6 +466,8 @@ export async function importPurchases(
   insertedInvoices: number;
   updatedInvoices: number;
   totalSpend: number;
+  periodStart: string | null;
+  periodEnd: string | null;
 }> {
   await ensureDefaults();
 
@@ -418,12 +483,15 @@ export async function importPurchases(
     totalSpend += inv.total;
   }
 
+  // Starts as PROCESSING and is finalized below with the real counts — so a
+  // crash halfway through shows up as FAILED/PROCESSING in the history
+  // instead of a misleading "Selesai".
   const batch = await prisma.purchaseBatch.create({
     data: {
       filename,
-      status: "DONE",
+      status: "PROCESSING",
       rowCount: totalItemsCount,
-      insertedCount: invoices.length,
+      errorRowCount,
       periodStart: minDate,
       periodEnd: maxDate,
     },
@@ -432,6 +500,44 @@ export async function importPurchases(
   let insertedInvoices = 0;
   let updatedInvoices = 0;
 
+  try {
+    await writeInvoices();
+  } catch (err: any) {
+    await prisma.purchaseBatch.update({
+      where: { id: batch.id },
+      data: {
+        status: "FAILED",
+        insertedCount: insertedInvoices,
+        duplicateCount: updatedInvoices,
+        errorMessage: String(err?.message ?? err).slice(0, 500),
+      },
+    });
+    throw err;
+  }
+
+  await prisma.purchaseBatch.update({
+    where: { id: batch.id },
+    data: {
+      status: "DONE",
+      insertedCount: insertedInvoices,
+      // "Duplikat" for purchases = invoice number already existed and was
+      // overwritten with this file's version (upsert by No Faktur).
+      duplicateCount: updatedInvoices,
+    },
+  });
+
+  return {
+    batchId: batch.id,
+    totalInvoices: invoices.length,
+    totalItems: totalItemsCount,
+    insertedInvoices,
+    updatedInvoices,
+    totalSpend,
+    periodStart: minDate ? minDate.toISOString().slice(0, 10) : null,
+    periodEnd: maxDate ? maxDate.toISOString().slice(0, 10) : null,
+  };
+
+  async function writeInvoices() {
   for (const inv of invoices) {
     const existing = await prisma.purchaseInvoice.findUnique({
       where: { invoiceNumber: inv.invoiceNumber },
@@ -503,15 +609,91 @@ export async function importPurchases(
       });
     }
   }
+  }
+}
 
-  return {
-    batchId: batch.id,
-    totalInvoices: invoices.length,
-    totalItems: totalItemsCount,
-    insertedInvoices,
-    updatedInvoices,
-    totalSpend,
-  };
+export interface PurchaseBatchHistoryItem {
+  id: number;
+  filename: string;
+  uploadedAt: string;
+  status: "PROCESSING" | "DONE" | "FAILED";
+  errorMessage: string | null;
+  rowCount: number;
+  insertedCount: number;
+  duplicateCount: number;
+  errorRowCount: number;
+  /** Period as recorded at upload time (min/max tanggal nota in the file). */
+  filePeriodStart: string | null;
+  filePeriodEnd: string | null;
+  /** Period of the invoices that STILL belong to this batch right now. Differs
+   *  from the file period when some of its invoices were later re-imported by
+   *  a newer batch (upsert by No Faktur moves them) or deleted individually. */
+  periodStart: string | null;
+  periodEnd: string | null;
+  invoiceCount: number;
+  itemCount: number;
+  totalSpend: number;
+}
+
+function isoDate(d: Date | null | undefined): string | null {
+  return d ? d.toISOString().slice(0, 10) : null;
+}
+
+export async function listPurchaseBatches(): Promise<PurchaseBatchHistoryItem[]> {
+  await ensureDefaults();
+  const [batches, invoiceAgg, itemAgg] = await Promise.all([
+    prisma.purchaseBatch.findMany({ orderBy: { uploadedAt: "desc" } }),
+    prisma.purchaseInvoice.groupBy({
+      by: ["batchId"],
+      where: { batchId: { not: null } },
+      _min: { date: true },
+      _max: { date: true },
+      _count: { _all: true },
+      _sum: { total: true },
+    }),
+    prisma.$queryRaw<{ batchId: number; count: number }[]>`
+      SELECT i."batchId" AS "batchId", COUNT(pi."id")::int AS "count"
+      FROM "purchase_items" pi
+      JOIN "purchase_invoices" i ON i."id" = pi."invoiceId"
+      WHERE i."batchId" IS NOT NULL
+      GROUP BY i."batchId"
+    `,
+  ]);
+
+  const invByBatch = new Map(invoiceAgg.map((a) => [a.batchId as number, a]));
+  const itemsByBatch = new Map(itemAgg.map((a) => [Number(a.batchId), Number(a.count)]));
+
+  return batches.map((b) => {
+    const agg = invByBatch.get(b.id);
+    return {
+      id: b.id,
+      filename: b.filename,
+      uploadedAt: b.uploadedAt.toISOString(),
+      status: b.status,
+      errorMessage: b.errorMessage,
+      rowCount: b.rowCount,
+      insertedCount: b.insertedCount,
+      duplicateCount: b.duplicateCount,
+      errorRowCount: b.errorRowCount,
+      filePeriodStart: isoDate(b.periodStart),
+      filePeriodEnd: isoDate(b.periodEnd),
+      periodStart: isoDate(agg?._min.date),
+      periodEnd: isoDate(agg?._max.date),
+      invoiceCount: agg?._count._all ?? 0,
+      itemCount: itemsByBatch.get(b.id) ?? 0,
+      totalSpend: Number(agg?._sum.total ?? 0),
+    };
+  });
+}
+
+/** Deletes the batch and (via onDelete: Cascade) every invoice + item still
+ *  linked to it. Returns how many invoices went with it. */
+export async function deletePurchaseBatch(id: number): Promise<{ filename: string; invoiceCount: number } | null> {
+  const batch = await prisma.purchaseBatch.findUnique({ where: { id } });
+  if (!batch) return null;
+  const invoiceCount = await prisma.purchaseInvoice.count({ where: { batchId: id } });
+  await prisma.purchaseBatch.delete({ where: { id } });
+  return { filename: batch.filename, invoiceCount };
 }
 
 export async function deletePurchaseInvoice(id: number): Promise<void> {

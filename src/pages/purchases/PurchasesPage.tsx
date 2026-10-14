@@ -1,5 +1,6 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
-import { formatNumber, formatRupiah } from "@/lib/format";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { formatDate, formatNumber, formatRupiah } from "@/lib/format";
+import { PurchaseBatchHistory, type PurchaseBatchHistoryHandle } from "@/components/PurchaseBatchHistory";
 
 interface PurchaseKpiSummary {
   totalSpend: number;
@@ -109,6 +110,7 @@ export function PurchasesPage() {
   const [importBusy, setImportBusy] = useState(false);
   const [importError, setImportError] = useState<string | null>(null);
   const [importSuccess, setImportSuccess] = useState<string | null>(null);
+  const historyRef = useRef<PurchaseBatchHistoryHandle>(null);
 
   // Quick Date Presets
   function applyDatePreset(preset: "this_month" | "last_month" | "all" | "custom") {
@@ -241,13 +243,20 @@ export function PurchasesPage() {
       if (!res.ok) {
         setImportError(data.error || "Gagal memproses import data.");
       } else {
+        const periode =
+          data.periodStart && data.periodEnd
+            ? data.periodStart === data.periodEnd
+              ? ` Periode: ${formatDate(data.periodStart)}.`
+              : ` Periode: ${formatDate(data.periodStart)} – ${formatDate(data.periodEnd)}.`
+            : "";
         setImportSuccess(
-          `✓ Berhasil mengimpor ${data.totalInvoices} nota (${data.totalItems} baris barang). Total belanja: ${formatRupiah(data.totalSpend)}.`
+          `✓ Berhasil mengimpor ${data.totalInvoices} nota (${data.insertedInvoices} baru, ${data.updatedInvoices} diperbarui; ${data.totalItems} baris barang). Total belanja: ${formatRupiah(data.totalSpend)}.${periode}`
         );
         setImportFile(null);
         setImportText("");
         await loadOptions();
         await loadData();
+        await historyRef.current?.reload();
       }
     } catch {
       setImportError("Terjadi kesalahan jaringan saat mengunggah data.");
@@ -693,6 +702,15 @@ export function PurchasesPage() {
           </div>
         </div>
       )}
+
+      {/* RIWAYAT UPLOAD / BATCH IMPORT PEMBELIAN */}
+      <PurchaseBatchHistory
+        ref={historyRef}
+        onChanged={() => {
+          loadOptions();
+          loadData();
+        }}
+      />
 
       {/* MODAL DETAIL NOTA FAKTUR PEMBELIAN */}
       {(activeInvoiceDetail || detailLoading) && (
