@@ -154,6 +154,13 @@ export const SIDEBAR_MENU_GROUPS: SidebarMenuGroup[] = [
         feature: "transactions",
         description: "Audit log transaksi penjualan lengkap",
       },
+      {
+        href: "/purchases",
+        label: "Pembelian & Suplier",
+        group: "Dimensi Analisis",
+        feature: "purchases",
+        description: "Analisis pembelian barang per suplier dan riwayat nota faktur",
+      },
     ],
   },
   {

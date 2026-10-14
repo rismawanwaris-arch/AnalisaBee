@@ -23,6 +23,7 @@ const EmployeesPage = lazy(() => import("./pages/employees/EmployeesPage").then(
 const EmployeeDetailPage = lazy(() => import("./pages/employees/EmployeeDetailPage").then((m) => ({ default: m.EmployeeDetailPage })));
 const TransactionsPage = lazy(() => import("./pages/transactions/TransactionsPage").then((m) => ({ default: m.TransactionsPage })));
 const DataExplorerPage = lazy(() => import("./pages/dataexplorer/DataExplorerPage").then((m) => ({ default: m.DataExplorerPage })));
+const PurchasesPage = lazy(() => import("./pages/purchases/PurchasesPage").then((m) => ({ default: m.PurchasesPage })));
 const ImportPage = lazy(() => import("./pages/import/ImportPage").then((m) => ({ default: m.ImportPage })));
 const SettingsPage = lazy(() => import("./pages/settings/SettingsPage").then((m) => ({ default: m.SettingsPage })));
 const ActivityLogPage = lazy(() => import("./pages/log/ActivityLogPage").then((m) => ({ default: m.ActivityLogPage })));
@@ -116,6 +117,7 @@ export function App() {
                 <Route path="/employees" element={<EmployeesPage />} />
                 <Route path="/employees/:id" element={<EmployeeDetailPage />} />
                 <Route path="/transactions" element={<TransactionsPage />} />
+                <Route path="/purchases" element={<PurchasesPage />} />
                 <Route path="/analisa-data" element={<DataExplorerPage />} />
                 <Route path="/import" element={<ImportPage />} />
 

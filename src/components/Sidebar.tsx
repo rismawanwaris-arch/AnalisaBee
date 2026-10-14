@@ -172,6 +172,7 @@ export function Sidebar({ status }: { status: SystemStatus | null }) {
           { href: "/outlets", label: "Performa Outlet", feature: "outlets", icon: <path d="M3 9.5 12 3l9 6.5M5 9v11h14V9M9 20v-6h6v6" /> },
           { href: "/employees", label: "Pegawai & Staff", feature: "employees", icon: <><circle cx="12" cy="8" r="3.2" /><path d="M5 20c0-3.9 3.1-7 7-7s7 3.1 7 7" /></> },
           { href: "/transactions", label: "Daftar Transaksi", feature: "transactions", icon: <><rect x="4" y="4" width="16" height="16" rx="2" /><path d="M4 10h16M9 10v10" /></> },
+          { href: "/purchases", label: "Pembelian & Suplier", feature: "purchases", icon: <><path d="M6 2 3 6v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V6l-3-4Z" /><path d="M3 6h18" /><path d="M16 10a4 4 0 0 1-8 0" /></> },
         ])}
         {/* Group: Manajemen */}
         {renderNavGroup("Manajemen Data & Sistem", [

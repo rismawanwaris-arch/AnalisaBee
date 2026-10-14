@@ -425,3 +425,66 @@ model Session {
   @@index([expiresAt])
   @@map("sessions")
 }
+
+// Uploaded batch of purchase invoices (e.g. from Excel/CSV export of purchase orders)
+model PurchaseBatch {
+  id             Int               @id @default(autoincrement())
+  filename       String
+  uploadedAt     DateTime          @default(now())
+  status         ImportStatus      @default(PROCESSING)
+  rowCount       Int               @default(0)
+  insertedCount  Int               @default(0)
+  duplicateCount Int               @default(0)
+  errorRowCount  Int               @default(0)
+  errorMessage   String?
+  periodStart    DateTime?         @db.Date
+  periodEnd      DateTime?         @db.Date
+  invoices       PurchaseInvoice[]
+
+  @@map("purchase_batches")
+}
+
+// Purchase invoice header (Faktur / Nota Pembelian)
+model PurchaseInvoice {
+  id            Int             @id @default(autoincrement())
+  invoiceNumber String          @unique // No Faktur (e.g. BL00007543)
+  date          DateTime        @db.Date // Tanggal
+  refInvoice    String?         // Faktur Ref
+  outletName    String          // Cabang (e.g. ALFA 1 CELL, GUDANG)
+  vendor        String          // Vendor / Suplier (e.g. PETSHOP PADASUKA, SPL UFONE)
+  currency      String          @default("Rupiah")
+  subtotal      Decimal         @db.Decimal(14, 2)
+  tax           Decimal         @db.Decimal(14, 2) @default(0)
+  discount      Decimal         @db.Decimal(14, 2) @default(0)
+  otherFee      Decimal         @db.Decimal(14, 2) @default(0)
+  total         Decimal         @db.Decimal(14, 2)
+  batchId       Int?
+  batch         PurchaseBatch?  @relation(fields: [batchId], references: [id], onDelete: Cascade)
+  items         PurchaseItem[]
+
+  @@index([date])
+  @@index([vendor])
+  @@index([outletName])
+  @@map("purchase_invoices")
+}
+
+// Individual line item in a purchase invoice (Detail Nota Pembelian)
+model PurchaseItem {
+  id            Int             @id @default(autoincrement())
+  invoiceId     Int
+  invoice       PurchaseInvoice @relation(fields: [invoiceId], references: [id], onDelete: Cascade)
+  itemSeq       Int?            // No Detail
+  itemCode      String          // Kode Item
+  itemName      String          // Nama Item
+  qty           Decimal         @db.Decimal(12, 2)
+  unit          String          @default("PCS")
+  discount      Decimal         @db.Decimal(14, 2) @default(0)
+  tax           Decimal         @db.Decimal(14, 2) @default(0)
+  price         Decimal         @db.Decimal(14, 2)
+  subtotal      Decimal         @db.Decimal(14, 2)
+
+  @@index([invoiceId])
+  @@index([itemCode])
+  @@index([itemName])
+  @@map("purchase_items")
+}
