@@ -8,6 +8,9 @@ export function PointsLayout({ branch = "BANDUNG" }: PointsLayoutProps = {}) {
   const location = useLocation();
   const pathname = location.pathname;
   const basePath = branch === "CIMAHI" ? "/cimahi/points" : "/points";
+  const isTg =
+    (branch === "BANDUNG" && pathname.startsWith("/points/tg")) ||
+    (branch === "CIMAHI" && pathname.startsWith("/cimahi/points/tg"));
   const isPetshop =
     (branch === "BANDUNG" && pathname.startsWith("/points/petshop")) ||
     (branch === "CIMAHI" && pathname.startsWith("/cimahi/points/petshop"));
@@ -19,22 +22,28 @@ export function PointsLayout({ branch = "BANDUNG" }: PointsLayoutProps = {}) {
     branch === "BANDUNG"
       ? [
           { href: "/points", label: "Aksesoris", exact: true },
+          { href: "/points/tg", label: "Tempered Glass (TG)", exact: true },
           { href: "/points/petshop", label: "Petshop", exact: true },
           { href: "/points/sp", label: "SP/Voucher", exact: true },
         ]
       : [
           { href: "/cimahi/points", label: "Aksesoris", exact: true },
+          { href: "/cimahi/points/tg", label: "Tempered Glass (TG)", exact: true },
           { href: "/cimahi/points/petshop", label: "Petshop", exact: true },
           { href: "/cimahi/points/sp", label: "SP/Voucher", exact: true },
         ];
 
   const titleSuffix =
     branch === "CIMAHI"
-      ? isPetshop
+      ? isTg
+        ? " — Tempered Glass (Cimahi)"
+        : isPetshop
         ? " — Petshop (Cimahi)"
         : isSp
         ? " — SP/Voucher (Cimahi)"
         : " — Aksesoris (Cimahi)"
+      : isTg
+      ? " — Tempered Glass (Bandung)"
       : isPetshop
       ? " — Petshop (Bandung)"
       : isSp
@@ -43,11 +52,15 @@ export function PointsLayout({ branch = "BANDUNG" }: PointsLayoutProps = {}) {
 
   const publicBoardHref =
     branch === "CIMAHI"
-      ? isPetshop
+      ? isTg
+        ? "/papan-poin/cimahi/tg"
+        : isPetshop
         ? "/papan-poin/cimahi/petshop"
         : isSp
         ? "/papan-poin/cimahi/sp"
         : "/papan-poin/cimahi"
+      : isTg
+      ? "/papan-poin/tg"
       : isPetshop
       ? "/papan-poin/petshop"
       : isSp

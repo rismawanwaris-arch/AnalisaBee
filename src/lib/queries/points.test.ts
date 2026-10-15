@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { computeItemPoints, computeMonthPeriod, computeWeekPeriod, classifyItemCategory } from "./points";
+import { computeItemPoints, computeMonthPeriod, computeWeekPeriod, classifyItemCategory, isTGItem } from "./points";
 
 describe("computeItemPoints", () => {
   const items = [
@@ -165,7 +165,33 @@ describe("classifyItemCategory", () => {
     expect(classifyItemCategory("HF Robot REC10E Type C")).toBe("Handsfree");
   });
 
+  it("classifies Tempered Glass / Hydrogel products", () => {
+    expect(classifyItemCategory("TGB IP 11")).toBe("Tempered Glass");
+    expect(classifyItemCategory("TEMPERED GLASS SAM A54")).toBe("Tempered Glass");
+    expect(classifyItemCategory("HYDROGEL BENING DEPAN")).toBe("Tempered Glass");
+  });
+
   it("falls back to Lainnya for anything unmatched", () => {
     expect(classifyItemCategory("Nasi Goreng Kucing")).toBe("Lainnya");
+  });
+});
+
+describe("isTGItem", () => {
+  it("detects items starting with TG (TGB, TGS, TGF, TGC, etc.)", () => {
+    expect(isTGItem("TG BENING")).toBe(true);
+    expect(isTGItem("TGB IP 11")).toBe(true);
+    expect(isTGItem("TGS SAM A12")).toBe(true);
+    expect(isTGItem("tgc infinix note 30")).toBe(true);
+  });
+
+  it("detects items containing TEMPERED or HYDROGEL", () => {
+    expect(isTGItem("PROTECTOR TEMPERED GLASS")).toBe(true);
+    expect(isTGItem("hydrogel front matte")).toBe(true);
+  });
+
+  it("returns false for non-TG items", () => {
+    expect(isTGItem("Kabel Data Robot")).toBe(false);
+    expect(isTGItem("TWS Robot Airbuds")).toBe(false);
+    expect(isTGItem("Charger Robot RT-A20C")).toBe(false);
   });
 });

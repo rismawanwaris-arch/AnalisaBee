@@ -7,8 +7,13 @@
 // requireAuth/requireFeature/requireMaster here, and never let these routes
 // return anything beyond points/ranking data (no revenue, no profit).
 import { Router, type Request } from "express";
-import { getPointPeriodSetting, computeCurrentMonthPeriod, getPublicPointsDashboard, getEmployeePointBreakdown } from "../../lib/queries/points";
-import type { ReportCategory } from "@/generated/prisma/client";
+import {
+  getPointPeriodSetting,
+  computeCurrentMonthPeriod,
+  getPublicPointsDashboard,
+  getEmployeePointBreakdown,
+  type PointsCategory,
+} from "../../lib/queries/points";
 import { publicPointsLimiter } from "../middleware";
 
 export const publicPointsRouter = Router();
@@ -17,9 +22,9 @@ export const publicPointsRouter = Router();
 // preset anymore) — pass ?from=&to= to pick one explicitly. Omit both to get
 // the month-cycle period (per PointSettings.periodStartDay) currently
 // running, e.g. periodStartDay=29 defaults to "29th – 28th". The displayed
-// target is always pointTargetMonthly regardless of the range picked — the
-// other two target settings (harian/mingguan) exist only for the internal
-// /points leaderboard's own Harian/Mingguan tabs, not this page.
+// target is always pointTargetMonthly (or pointTargetTGMonthly for TG) regardless
+// of the range picked — the other two target settings (harian/mingguan) exist
+// only for the internal /points leaderboard's own Harian/Mingguan tabs, not this page.
 async function resolvePublicPointsPeriod(
   req: Request
 ): Promise<{ from: Date; to: Date; pointTarget: number; periodStartDay: number }> {
@@ -33,7 +38,10 @@ async function resolvePublicPointsPeriod(
     ? { from: new Date(fromParam), to: new Date(toParam) }
     : computeCurrentMonthPeriod(setting.periodStartDay);
 
-  return { from, to, pointTarget: setting.pointTargetMonthly, periodStartDay: setting.periodStartDay };
+  const category = parsePublicCategory(req);
+  const pointTarget = category === "TG" ? setting.pointTargetTGMonthly : setting.pointTargetMonthly;
+
+  return { from, to, pointTarget, periodStartDay: setting.periodStartDay };
 }
 
 function parsePublicOutletId(req: Request): number | undefined {
@@ -46,15 +54,16 @@ function parsePublicBranch(req: Request): "BANDUNG" | "CIMAHI" | undefined {
   return undefined;
 }
 
-// Undefined = no category filter (mixes all three, the only behavior before
-// the Aksesoris/Petshop/SP-Voucher wallboard split existed). Same values as
+// Undefined = no category filter (mixes all categories, the only behavior before
+// the Aksesoris/TG/Petshop/SP-Voucher wallboard split existed). Same values as
 // the internal pointsFeature/parsePointsCategory in routes/points.ts — kept
 // separate since this route has no auth/feature-gating to hook a permission
 // check into.
-function parsePublicCategory(req: Request): ReportCategory | undefined {
+function parsePublicCategory(req: Request): PointsCategory | undefined {
   return req.query.category === "PETSHOP" ||
     req.query.category === "AKSESORIS" ||
-    req.query.category === "SP_VOUCHER"
+    req.query.category === "SP_VOUCHER" ||
+    req.query.category === "TG"
     ? req.query.category
     : undefined;
 }

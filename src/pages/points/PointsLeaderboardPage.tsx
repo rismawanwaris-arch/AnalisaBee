@@ -54,10 +54,11 @@ function currentPeriodMonthStr(periodStartDay: number): string {
 
 const MODE_LABEL: Record<Mode, string> = { day: "Per Hari", month: "Per Bulan", range: "Per Rentang" };
 
-type PointsCategory = "PETSHOP" | "AKSESORIS" | "SP_VOUCHER";
+type PointsCategory = "PETSHOP" | "AKSESORIS" | "SP_VOUCHER" | "TG";
 
 const CATEGORY_PATH: Record<PointsCategory, string> = {
   AKSESORIS: "/points",
+  TG: "/points/tg",
   PETSHOP: "/points/petshop",
   SP_VOUCHER: "/points/sp",
 };
@@ -75,7 +76,9 @@ export function PointsLeaderboardPage({ branch = "BANDUNG", category }: PointsLe
   const [searchParams] = useSearchParams();
   const basePath =
     branch === "CIMAHI"
-      ? category === "PETSHOP"
+      ? category === "TG"
+        ? "/cimahi/points/tg"
+        : category === "PETSHOP"
         ? "/cimahi/points/petshop"
         : category === "SP_VOUCHER"
         ? "/cimahi/points/sp"
@@ -195,7 +198,15 @@ export function PointsLeaderboardPage({ branch = "BANDUNG", category }: PointsLe
       const exportData: { rows: LeaderboardExportRow[] } = await exportRes.json();
 
       const categoryLabel =
-        category === "PETSHOP" ? " — Petshop" : category === "SP_VOUCHER" ? " — SP/Voucher" : category === "AKSESORIS" ? " — Aksesoris" : "";
+        category === "TG"
+          ? " — Tempered Glass"
+          : category === "PETSHOP"
+          ? " — Petshop"
+          : category === "SP_VOUCHER"
+          ? " — SP/Voucher"
+          : category === "AKSESORIS"
+          ? " — Aksesoris"
+          : "";
       const meta: (string | number)[][] = [
         [`Poin & Insentif Penjualan${categoryLabel}`],
         [`Periode: ${formatDate(data.from)} - ${formatDate(data.to)}`],

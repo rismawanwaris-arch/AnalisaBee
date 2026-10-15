@@ -2,6 +2,18 @@ import { prisma } from "@/lib/prisma";
 import { ensureDefaults } from "@/lib/ensureDefaults";
 import type { ReportCategory } from "@/generated/prisma/client";
 
+export type PointsCategory = ReportCategory | "TG";
+
+export function isTGItem(name: string): boolean {
+  if (!name) return false;
+  const upper = name.trim().toUpperCase();
+  return (
+    upper.startsWith("TG") ||
+    upper.includes("TEMPERED") ||
+    upper.includes("HYDROGEL")
+  );
+}
+
 // Lets the leaderboard/export/breakdown/wallboard queries scope points to one report
 // category (PETSHOP vs AKSESORIS vs SP_VOUCHER) using PointGroupMapping specifically configured
 // for points & papan poin (independent from Target Harian's ItemGroupMapping).
@@ -11,6 +23,43 @@ async function getItemGroupsForCategory(category: ReportCategory): Promise<strin
     select: { itemGroup: true },
   });
   return rows.map((r) => r.itemGroup);
+}
+
+export function buildPointCategoryItemWhere(category?: PointsCategory, categoryGroups?: string[]) {
+  if (!category || !categoryGroups) return {};
+
+  if (category === "TG") {
+    return {
+      item: {
+        itemGroup: { in: categoryGroups },
+        OR: [
+          { name: { startsWith: "TG", mode: "insensitive" as const } },
+          { name: { contains: "TEMPERED", mode: "insensitive" as const } },
+          { name: { contains: "HYDROGEL", mode: "insensitive" as const } },
+        ],
+      },
+    };
+  }
+
+  if (category === "AKSESORIS") {
+    // Opsi B: Papan Aksesoris khusus aksesoris Non-TG (TG dikeluarkan dari papan Aksesoris)
+    return {
+      item: {
+        itemGroup: { in: categoryGroups },
+        NOT: {
+          OR: [
+            { name: { startsWith: "TG", mode: "insensitive" as const } },
+            { name: { contains: "TEMPERED", mode: "insensitive" as const } },
+            { name: { contains: "HYDROGEL", mode: "insensitive" as const } },
+          ],
+        },
+      },
+    };
+  }
+
+  return {
+    item: { itemGroup: { in: categoryGroups } },
+  };
 }
 
 export function toDateStr(d: Date | string): string {
@@ -458,6 +507,9 @@ export interface PointPeriodSetting {
   pointTargetDaily: number;
   pointTargetWeekly: number;
   pointTargetMonthly: number;
+  pointTargetTGDaily: number;
+  pointTargetTGWeekly: number;
+  pointTargetTGMonthly: number;
   /** Rupiah value of 1 point — admin-only incentive column on the internal
    *  Poin Penjualan page, never sent to the public Papan Poin endpoint. */
   pointRupiahRate: number;
@@ -467,13 +519,26 @@ export async function getPointPeriodSetting(): Promise<PointPeriodSetting> {
   const setting = await prisma.pointSettings.upsert({
     where: { id: 1 },
     update: {},
-    create: { id: 1, periodStartDay: 1, pointTargetDaily: 0, pointTargetWeekly: 0, pointTargetMonthly: 0, pointRupiahRate: 100 },
+    create: {
+      id: 1,
+      periodStartDay: 1,
+      pointTargetDaily: 0,
+      pointTargetWeekly: 0,
+      pointTargetMonthly: 0,
+      pointTargetTGDaily: 0,
+      pointTargetTGWeekly: 0,
+      pointTargetTGMonthly: 0,
+      pointRupiahRate: 100,
+    },
   });
   return {
     periodStartDay: setting.periodStartDay,
     pointTargetDaily: setting.pointTargetDaily,
     pointTargetWeekly: setting.pointTargetWeekly,
     pointTargetMonthly: setting.pointTargetMonthly,
+    pointTargetTGDaily: setting.pointTargetTGDaily ?? 0,
+    pointTargetTGWeekly: setting.pointTargetTGWeekly ?? 0,
+    pointTargetTGMonthly: setting.pointTargetTGMonthly ?? 0,
     pointRupiahRate: setting.pointRupiahRate,
   };
 }
@@ -482,6 +547,9 @@ export interface PointTargetUpdate {
   daily?: number;
   weekly?: number;
   monthly?: number;
+  tgDaily?: number;
+  tgWeekly?: number;
+  tgMonthly?: number;
   rupiahRate?: number;
 }
 
@@ -493,6 +561,9 @@ export async function setPointPeriodSetting(periodStartDay: number, targets?: Po
       ...(targets?.daily !== undefined ? { pointTargetDaily: targets.daily } : {}),
       ...(targets?.weekly !== undefined ? { pointTargetWeekly: targets.weekly } : {}),
       ...(targets?.monthly !== undefined ? { pointTargetMonthly: targets.monthly } : {}),
+      ...(targets?.tgDaily !== undefined ? { pointTargetTGDaily: targets.tgDaily } : {}),
+      ...(targets?.tgWeekly !== undefined ? { pointTargetTGWeekly: targets.tgWeekly } : {}),
+      ...(targets?.tgMonthly !== undefined ? { pointTargetTGMonthly: targets.tgMonthly } : {}),
       ...(targets?.rupiahRate !== undefined ? { pointRupiahRate: targets.rupiahRate } : {}),
     },
     create: {
@@ -501,6 +572,9 @@ export async function setPointPeriodSetting(periodStartDay: number, targets?: Po
       pointTargetDaily: targets?.daily ?? 0,
       pointTargetWeekly: targets?.weekly ?? 0,
       pointTargetMonthly: targets?.monthly ?? 0,
+      pointTargetTGDaily: targets?.tgDaily ?? 0,
+      pointTargetTGWeekly: targets?.tgWeekly ?? 0,
+      pointTargetTGMonthly: targets?.tgMonthly ?? 0,
       pointRupiahRate: targets?.rupiahRate ?? 100,
     },
   });
@@ -569,6 +643,7 @@ const CATEGORY_RULES: { category: string; keywords: string[] }[] = [
 ];
 
 export function classifyItemCategory(itemName: string): string {
+  if (isTGItem(itemName)) return "Tempered Glass";
   const upper = itemName.toUpperCase();
   for (const rule of CATEGORY_RULES) {
     if (rule.keywords.some((kw) => upper.includes(kw))) return rule.category;
@@ -580,13 +655,14 @@ export async function getLeaderboard(
   from: Date,
   to: Date,
   branch?: "BANDUNG" | "CIMAHI",
-  category?: ReportCategory
+  category?: PointsCategory
 ): Promise<{ rows: EmployeeLeaderboardRow[]; from: string; to: string }> {
   await ensureDefaults();
 
+  const categoryToLookup = category === "TG" ? "AKSESORIS" : category;
   const [excludedIds, categoryGroups] = await Promise.all([
     getExcludedEmployeeIds(),
-    category ? getItemGroupsForCategory(category) : Promise.resolve(undefined),
+    categoryToLookup ? getItemGroupsForCategory(categoryToLookup) : Promise.resolve(undefined),
   ]);
 
   // Aggregate at DB level — group by item, employee, and tanggal
@@ -596,7 +672,7 @@ export async function getLeaderboard(
       tanggal: { gte: from, lte: to },
       ...(excludedIds.length > 0 ? { employeeId: { notIn: excludedIds } } : {}),
       ...(branch ? { outlet: { branch } } : {}),
-      ...(categoryGroups ? { item: { itemGroup: { in: categoryGroups } } } : {}),
+      ...buildPointCategoryItemWhere(category, categoryGroups),
     },
     _sum: { qty: true },
   });
@@ -647,13 +723,14 @@ export async function getLeaderboardExport(
   from: Date,
   to: Date,
   branch?: "BANDUNG" | "CIMAHI",
-  category?: ReportCategory
+  category?: PointsCategory
 ): Promise<{ rows: LeaderboardExportRow[]; from: string; to: string }> {
   await ensureDefaults();
 
+  const categoryToLookup = category === "TG" ? "AKSESORIS" : category;
   const [excludedIds, categoryGroups] = await Promise.all([
     getExcludedEmployeeIds(),
-    category ? getItemGroupsForCategory(category) : Promise.resolve(undefined),
+    categoryToLookup ? getItemGroupsForCategory(categoryToLookup) : Promise.resolve(undefined),
   ]);
 
   const salesAgg = await prisma.sale.groupBy({
@@ -662,7 +739,7 @@ export async function getLeaderboardExport(
       tanggal: { gte: from, lte: to },
       ...(excludedIds.length > 0 ? { employeeId: { notIn: excludedIds } } : {}),
       ...(branch ? { outlet: { branch } } : {}),
-      ...(categoryGroups ? { item: { itemGroup: { in: categoryGroups } } } : {}),
+      ...buildPointCategoryItemWhere(category, categoryGroups),
     },
     _sum: { qty: true },
   });
@@ -739,11 +816,12 @@ export async function getEmployeePointBreakdown(
   to: Date,
   outletId?: number,
   branch?: "BANDUNG" | "CIMAHI",
-  category?: ReportCategory
+  category?: PointsCategory
 ): Promise<ItemPointBreakdownRow[]> {
   await ensureDefaults();
 
-  const categoryGroups = category ? await getItemGroupsForCategory(category) : undefined;
+  const categoryToLookup = category === "TG" ? "AKSESORIS" : category;
+  const categoryGroups = categoryToLookup ? await getItemGroupsForCategory(categoryToLookup) : undefined;
 
   // Aggregate at DB level — group by itemId and tanggal
   const salesAgg = await prisma.sale.groupBy({
@@ -753,7 +831,7 @@ export async function getEmployeePointBreakdown(
       tanggal: { gte: from, lte: to },
       ...(outletId ? { outletId } : {}),
       ...(branch ? { outlet: { branch } } : {}),
-      ...(categoryGroups ? { item: { itemGroup: { in: categoryGroups } } } : {}),
+      ...buildPointCategoryItemWhere(category, categoryGroups),
     },
     _sum: { qty: true },
   });
@@ -835,14 +913,15 @@ export async function getPublicPointsDashboard(
   to: Date,
   outletId: number | undefined,
   pointTarget: number,
-  category?: ReportCategory,
+  category?: PointsCategory,
   branch?: "BANDUNG" | "CIMAHI"
 ): Promise<PublicPointsDashboard> {
   await ensureDefaults();
 
+  const categoryToLookup = category === "TG" ? "AKSESORIS" : category;
   const [excludedIds, categoryGroups] = await Promise.all([
     getExcludedEmployeeIds(),
-    category ? getItemGroupsForCategory(category) : Promise.resolve(undefined),
+    categoryToLookup ? getItemGroupsForCategory(categoryToLookup) : Promise.resolve(undefined),
   ]);
   const excludeClause = excludedIds.length > 0 ? { employeeId: { notIn: excludedIds } } : {};
   const branchClause = branch ? { outlet: { branch } } : {};
@@ -859,7 +938,7 @@ export async function getPublicPointsDashboard(
         ...excludeClause,
         ...branchClause,
         ...(outletId ? { outletId } : {}),
-        ...(categoryGroups ? { item: { itemGroup: { in: categoryGroups } } } : {}),
+        ...buildPointCategoryItemWhere(category, categoryGroups),
       },
       _sum: { qty: true },
     }),

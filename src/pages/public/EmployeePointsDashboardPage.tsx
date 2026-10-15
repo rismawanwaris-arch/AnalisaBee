@@ -40,19 +40,21 @@ const RANK_BADGE = [
   "bg-orange-600/15 text-orange-600 dark:text-orange-400 border-orange-600/30",
 ];
 
-type PublicCategory = "PETSHOP" | "AKSESORIS" | "SP_VOUCHER";
+type PublicCategory = "PETSHOP" | "AKSESORIS" | "SP_VOUCHER" | "TG";
 
-// Bandung sells accessories, petshop goods and SIM/voucher products, so
-// (like the internal /points split) the public wallboard is three separate
+// Bandung sells accessories, tempered glass, petshop goods and SIM/voucher products, so
+// (like the internal /points split) the public wallboard is separate
 // pages, not one mixed leaderboard.
 const CATEGORY_META: Record<PublicCategory, { title: string; subtitle: string; path: string }> = {
   AKSESORIS: { title: "Aksesoris", subtitle: "aksesoris", path: "/papan-poin" },
+  TG: { title: "Tempered Glass", subtitle: "tempered glass (TG)", path: "/papan-poin/tg" },
   PETSHOP: { title: "Petshop", subtitle: "petshop", path: "/papan-poin/petshop" },
   SP_VOUCHER: { title: "SP/Voucher", subtitle: "SP/voucher", path: "/papan-poin/sp" },
 };
 
 function getCategoryPath(category: PublicCategory, branch: "BANDUNG" | "CIMAHI"): string {
   if (branch === "CIMAHI") {
+    if (category === "TG") return "/papan-poin/cimahi/tg";
     if (category === "PETSHOP") return "/papan-poin/cimahi/petshop";
     if (category === "SP_VOUCHER") return "/papan-poin/cimahi/sp";
     return "/papan-poin/cimahi";
@@ -64,7 +66,7 @@ function getBranchSwitchPath(targetBranch: "BANDUNG" | "CIMAHI", category?: Publ
   if (!category || category === "AKSESORIS") {
     return targetBranch === "CIMAHI" ? "/papan-poin/cimahi" : "/papan-poin";
   }
-  const suffix = category === "PETSHOP" ? "petshop" : "sp";
+  const suffix = category === "TG" ? "tg" : category === "PETSHOP" ? "petshop" : "sp";
   return targetBranch === "CIMAHI" ? `/papan-poin/cimahi/${suffix}` : `/papan-poin/${suffix}`;
 }
 

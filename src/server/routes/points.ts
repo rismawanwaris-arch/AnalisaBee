@@ -27,6 +27,7 @@ import {
   excludeEmployee,
   includeEmployee,
   type PointTargetUpdate,
+  type PointsCategory,
 } from "../../lib/queries/points";
 import { type FeatureKey } from "../../lib/features";
 import type { ReportCategory } from "@/generated/prisma/client";
@@ -58,10 +59,12 @@ async function resolvePointPeriod(req: Request): Promise<{ from: Date; to: Date 
 // ignored for gating, though the query itself still honours it if ever sent).
 const pointsFeature = (req: Request): FeatureKey => {
   if (req.query.branch === "CIMAHI") {
+    if (req.query.category === "TG") return "points_cimahi_tg";
     if (req.query.category === "PETSHOP") return "points_cimahi_petshop";
     if (req.query.category === "SP_VOUCHER") return "points_cimahi_sp";
     return "points_cimahi";
   }
+  if (req.query.category === "TG") return "points_tg";
   if (req.query.category === "PETSHOP") return "points_petshop";
   if (req.query.category === "SP_VOUCHER") return "points_sp";
   return "points";
@@ -76,12 +79,13 @@ function parsePointsBranch(req: Request): "BANDUNG" | "CIMAHI" {
 }
 
 // Undefined = no category filter (mixes every category, same as before this
-// split existed) — only the Poin Aksesoris / Poin Petshop / Poin SP-Voucher
+// split existed) — only the Poin Aksesoris / Poin TG / Poin Petshop / Poin SP-Voucher
 // pages send one.
-function parsePointsCategory(req: Request): ReportCategory | undefined {
+function parsePointsCategory(req: Request): PointsCategory | undefined {
   return req.query.category === "PETSHOP" ||
     req.query.category === "AKSESORIS" ||
-    req.query.category === "SP_VOUCHER"
+    req.query.category === "SP_VOUCHER" ||
+    req.query.category === "TG"
     ? req.query.category
     : undefined;
 }
@@ -119,14 +123,23 @@ pointsRouter.get("/api/points/settings", requireFeature(pointsFeature), cacheBri
   }
 });
 
-// Shared by PUT/POST below: pulls periodStartDay + the 3 optional per-period
+// Shared by PUT/POST below: pulls periodStartDay + the optional per-period
 // point targets out of the request body, validating each as an integer >= 0.
 // Returns null (after writing the 400 response itself) on invalid input.
 function parsePointSettingsBody(
   req: Request,
   res: Response
 ): { day: number; targets: PointTargetUpdate } | null {
-  const { periodStartDay, pointTargetDaily, pointTargetWeekly, pointTargetMonthly, pointRupiahRate } = req.body;
+  const {
+    periodStartDay,
+    pointTargetDaily,
+    pointTargetWeekly,
+    pointTargetMonthly,
+    pointTargetTGDaily,
+    pointTargetTGWeekly,
+    pointTargetTGMonthly,
+    pointRupiahRate,
+  } = req.body;
   const day = Number(periodStartDay);
   if (!Number.isInteger(day) || day < 1 || day > 31) {
     res.status(400).json({ error: "Tanggal harus 1-31." });
@@ -137,6 +150,9 @@ function parsePointSettingsBody(
     ["daily", pointTargetDaily],
     ["weekly", pointTargetWeekly],
     ["monthly", pointTargetMonthly],
+    ["tgDaily", pointTargetTGDaily],
+    ["tgWeekly", pointTargetTGWeekly],
+    ["tgMonthly", pointTargetTGMonthly],
     ["rupiahRate", pointRupiahRate],
   ] as const) {
     if (raw === undefined) continue;

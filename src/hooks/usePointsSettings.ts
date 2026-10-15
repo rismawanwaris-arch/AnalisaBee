@@ -5,6 +5,9 @@ interface PointsSettings {
   pointTargetDaily: number;
   pointTargetWeekly: number;
   pointTargetMonthly: number;
+  pointTargetTGDaily: number;
+  pointTargetTGWeekly: number;
+  pointTargetTGMonthly: number;
   pointRupiahRate: number;
 }
 

@@ -45,6 +45,14 @@ export const SIDEBAR_MENU_GROUPS: SidebarMenuGroup[] = [
         description: "Klasemen & komisi poin kategori Aksesoris",
       },
       {
+        href: "/points/tg",
+        label: "Poin TG",
+        group: "Cabang Bandung",
+        feature: "points_tg",
+        exact: true,
+        description: "Klasemen & komisi poin kategori Tempered Glass",
+      },
+      {
         href: "/points/petshop",
         label: "Poin Petshop",
         group: "Cabang Bandung",
@@ -91,6 +99,14 @@ export const SIDEBAR_MENU_GROUPS: SidebarMenuGroup[] = [
         feature: "points_cimahi",
         exact: true,
         description: "Klasemen & komisi poin kategori Aksesoris Cimahi",
+      },
+      {
+        href: "/cimahi/points/tg",
+        label: "Poin TG",
+        group: "Cabang Cimahi",
+        feature: "points_cimahi_tg",
+        exact: true,
+        description: "Klasemen & komisi poin kategori Tempered Glass Cimahi",
       },
       {
         href: "/cimahi/points/petshop",

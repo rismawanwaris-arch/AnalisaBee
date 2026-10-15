@@ -71,17 +71,18 @@ export function App() {
               {/* Public, no-login employee points wallboard — see AGENTS.md-adjacent
                   discussion: Employee and User are unrelated models, so this page
                   intentionally lives outside <AppLayout /> and its auth guard.
-                  Split into two boards, same reasoning as the internal /points
-                  Aksesoris/Petshop split — /papan-poin keeps its original meaning
+                  Split into category boards — /papan-poin keeps its original meaning
                   (Aksesoris) so existing bookmarks/tablets don't silently change. */}
               <Route path="/papan-poin" element={<EmployeePointsDashboardPage branch="BANDUNG" category="AKSESORIS" />} />
               <Route path="/papan-poin/aksesoris" element={<Navigate to="/papan-poin" replace />} />
+              <Route path="/papan-poin/tg" element={<EmployeePointsDashboardPage branch="BANDUNG" category="TG" />} />
               <Route path="/papan-poin/petshop" element={<EmployeePointsDashboardPage branch="BANDUNG" category="PETSHOP" />} />
               <Route path="/papan-poin/sp" element={<EmployeePointsDashboardPage branch="BANDUNG" category="SP_VOUCHER" />} />
 
               {/* Public Cimahi points wallboards */}
               <Route path="/papan-poin/cimahi" element={<EmployeePointsDashboardPage branch="CIMAHI" category="AKSESORIS" />} />
               <Route path="/papan-poin/cimahi/aksesoris" element={<Navigate to="/papan-poin/cimahi" replace />} />
+              <Route path="/papan-poin/cimahi/tg" element={<EmployeePointsDashboardPage branch="CIMAHI" category="TG" />} />
               <Route path="/papan-poin/cimahi/petshop" element={<EmployeePointsDashboardPage branch="CIMAHI" category="PETSHOP" />} />
               <Route path="/papan-poin/cimahi/sp" element={<EmployeePointsDashboardPage branch="CIMAHI" category="SP_VOUCHER" />} />
 
@@ -98,12 +99,11 @@ export function App() {
                   <Route path="pengaturan" element={<Navigate to="/settings?tab=target" replace />} />
                 </Route>
 
-                {/* Points & Incentives Section — Bandung splits into three
-                    category-scoped leaderboards (Aksesoris / Petshop /
-                    SP-Voucher) since all three product lines are sold there;
-                    see FEATURE_KEYS "points" / "points_petshop" / "points_sp". */}
+                {/* Points & Incentives Section — Bandung splits into category-scoped
+                    leaderboards (Aksesoris / TG / Petshop / SP-Voucher). */}
                 <Route path="/points" element={<PointsLayout />}>
                   <Route index element={<PointsLeaderboardPage category="AKSESORIS" />} />
+                  <Route path="tg" element={<PointsLeaderboardPage category="TG" />} />
                   <Route path="petshop" element={<PointsLeaderboardPage category="PETSHOP" />} />
                   <Route path="sp" element={<PointsLeaderboardPage category="SP_VOUCHER" />} />
                   <Route path="pengaturan" element={<Navigate to="/settings?tab=points" replace />} />
@@ -131,6 +131,7 @@ export function App() {
                 </Route>
                 <Route path="/cimahi/points" element={<PointsLayout branch="CIMAHI" />}>
                   <Route index element={<PointsLeaderboardPage branch="CIMAHI" category="AKSESORIS" />} />
+                  <Route path="tg" element={<PointsLeaderboardPage branch="CIMAHI" category="TG" />} />
                   <Route path="petshop" element={<PointsLeaderboardPage branch="CIMAHI" category="PETSHOP" />} />
                   <Route path="sp" element={<PointsLeaderboardPage branch="CIMAHI" category="SP_VOUCHER" />} />
                   <Route path="pengaturan" element={<Navigate to="/settings?tab=points" replace />} />

@@ -259,6 +259,9 @@ export function SettingsPage() {
   const [pointTargetDaily, setPointTargetDaily] = useState("0");
   const [pointTargetWeekly, setPointTargetWeekly] = useState("0");
   const [pointTargetMonthly, setPointTargetMonthly] = useState("0");
+  const [pointTargetTGDaily, setPointTargetTGDaily] = useState("0");
+  const [pointTargetTGWeekly, setPointTargetTGWeekly] = useState("0");
+  const [pointTargetTGMonthly, setPointTargetTGMonthly] = useState("0");
   const [pointRupiahRate, setPointRupiahRate] = useState("100");
   const [periodBusy, setPeriodBusy] = useState(false);
   const [periodSaved, setPeriodSaved] = useState(false);
@@ -299,6 +302,9 @@ export function SettingsPage() {
         setPointTargetDaily(String(d.pointTargetDaily ?? 0));
         setPointTargetWeekly(String(d.pointTargetWeekly ?? 0));
         setPointTargetMonthly(String(d.pointTargetMonthly ?? 0));
+        setPointTargetTGDaily(String(d.pointTargetTGDaily ?? 0));
+        setPointTargetTGWeekly(String(d.pointTargetTGWeekly ?? 0));
+        setPointTargetTGMonthly(String(d.pointTargetTGMonthly ?? 0));
         setPointRupiahRate(String(d.pointRupiahRate ?? 100));
       }
     } catch {
@@ -1017,6 +1023,9 @@ export function SettingsPage() {
           pointTargetDaily: Number(pointTargetDaily),
           pointTargetWeekly: Number(pointTargetWeekly),
           pointTargetMonthly: Number(pointTargetMonthly),
+          pointTargetTGDaily: Number(pointTargetTGDaily),
+          pointTargetTGWeekly: Number(pointTargetTGWeekly),
+          pointTargetTGMonthly: Number(pointTargetTGMonthly),
           pointRupiahRate: Number(pointRupiahRate),
         }),
       });
@@ -2670,7 +2679,7 @@ export function SettingsPage() {
               </div>
               <div>
                 <label htmlFor="settings-point-target-daily" className="block text-[11px] font-semibold uppercase tracking-wider text-muted mb-1">
-                  Target Poin Harian
+                  Target Aksesoris Harian
                 </label>
                 <input
                   id="settings-point-target-daily"
@@ -2683,7 +2692,7 @@ export function SettingsPage() {
               </div>
               <div>
                 <label htmlFor="settings-point-target-weekly" className="block text-[11px] font-semibold uppercase tracking-wider text-muted mb-1">
-                  Target Poin Mingguan
+                  Target Aksesoris Mingguan
                 </label>
                 <input
                   id="settings-point-target-weekly"
@@ -2696,7 +2705,7 @@ export function SettingsPage() {
               </div>
               <div>
                 <label htmlFor="settings-point-target-monthly" className="block text-[11px] font-semibold uppercase tracking-wider text-muted mb-1">
-                  Target Poin Bulanan
+                  Target Aksesoris Bulanan
                 </label>
                 <input
                   id="settings-point-target-monthly"
@@ -2704,6 +2713,45 @@ export function SettingsPage() {
                   min={0}
                   value={pointTargetMonthly}
                   onChange={(e) => setPointTargetMonthly(e.target.value)}
+                  className="w-32 rounded-lg border border-border/80 bg-surface-subtle px-3 py-1.5 text-xs font-mono text-foreground focus:outline-none focus:ring-2 focus:ring-accent/20 focus:border-accent transition-all"
+                />
+              </div>
+              <div>
+                <label htmlFor="settings-point-target-tg-daily" className="block text-[11px] font-semibold uppercase tracking-wider text-muted mb-1">
+                  Target TG Harian
+                </label>
+                <input
+                  id="settings-point-target-tg-daily"
+                  type="number"
+                  min={0}
+                  value={pointTargetTGDaily}
+                  onChange={(e) => setPointTargetTGDaily(e.target.value)}
+                  className="w-32 rounded-lg border border-border/80 bg-surface-subtle px-3 py-1.5 text-xs font-mono text-foreground focus:outline-none focus:ring-2 focus:ring-accent/20 focus:border-accent transition-all"
+                />
+              </div>
+              <div>
+                <label htmlFor="settings-point-target-tg-weekly" className="block text-[11px] font-semibold uppercase tracking-wider text-muted mb-1">
+                  Target TG Mingguan
+                </label>
+                <input
+                  id="settings-point-target-tg-weekly"
+                  type="number"
+                  min={0}
+                  value={pointTargetTGWeekly}
+                  onChange={(e) => setPointTargetTGWeekly(e.target.value)}
+                  className="w-32 rounded-lg border border-border/80 bg-surface-subtle px-3 py-1.5 text-xs font-mono text-foreground focus:outline-none focus:ring-2 focus:ring-accent/20 focus:border-accent transition-all"
+                />
+              </div>
+              <div>
+                <label htmlFor="settings-point-target-tg-monthly" className="block text-[11px] font-semibold uppercase tracking-wider text-muted mb-1">
+                  Target TG Bulanan
+                </label>
+                <input
+                  id="settings-point-target-tg-monthly"
+                  type="number"
+                  min={0}
+                  value={pointTargetTGMonthly}
+                  onChange={(e) => setPointTargetTGMonthly(e.target.value)}
                   className="w-32 rounded-lg border border-border/80 bg-surface-subtle px-3 py-1.5 text-xs font-mono text-foreground focus:outline-none focus:ring-2 focus:ring-accent/20 focus:border-accent transition-all"
                 />
               </div>
