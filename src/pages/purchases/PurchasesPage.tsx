@@ -74,6 +74,44 @@ interface TopPurchasedItemRow {
   avgPrice: number;
 }
 
+interface PurchaseImportPreviewData {
+  filename: string;
+  totalInvoices: number;
+  totalItems: number;
+  newCount: number;
+  duplicateCount: number;
+  errorCount: number;
+  periodStart: string | null;
+  periodEnd: string | null;
+  totalSpend: number;
+  errors: { row: number; message: string }[];
+  duplicates: {
+    invoiceNumber: string;
+    date: string;
+    vendor: string;
+    outletName: string;
+    total: number;
+    itemsCount: number;
+    existingDate: string;
+    existingVendor: string;
+    existingOutlet: string;
+    existingTotal: number;
+    existingBatch: {
+      id: number;
+      filename: string;
+      uploadedAt: string;
+    } | null;
+  }[];
+  newSample: {
+    invoiceNumber: string;
+    date: string;
+    vendor: string;
+    outletName: string;
+    total: number;
+    itemsCount: number;
+  }[];
+}
+
 export function PurchasesPage() {
   const [activeTab, setActiveTab] = useState<"vendors" | "invoices" | "items">("vendors");
 
@@ -102,11 +140,16 @@ export function PurchasesPage() {
   const [activeInvoiceDetail, setActiveInvoiceDetail] = useState<PurchaseInvoiceDetail | null>(null);
   const [detailLoading, setDetailLoading] = useState(false);
 
-  // Import Modal
+  // Import Modal & Duplicate Detection
   const [showImportModal, setShowImportModal] = useState(false);
   const [importTab, setImportTab] = useState<"file" | "paste">("file");
   const [importFile, setImportFile] = useState<File | null>(null);
   const [importText, setImportText] = useState("");
+  const [previewLoading, setPreviewLoading] = useState(false);
+  const [previewData, setPreviewData] = useState<PurchaseImportPreviewData | null>(null);
+  const [duplicateMode, setDuplicateMode] = useState<"skip" | "overwrite">("skip");
+  const [showDuplicateList, setShowDuplicateList] = useState(false);
+  const [showNewList, setShowNewList] = useState(false);
   const [importBusy, setImportBusy] = useState(false);
   const [importError, setImportError] = useState<string | null>(null);
   const [importSuccess, setImportSuccess] = useState<string | null>(null);
@@ -208,10 +251,26 @@ export function PurchasesPage() {
     }
   }
 
-  // Handle Import Submit
-  async function handleImportSubmit(e: React.FormEvent) {
+  function resetImportModal() {
+    setShowImportModal(false);
+    setPreviewData(null);
+    setImportError(null);
+    setShowDuplicateList(false);
+    setShowNewList(false);
+    setDuplicateMode("skip");
+  }
+
+  function handleBackToInput() {
+    setPreviewData(null);
+    setImportError(null);
+    setShowDuplicateList(false);
+    setShowNewList(false);
+  }
+
+  // Handle Check Duplicates / Preview
+  async function handleCheckDuplicates(e: React.FormEvent) {
     e.preventDefault();
-    setImportBusy(true);
+    setPreviewLoading(true);
     setImportError(null);
     setImportSuccess(null);
 
@@ -220,11 +279,57 @@ export function PurchasesPage() {
       if (importTab === "file") {
         if (!importFile) {
           setImportError("Pilih file Excel/CSV terlebih dahulu.");
+          setPreviewLoading(false);
+          return;
+        }
+        const fd = new FormData();
+        fd.append("file", importFile);
+        res = await fetch("/api/purchases/preview", { method: "POST", body: fd });
+      } else {
+        if (!importText.trim()) {
+          setImportError("Salin dan tempel data CSV/teks terlebih dahulu.");
+          setPreviewLoading(false);
+          return;
+        }
+        res = await fetch("/api/purchases/preview", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ text: importText }),
+        });
+      }
+
+      const data = await res.json();
+      if (!res.ok) {
+        setImportError(data.error || "Gagal memeriksa data file pembelian.");
+      } else {
+        setPreviewData(data);
+        setDuplicateMode("skip");
+      }
+    } catch {
+      setImportError("Terjadi kesalahan jaringan saat memeriksa file.");
+    } finally {
+      setPreviewLoading(false);
+    }
+  }
+
+  // Handle Import Submit
+  async function handleImportSubmit() {
+    if (!previewData) return;
+    setImportBusy(true);
+    setImportError(null);
+    setImportSuccess(null);
+
+    try {
+      let res: Response;
+      if (importTab === "file") {
+        if (!importFile) {
+          setImportError("File tidak ditemukan. Silakan pilih kembali file Anda.");
           setImportBusy(false);
           return;
         }
         const fd = new FormData();
         fd.append("file", importFile);
+        fd.append("duplicateMode", duplicateMode);
         res = await fetch("/api/purchases/import", { method: "POST", body: fd });
       } else {
         if (!importText.trim()) {
@@ -235,7 +340,7 @@ export function PurchasesPage() {
         res = await fetch("/api/purchases/import", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ text: importText }),
+          body: JSON.stringify({ text: importText, duplicateMode }),
         });
       }
 
@@ -249,9 +354,14 @@ export function PurchasesPage() {
               ? ` Periode: ${formatDate(data.periodStart)}.`
               : ` Periode: ${formatDate(data.periodStart)} – ${formatDate(data.periodEnd)}.`
             : "";
+        const skippedTxt = data.skippedInvoices > 0 ? `, ${data.skippedInvoices} faktur duplikat dilewati` : "";
+        const updatedTxt = data.updatedInvoices > 0 ? `, ${data.updatedInvoices} diperbarui` : "";
+
         setImportSuccess(
-          `✓ Berhasil mengimpor ${data.totalInvoices} nota (${data.insertedInvoices} baru, ${data.updatedInvoices} diperbarui; ${data.totalItems} baris barang). Total belanja: ${formatRupiah(data.totalSpend)}.${periode}`
+          `✓ Berhasil mengimpor ${data.insertedInvoices} faktur baru${skippedTxt}${updatedTxt} (${data.totalItems} baris barang). Total belanja: ${formatRupiah(data.totalSpend)}.${periode}`
         );
+        setShowImportModal(false);
+        setPreviewData(null);
         setImportFile(null);
         setImportText("");
         await loadOptions();
@@ -283,7 +393,6 @@ export function PurchasesPage() {
             type="button"
             onClick={() => {
               setImportError(null);
-              setImportSuccess(null);
               setShowImportModal(true);
             }}
             className="inline-flex items-center gap-1.5 rounded-lg bg-accent text-accent-foreground px-3.5 py-1.5 text-xs font-semibold hover:bg-accent-hover transition-all shadow-xs"
@@ -292,6 +401,23 @@ export function PurchasesPage() {
           </button>
         </div>
       </div>
+
+      {/* Success Notification Banner */}
+      {importSuccess && (
+        <div className="rounded-xl border border-emerald-500/30 bg-emerald-500/10 p-3.5 flex items-center justify-between gap-3 text-xs text-emerald-700 dark:text-emerald-400 font-medium animate-in fade-in">
+          <div className="flex items-center gap-2">
+            <span>✅</span>
+            <span>{importSuccess}</span>
+          </div>
+          <button
+            type="button"
+            onClick={() => setImportSuccess(null)}
+            className="text-muted hover:text-foreground text-xs"
+          >
+            ✕
+          </button>
+        </div>
+      )}
 
       {/* Filter Bar */}
       <div className="rounded-xl border border-border/80 bg-surface p-4 shadow-xs space-y-3">
@@ -831,99 +957,403 @@ export function PurchasesPage() {
       {/* MODAL IMPORT PEMBELIAN */}
       {showImportModal && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-xs animate-in fade-in duration-150">
-          <div className="w-full max-w-2xl rounded-2xl bg-surface border border-border shadow-2xl p-6 space-y-4">
-            <div className="flex items-center justify-between pb-2 border-b border-border/80">
-              <h3 className="text-base font-bold text-foreground flex items-center gap-2">
-                <span>📥 Import Faktur / Nota Pembelian</span>
-              </h3>
+          <div className="w-full max-w-3xl max-h-[92vh] flex flex-col rounded-2xl bg-surface border border-border shadow-2xl p-6 space-y-4 overflow-y-auto">
+            {/* Header Modal */}
+            <div className="flex items-center justify-between pb-3 border-b border-border/80">
+              <div className="flex items-center gap-2">
+                <span className="text-base font-bold text-foreground">
+                  {previewData ? "🔍 Pratinjau & Deteksi Duplikat Pembelian" : "📥 Import Faktur / Nota Pembelian"}
+                </span>
+                {previewData && (
+                  <span className="text-[11px] font-mono bg-surface-subtle text-muted px-2 py-0.5 rounded border border-border/60">
+                    Langkah 2 dari 2: Verifikasi
+                  </span>
+                )}
+              </div>
               <button
                 type="button"
-                onClick={() => setShowImportModal(false)}
-                className="text-muted hover:text-foreground text-sm"
+                onClick={resetImportModal}
+                className="text-muted hover:text-foreground text-sm p-1 rounded-md hover:bg-surface-hover transition-colors"
               >
                 ✕
               </button>
             </div>
 
-            <p className="text-xs text-muted leading-relaxed">
-              Unggah file export faktur pembelian (.xlsx / .xls / .csv) atau salin teks data tabel dari POS (kolom: <code>No Faktur, Tanggal, Cabang, Vendor, Total, Kode Item, Nama Item, Qty, Harga, Subtotal Item</code>).
-            </p>
-
-            {/* Import Tabs */}
-            <div className="inline-flex rounded-lg bg-surface-subtle p-1 border border-border/60">
-              <button
-                type="button"
-                onClick={() => setImportTab("file")}
-                className={`px-3 py-1 text-xs font-semibold rounded-md transition-all ${
-                  importTab === "file" ? "bg-surface text-foreground shadow-xs" : "text-muted hover:text-foreground"
-                }`}
-              >
-                📁 Unggah File Excel / CSV
-              </button>
-              <button
-                type="button"
-                onClick={() => setImportTab("paste")}
-                className={`px-3 py-1 text-xs font-semibold rounded-md transition-all ${
-                  importTab === "paste" ? "bg-surface text-foreground shadow-xs" : "text-muted hover:text-foreground"
-                }`}
-              >
-                📋 Salin &amp; Tempel Teks CSV
-              </button>
-            </div>
-
-            <form onSubmit={handleImportSubmit} className="space-y-4">
-              {importTab === "file" ? (
-                <div>
-                  <input
-                    type="file"
-                    accept=".xlsx,.xls,.csv"
-                    onChange={(e) => setImportFile(e.target.files?.[0] || null)}
-                    className="w-full rounded-lg border border-border/80 bg-surface-subtle p-3 text-xs text-foreground file:mr-3 file:py-1.5 file:px-3 file:rounded-md file:border-0 file:text-xs file:font-semibold file:bg-accent file:text-accent-foreground hover:file:bg-accent-hover cursor-pointer"
-                  />
-                  {importFile && (
-                    <p className="text-[11px] text-muted mt-1.5">File terpilih: <strong>{importFile.name}</strong> ({Math.round(importFile.size / 1024)} KB)</p>
-                  )}
-                </div>
-              ) : (
-                <div>
-                  <textarea
-                    rows={6}
-                    value={importText}
-                    onChange={(e) => setImportText(e.target.value)}
-                    placeholder="Tempel baris data CSV faktur pembelian di sini..."
-                    className="w-full rounded-lg border border-border/80 bg-surface-subtle p-3 text-xs font-mono text-foreground placeholder:text-muted/60 focus:outline-none focus:ring-2 focus:ring-accent/20 focus:border-accent"
-                  />
-                </div>
-              )}
-
-              {importError && (
-                <div className="rounded-lg bg-rose-500/10 border border-rose-500/20 p-3 text-xs text-rose-600 dark:text-rose-400 font-medium">
-                  {importError}
-                </div>
-              )}
-              {importSuccess && (
-                <div className="rounded-lg bg-emerald-500/10 border border-emerald-500/20 p-3 text-xs text-emerald-600 dark:text-emerald-400 font-medium">
-                  {importSuccess}
-                </div>
-              )}
-
-              <div className="flex items-center justify-end gap-2 pt-2 border-t border-border/60">
-                <button
-                  type="button"
-                  onClick={() => setShowImportModal(false)}
-                  className="rounded-lg border border-border/80 bg-surface px-4 py-1.5 text-xs font-semibold text-foreground hover:bg-surface-hover transition-colors"
-                >
-                  Tutup
-                </button>
-                <button
-                  type="submit"
-                  disabled={importBusy}
-                  className="rounded-lg bg-accent text-accent-foreground px-4 py-1.5 text-xs font-semibold hover:bg-accent-hover disabled:opacity-50 transition-colors shadow-xs"
-                >
-                  {importBusy ? "Memproses..." : "Mulai Import Data"}
-                </button>
+            {/* Error Message */}
+            {importError && (
+              <div className="rounded-lg bg-rose-500/10 border border-rose-500/20 p-3 text-xs text-rose-600 dark:text-rose-400 font-medium">
+                {importError}
               </div>
-            </form>
+            )}
+
+            {/* STEP 1: FILE / TEXT INPUT */}
+            {!previewData && (
+              <form onSubmit={handleCheckDuplicates} className="space-y-4">
+                <p className="text-xs text-muted leading-relaxed">
+                  Unggah file export faktur pembelian (.xlsx / .xls / .csv) atau salin teks data tabel dari POS. Sistem akan otomatis mendeteksi apakah data faktur sudah pernah diimpor untuk mencegah duplikasi (terinput 2x).
+                </p>
+
+                {/* Import Tabs */}
+                <div className="inline-flex rounded-lg bg-surface-subtle p-1 border border-border/60">
+                  <button
+                    type="button"
+                    onClick={() => setImportTab("file")}
+                    className={`px-3 py-1 text-xs font-semibold rounded-md transition-all ${
+                      importTab === "file" ? "bg-surface text-foreground shadow-xs" : "text-muted hover:text-foreground"
+                    }`}
+                  >
+                    📁 Unggah File Excel / CSV
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setImportTab("paste")}
+                    className={`px-3 py-1 text-xs font-semibold rounded-md transition-all ${
+                      importTab === "paste" ? "bg-surface text-foreground shadow-xs" : "text-muted hover:text-foreground"
+                    }`}
+                  >
+                    📋 Salin &amp; Tempel Teks CSV
+                  </button>
+                </div>
+
+                {importTab === "file" ? (
+                  <div>
+                    <input
+                      type="file"
+                      accept=".xlsx,.xls,.csv"
+                      onChange={(e) => {
+                        setImportFile(e.target.files?.[0] || null);
+                        setImportError(null);
+                      }}
+                      className="w-full rounded-lg border border-border/80 bg-surface-subtle p-3 text-xs text-foreground file:mr-3 file:py-1.5 file:px-3 file:rounded-md file:border-0 file:text-xs file:font-semibold file:bg-accent file:text-accent-foreground hover:file:bg-accent-hover cursor-pointer"
+                    />
+                    {importFile && (
+                      <p className="text-[11px] text-muted mt-1.5">
+                        File terpilih: <strong>{importFile.name}</strong> ({Math.round(importFile.size / 1024)} KB)
+                      </p>
+                    )}
+                  </div>
+                ) : (
+                  <div>
+                    <textarea
+                      rows={6}
+                      value={importText}
+                      onChange={(e) => {
+                        setImportText(e.target.value);
+                        setImportError(null);
+                      }}
+                      placeholder="Tempel baris data CSV faktur pembelian di sini..."
+                      className="w-full rounded-lg border border-border/80 bg-surface-subtle p-3 text-xs font-mono text-foreground placeholder:text-muted/60 focus:outline-none focus:ring-2 focus:ring-accent/20 focus:border-accent"
+                    />
+                  </div>
+                )}
+
+                <div className="flex items-center justify-end gap-2 pt-3 border-t border-border/60">
+                  <button
+                    type="button"
+                    onClick={resetImportModal}
+                    className="rounded-lg border border-border/80 bg-surface px-4 py-1.5 text-xs font-semibold text-foreground hover:bg-surface-hover transition-colors"
+                  >
+                    Batal
+                  </button>
+                  <button
+                    type="submit"
+                    disabled={previewLoading || (importTab === "file" ? !importFile : !importText.trim())}
+                    className="rounded-lg bg-accent text-accent-foreground px-4 py-1.5 text-xs font-semibold hover:bg-accent-hover disabled:opacity-50 transition-colors shadow-xs inline-flex items-center gap-1.5"
+                  >
+                    {previewLoading ? "🔍 Memeriksa Data & Duplikat..." : "🔍 Periksa Data & Cek Duplikat"}
+                  </button>
+                </div>
+              </form>
+            )}
+
+            {/* STEP 2: PREVIEW & DUPLICATE DETECTION RESULT */}
+            {previewData && (
+              <div className="space-y-4">
+                {/* File info banner */}
+                <div className="flex flex-wrap items-center justify-between gap-2 p-3 rounded-lg bg-surface-subtle border border-border/70 text-xs">
+                  <div>
+                    <span className="text-muted">Nama Sumber: </span>
+                    <strong className="text-foreground">{previewData.filename}</strong>
+                  </div>
+                  <div>
+                    <span className="text-muted">Periode Data: </span>
+                    <span className="font-mono font-medium text-foreground">
+                      {previewData.periodStart && previewData.periodEnd
+                        ? previewData.periodStart === previewData.periodEnd
+                          ? formatDate(previewData.periodStart)
+                          : `${formatDate(previewData.periodStart)} – ${formatDate(previewData.periodEnd)}`
+                        : "-"}
+                    </span>
+                  </div>
+                </div>
+
+                {/* 4 Metric Cards */}
+                <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5">
+                  <div className="rounded-xl border border-border/80 bg-surface-subtle/50 p-3">
+                    <div className="text-[11px] text-muted font-medium">Total Faktur</div>
+                    <div className="text-lg font-bold font-mono text-foreground mt-0.5">
+                      {formatNumber(previewData.totalInvoices)}
+                    </div>
+                    <div className="text-[10px] text-muted">{formatNumber(previewData.totalItems)} baris item</div>
+                  </div>
+                  <div className="rounded-xl border border-emerald-500/30 bg-emerald-500/10 p-3">
+                    <div className="text-[11px] text-emerald-700 dark:text-emerald-400 font-medium">✨ Faktur Baru</div>
+                    <div className="text-lg font-bold font-mono text-emerald-600 dark:text-emerald-400 mt-0.5">
+                      {formatNumber(previewData.newCount)}
+                    </div>
+                    <div className="text-[10px] text-emerald-700/80 dark:text-emerald-400/80">Siap diimpor</div>
+                  </div>
+                  <div
+                    className={`rounded-xl border p-3 ${
+                      previewData.duplicateCount > 0
+                        ? "border-amber-500/40 bg-amber-500/10"
+                        : "border-border/80 bg-surface-subtle/50"
+                    }`}
+                  >
+                    <div
+                      className={`text-[11px] font-medium ${
+                        previewData.duplicateCount > 0 ? "text-amber-700 dark:text-amber-400" : "text-muted"
+                      }`}
+                    >
+                      ⚠️ Sudah Terdaftar
+                    </div>
+                    <div
+                      className={`text-lg font-bold font-mono mt-0.5 ${
+                        previewData.duplicateCount > 0 ? "text-amber-600 dark:text-amber-400" : "text-foreground"
+                      }`}
+                    >
+                      {formatNumber(previewData.duplicateCount)}
+                    </div>
+                    <div className="text-[10px] text-muted">
+                      {previewData.duplicateCount > 0 ? "Faktur duplikat" : "Tidak ada duplikat"}
+                    </div>
+                  </div>
+                  <div className="rounded-xl border border-border/80 bg-surface-subtle/50 p-3">
+                    <div className="text-[11px] text-muted font-medium">Total Nilai Belanja</div>
+                    <div className="text-xs font-bold font-mono text-foreground mt-1 truncate">
+                      {formatRupiah(previewData.totalSpend)}
+                    </div>
+                    <div className="text-[10px] text-muted">Rupiah</div>
+                  </div>
+                </div>
+
+                {/* Duplicate Detection Alert & Options */}
+                {previewData.duplicateCount > 0 ? (
+                  <div className="rounded-xl border border-amber-500/40 bg-amber-500/10 p-4 space-y-3">
+                    <div className="flex items-start gap-2.5">
+                      <span className="text-lg leading-none mt-0.5">⚠️</span>
+                      <div className="space-y-1">
+                        <h4 className="text-xs font-bold text-amber-800 dark:text-amber-300">
+                          {previewData.newCount === 0
+                            ? `PERINGATAN: Seluruh faktur (${previewData.duplicateCount} nota) sudah pernah diimpor!`
+                            : `Terdeteksi ${previewData.duplicateCount} faktur sudah ada di sistem database!`}
+                        </h4>
+                        <p className="text-[11px] text-amber-700 dark:text-amber-400/90 leading-relaxed">
+                          Nomor faktur di bawah ini telah terdaftar di database. Sistem mendeteksi adanya potensi impor data ganda (double-counting). Pilih opsi penanganan di bawah ini:
+                        </p>
+                      </div>
+                    </div>
+
+                    <div className="space-y-2 pt-1 border-t border-amber-500/20">
+                      <label
+                        className={`flex items-start gap-3 p-2.5 rounded-lg border transition-all cursor-pointer ${
+                          duplicateMode === "skip"
+                            ? "border-emerald-500/60 bg-emerald-500/10 shadow-xs"
+                            : "border-border/80 bg-surface/80 hover:bg-surface"
+                        }`}
+                      >
+                        <input
+                          type="radio"
+                          name="duplicateMode"
+                          value="skip"
+                          checked={duplicateMode === "skip"}
+                          onChange={() => setDuplicateMode("skip")}
+                          className="mt-0.5 text-emerald-600 focus:ring-emerald-500"
+                        />
+                        <div className="space-y-0.5">
+                          <div className="text-xs font-bold text-foreground flex items-center gap-1.5">
+                            <span>✅ Lewati Faktur Duplikat (Rekomendasi Aman)</span>
+                          </div>
+                          <p className="text-[11px] text-muted leading-relaxed">
+                            {previewData.newCount > 0
+                              ? `Hanya ${previewData.newCount} faktur baru yang akan diimpor. Sebanyak ${previewData.duplicateCount} faktur yang sudah ada tidak akan diubah atau digandakan.`
+                              : `Semua ${previewData.duplicateCount} faktur sudah ada di database. Tidak ada data baru yang akan diimpor.`}
+                          </p>
+                        </div>
+                      </label>
+
+                      <label
+                        className={`flex items-start gap-3 p-2.5 rounded-lg border transition-all cursor-pointer ${
+                          duplicateMode === "overwrite"
+                            ? "border-amber-500/60 bg-amber-500/10 shadow-xs"
+                            : "border-border/80 bg-surface/80 hover:bg-surface"
+                        }`}
+                      >
+                        <input
+                          type="radio"
+                          name="duplicateMode"
+                          value="overwrite"
+                          checked={duplicateMode === "overwrite"}
+                          onChange={() => setDuplicateMode("overwrite")}
+                          className="mt-0.5 text-amber-600 focus:ring-amber-500"
+                        />
+                        <div className="space-y-0.5">
+                          <div className="text-xs font-bold text-foreground">
+                            ⚠️ Timpa / Perbarui Faktur Lama yang Sudah Ada
+                          </div>
+                          <p className="text-[11px] text-muted leading-relaxed">
+                            Perbarui {previewData.duplicateCount} faktur lama dengan data item dan nilai baru dari file ini.
+                          </p>
+                        </div>
+                      </label>
+                    </div>
+                  </div>
+                ) : (
+                  <div className="rounded-xl border border-emerald-500/40 bg-emerald-500/10 p-3.5 flex items-center gap-2.5 text-xs text-emerald-700 dark:text-emerald-400 font-medium">
+                    <span className="text-base">✅</span>
+                    <span>
+                      Aman! Tidak ditemukan data duplikat. Seluruh <strong>{previewData.newCount} faktur</strong> adalah data baru dan siap diimpor.
+                    </span>
+                  </div>
+                )}
+
+                {/* Collapsible: Duplicates List */}
+                {previewData.duplicateCount > 0 && (
+                  <div className="rounded-xl border border-border/80 bg-surface overflow-hidden">
+                    <button
+                      type="button"
+                      onClick={() => setShowDuplicateList(!showDuplicateList)}
+                      className="w-full flex items-center justify-between p-3 text-xs font-semibold text-foreground bg-surface-subtle/50 hover:bg-surface-subtle transition-colors"
+                    >
+                      <span className="flex items-center gap-1.5 text-amber-600 dark:text-amber-400">
+                        <span>📋 Rincian {previewData.duplicates.length} Faktur yang Sudah Terdaftar di Sistem</span>
+                      </span>
+                      <span className="text-muted text-[11px]">{showDuplicateList ? "▲ Sembunyikan" : "▼ Tampilkan"}</span>
+                    </button>
+                    {showDuplicateList && (
+                      <div className="max-h-56 overflow-y-auto border-t border-border/80 p-2">
+                        <table className="w-full text-[11px]">
+                          <thead className="bg-surface-subtle/70 text-muted border-b border-border/60 sticky top-0">
+                            <tr>
+                              <th className="px-2 py-1.5 text-left">No Faktur</th>
+                              <th className="px-2 py-1.5 text-left">Tanggal</th>
+                              <th className="px-2 py-1.5 text-left">Suplier</th>
+                              <th className="px-2 py-1.5 text-left">Cabang</th>
+                              <th className="px-2 py-1.5 text-right">Nilai Faktur</th>
+                              <th className="px-2 py-1.5 text-left">Riwayat Upload Sebelumnya</th>
+                            </tr>
+                          </thead>
+                          <tbody className="divide-y divide-border/40 font-mono">
+                            {previewData.duplicates.map((d) => (
+                              <tr key={d.invoiceNumber} className="hover:bg-surface-hover/50">
+                                <td className="px-2 py-1.5 font-bold text-foreground">{d.invoiceNumber}</td>
+                                <td className="px-2 py-1.5 text-muted">{d.date}</td>
+                                <td className="px-2 py-1.5 font-sans text-foreground">{d.vendor}</td>
+                                <td className="px-2 py-1.5 font-sans text-muted">{d.outletName}</td>
+                                <td className="px-2 py-1.5 text-right text-foreground font-semibold">
+                                  {formatRupiah(d.total)}
+                                </td>
+                                <td className="px-2 py-1.5 font-sans text-muted text-[10px]">
+                                  {d.existingBatch ? (
+                                    <span>
+                                      Diimpor {formatDate(d.existingBatch.uploadedAt)} ({d.existingBatch.filename})
+                                    </span>
+                                  ) : (
+                                    <span>Sudah tersimpan di database</span>
+                                  )}
+                                </td>
+                              </tr>
+                            ))}
+                          </tbody>
+                        </table>
+                      </div>
+                    )}
+                  </div>
+                )}
+
+                {/* Collapsible: New Invoices Sample */}
+                {previewData.newCount > 0 && (
+                  <div className="rounded-xl border border-border/80 bg-surface overflow-hidden">
+                    <button
+                      type="button"
+                      onClick={() => setShowNewList(!showNewList)}
+                      className="w-full flex items-center justify-between p-3 text-xs font-semibold text-foreground bg-surface-subtle/50 hover:bg-surface-subtle transition-colors"
+                    >
+                      <span className="flex items-center gap-1.5 text-emerald-600 dark:text-emerald-400">
+                        <span>✨ Sampel Faktur Baru ({Math.min(previewData.newSample.length, previewData.newCount)} dari {previewData.newCount} nota)</span>
+                      </span>
+                      <span className="text-muted text-[11px]">{showNewList ? "▲ Sembunyikan" : "▼ Tampilkan"}</span>
+                    </button>
+                    {showNewList && (
+                      <div className="max-h-56 overflow-y-auto border-t border-border/80 p-2">
+                        <table className="w-full text-[11px]">
+                          <thead className="bg-surface-subtle/70 text-muted border-b border-border/60 sticky top-0">
+                            <tr>
+                              <th className="px-2 py-1.5 text-left">No Faktur</th>
+                              <th className="px-2 py-1.5 text-left">Tanggal</th>
+                              <th className="px-2 py-1.5 text-left">Suplier</th>
+                              <th className="px-2 py-1.5 text-left">Cabang</th>
+                              <th className="px-2 py-1.5 text-right">Item</th>
+                              <th className="px-2 py-1.5 text-right">Nilai Faktur</th>
+                            </tr>
+                          </thead>
+                          <tbody className="divide-y divide-border/40 font-mono">
+                            {previewData.newSample.map((n) => (
+                              <tr key={n.invoiceNumber} className="hover:bg-surface-hover/50">
+                                <td className="px-2 py-1.5 font-bold text-foreground">{n.invoiceNumber}</td>
+                                <td className="px-2 py-1.5 text-muted">{n.date}</td>
+                                <td className="px-2 py-1.5 font-sans text-foreground">{n.vendor}</td>
+                                <td className="px-2 py-1.5 font-sans text-muted">{n.outletName}</td>
+                                <td className="px-2 py-1.5 text-right text-muted">{n.itemsCount}</td>
+                                <td className="px-2 py-1.5 text-right text-emerald-600 dark:text-emerald-400 font-semibold">
+                                  {formatRupiah(n.total)}
+                                </td>
+                              </tr>
+                            ))}
+                          </tbody>
+                        </table>
+                      </div>
+                    )}
+                  </div>
+                )}
+
+                {/* Footer Buttons */}
+                <div className="flex items-center justify-between pt-3 border-t border-border/60">
+                  <button
+                    type="button"
+                    onClick={handleBackToInput}
+                    disabled={importBusy}
+                    className="rounded-lg border border-border/80 bg-surface px-3 py-1.5 text-xs font-semibold text-foreground hover:bg-surface-hover transition-colors"
+                  >
+                    ← Ganti File / Kembali
+                  </button>
+                  <div className="flex items-center gap-2">
+                    <button
+                      type="button"
+                      onClick={resetImportModal}
+                      disabled={importBusy}
+                      className="rounded-lg border border-border/80 bg-surface px-3.5 py-1.5 text-xs font-semibold text-foreground hover:bg-surface-hover transition-colors"
+                    >
+                      Batal
+                    </button>
+                    <button
+                      type="button"
+                      onClick={handleImportSubmit}
+                      disabled={importBusy || (duplicateMode === "skip" && previewData.newCount === 0)}
+                      className="rounded-lg bg-accent text-accent-foreground px-4 py-1.5 text-xs font-semibold hover:bg-accent-hover disabled:opacity-50 transition-colors shadow-xs"
+                    >
+                      {importBusy
+                        ? "Mengimpor Data..."
+                        : duplicateMode === "skip"
+                        ? previewData.newCount > 0
+                          ? `Konfirmasi & Impor ${previewData.newCount} Faktur Baru`
+                          : "Semua Duplikat Dilewati (0 Baru)"
+                        : `Konfirmasi & Timpa Semua (${previewData.totalInvoices} Faktur)`}
+                    </button>
+                  </div>
+                </div>
+              </div>
+            )}
           </div>
         </div>
       )}

@@ -455,16 +455,154 @@ export async function listPurchasedOutlets(): Promise<string[]> {
   return rows.map((r) => r.outletName).filter(Boolean);
 }
 
+function isoDate(d: Date | null | undefined): string | null {
+  return d ? d.toISOString().slice(0, 10) : null;
+}
+
+export interface PurchaseDuplicateInvoice {
+  invoiceNumber: string;
+  date: string;
+  vendor: string;
+  outletName: string;
+  total: number;
+  itemsCount: number;
+  existingDate: string;
+  existingVendor: string;
+  existingOutlet: string;
+  existingTotal: number;
+  existingBatch: {
+    id: number;
+    filename: string;
+    uploadedAt: string;
+  } | null;
+}
+
+export interface PurchaseNewInvoiceSample {
+  invoiceNumber: string;
+  date: string;
+  vendor: string;
+  outletName: string;
+  total: number;
+  itemsCount: number;
+}
+
+export interface PurchaseImportPreview {
+  totalInvoices: number;
+  totalItems: number;
+  newCount: number;
+  duplicateCount: number;
+  errorCount: number;
+  periodStart: string | null;
+  periodEnd: string | null;
+  totalSpend: number;
+  errors: { row: number; message: string }[];
+  duplicates: PurchaseDuplicateInvoice[];
+  newSample: PurchaseNewInvoiceSample[];
+}
+
+export async function previewPurchaseImport(
+  invoices: ParsedPurchaseInvoice[],
+  errors: { row: number; message: string }[] = []
+): Promise<PurchaseImportPreview> {
+  await ensureDefaults();
+
+  const invoiceNumbers = invoices.map((i) => i.invoiceNumber);
+  const existingList = await prisma.purchaseInvoice.findMany({
+    where: { invoiceNumber: { in: invoiceNumbers } },
+    select: {
+      invoiceNumber: true,
+      date: true,
+      vendor: true,
+      outletName: true,
+      total: true,
+      batch: {
+        select: {
+          id: true,
+          filename: true,
+          uploadedAt: true,
+        },
+      },
+    },
+  });
+
+  const existingMap = new Map(existingList.map((e) => [e.invoiceNumber, e]));
+
+  let minDate: Date | null = null;
+  let maxDate: Date | null = null;
+  let totalItems = 0;
+  let totalSpend = 0;
+
+  const duplicates: PurchaseDuplicateInvoice[] = [];
+  const newSample: PurchaseNewInvoiceSample[] = [];
+
+  for (const inv of invoices) {
+    totalItems += inv.items.length;
+    totalSpend += inv.total;
+    if (!minDate || inv.date < minDate) minDate = inv.date;
+    if (!maxDate || inv.date > maxDate) maxDate = inv.date;
+
+    const exist = existingMap.get(inv.invoiceNumber);
+    if (exist) {
+      duplicates.push({
+        invoiceNumber: inv.invoiceNumber,
+        date: isoDate(inv.date) || "",
+        vendor: inv.vendor,
+        outletName: inv.outletName,
+        total: inv.total,
+        itemsCount: inv.items.length,
+        existingDate: isoDate(exist.date) || "",
+        existingVendor: exist.vendor,
+        existingOutlet: exist.outletName,
+        existingTotal: Number(exist.total),
+        existingBatch: exist.batch
+          ? {
+              id: exist.batch.id,
+              filename: exist.batch.filename,
+              uploadedAt: exist.batch.uploadedAt.toISOString(),
+            }
+          : null,
+      });
+    } else {
+      if (newSample.length < 25) {
+        newSample.push({
+          invoiceNumber: inv.invoiceNumber,
+          date: isoDate(inv.date) || "",
+          vendor: inv.vendor,
+          outletName: inv.outletName,
+          total: inv.total,
+          itemsCount: inv.items.length,
+        });
+      }
+    }
+  }
+
+  return {
+    totalInvoices: invoices.length,
+    totalItems,
+    newCount: invoices.length - duplicates.length,
+    duplicateCount: duplicates.length,
+    errorCount: errors.length,
+    periodStart: isoDate(minDate),
+    periodEnd: isoDate(maxDate),
+    totalSpend,
+    errors: errors.slice(0, 20),
+    duplicates,
+    newSample,
+  };
+}
+
 export async function importPurchases(
   invoices: ParsedPurchaseInvoice[],
   filename = "import_pembelian",
-  errorRowCount = 0
+  errorRowCount = 0,
+  duplicateMode: "skip" | "overwrite" = "skip"
 ): Promise<{
   batchId: number;
   totalInvoices: number;
   totalItems: number;
   insertedInvoices: number;
   updatedInvoices: number;
+  skippedInvoices: number;
   totalSpend: number;
   periodStart: string | null;
   periodEnd: string | null;
@@ -499,6 +637,7 @@ export async function importPurchases(
 
   let insertedInvoices = 0;
   let updatedInvoices = 0;
+  let skippedInvoices = 0;
 
   try {
     await writeInvoices();
@@ -508,7 +647,7 @@ export async function importPurchases(
       data: {
         status: "FAILED",
         insertedCount: insertedInvoices,
-        duplicateCount: updatedInvoices,
+        duplicateCount: duplicateMode === "skip" ? skippedInvoices : updatedInvoices,
         errorMessage: String(err?.message ?? err).slice(0, 500),
       },
     });
@@ -520,9 +659,7 @@ export async function importPurchases(
     data: {
       status: "DONE",
       insertedCount: insertedInvoices,
-      // "Duplikat" for purchases = invoice number already existed and was
-      // overwritten with this file's version (upsert by No Faktur).
-      duplicateCount: updatedInvoices,
+      duplicateCount: duplicateMode === "skip" ? skippedInvoices : updatedInvoices,
     },
   });
 
@@ -532,111 +669,89 @@ export async function importPurchases(
     totalItems: totalItemsCount,
     insertedInvoices,
     updatedInvoices,
+    skippedInvoices,
     totalSpend,
     periodStart: minDate ? minDate.toISOString().slice(0, 10) : null,
     periodEnd: maxDate ? maxDate.toISOString().slice(0, 10) : null,
   };
 
   async function writeInvoices() {
-  for (const inv of invoices) {
-    const existing = await prisma.purchaseInvoice.findUnique({
-      where: { invoiceNumber: inv.invoiceNumber },
-      select: { id: true },
-    });
+    for (const inv of invoices) {
+      const existing = await prisma.purchaseInvoice.findUnique({
+        where: { invoiceNumber: inv.invoiceNumber },
+        select: { id: true },
+      });
 
-    if (existing) {
-      updatedInvoices++;
-      await prisma.purchaseInvoice.update({
-        where: { id: existing.id },
-        data: {
-          date: inv.date,
-          refInvoice: inv.refInvoice,
-          outletName: inv.outletName,
-          vendor: inv.vendor,
-          currency: inv.currency,
-          subtotal: inv.subtotal,
-          tax: inv.tax,
-          discount: inv.discount,
-          otherFee: inv.otherFee,
-          total: inv.total,
-          batchId: batch.id,
-          items: {
-            deleteMany: {},
-            create: inv.items.map((it) => ({
-              itemSeq: it.itemSeq,
-              itemCode: it.itemCode,
-              itemName: it.itemName,
-              qty: it.qty,
-              unit: it.unit,
-              discount: it.discount,
-              tax: it.tax,
-              price: it.price,
-              subtotal: it.subtotal,
-            })),
+      if (existing) {
+        if (duplicateMode === "skip") {
+          skippedInvoices++;
+          continue;
+        }
+        updatedInvoices++;
+        await prisma.purchaseInvoice.update({
+          where: { id: existing.id },
+          data: {
+            date: inv.date,
+            refInvoice: inv.refInvoice,
+            outletName: inv.outletName,
+            vendor: inv.vendor,
+            currency: inv.currency,
+            subtotal: inv.subtotal,
+            tax: inv.tax,
+            discount: inv.discount,
+            otherFee: inv.otherFee,
+            total: inv.total,
+            batchId: batch.id,
+            items: {
+              deleteMany: {},
+              create: inv.items.map((it) => ({
+                itemSeq: it.itemSeq,
+                itemCode: it.itemCode,
+                itemName: it.itemName,
+                qty: it.qty,
+                unit: it.unit,
+                discount: it.discount,
+                tax: it.tax,
+                price: it.price,
+                subtotal: it.subtotal,
+              })),
+            },
           },
-        },
-      });
-    } else {
-      insertedInvoices++;
-      await prisma.purchaseInvoice.create({
-        data: {
-          invoiceNumber: inv.invoiceNumber,
-          date: inv.date,
-          refInvoice: inv.refInvoice,
-          outletName: inv.outletName,
-          vendor: inv.vendor,
-          currency: inv.currency,
-          subtotal: inv.subtotal,
-          tax: inv.tax,
-          discount: inv.discount,
-          otherFee: inv.otherFee,
-          total: inv.total,
-          batchId: batch.id,
-          items: {
-            create: inv.items.map((it) => ({
-              itemSeq: it.itemSeq,
-              itemCode: it.itemCode,
-              itemName: it.itemName,
-              qty: it.qty,
-              unit: it.unit,
-              discount: it.discount,
-              tax: it.tax,
-              price: it.price,
-              subtotal: it.subtotal,
-            })),
+        });
+      } else {
+        insertedInvoices++;
+        await prisma.purchaseInvoice.create({
+          data: {
+            invoiceNumber: inv.invoiceNumber,
+            date: inv.date,
+            refInvoice: inv.refInvoice,
+            outletName: inv.outletName,
+            vendor: inv.vendor,
+            currency: inv.currency,
+            subtotal: inv.subtotal,
+            tax: inv.tax,
+            discount: inv.discount,
+            otherFee: inv.otherFee,
+            total: inv.total,
+            batchId: batch.id,
+            items: {
+              create: inv.items.map((it) => ({
+                itemSeq: it.itemSeq,
+                itemCode: it.itemCode,
+                itemName: it.itemName,
+                qty: it.qty,
+                unit: it.unit,
+                discount: it.discount,
+                tax: it.tax,
+                price: it.price,
+                subtotal: it.subtotal,
+              })),
+            },
           },
-        },
-      });
+        });
+      }
     }
   }
-  }
-}
-
-export interface PurchaseBatchHistoryItem {
-  id: number;
-  filename: string;
-  uploadedAt: string;
-  status: "PROCESSING" | "DONE" | "FAILED";
-  errorMessage: string | null;
-  rowCount: number;
-  insertedCount: number;
-  duplicateCount: number;
-  errorRowCount: number;
-  /** Period as recorded at upload time (min/max tanggal nota in the file). */
-  filePeriodStart: string | null;
-  filePeriodEnd: string | null;
-  /** Period of the invoices that STILL belong to this batch right now. Differs
-   *  from the file period when some of its invoices were later re-imported by
-   *  a newer batch (upsert by No Faktur moves them) or deleted individually. */
-  periodStart: string | null;
-  periodEnd: string | null;
-  invoiceCount: number;
-  itemCount: number;
-  totalSpend: number;
-}
-
-function isoDate(d: Date | null | undefined): string | null {
-  return d ? d.toISOString().slice(0, 10) : null;
 }
 
 export async function listPurchaseBatches(): Promise<PurchaseBatchHistoryItem[]> {

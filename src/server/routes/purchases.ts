@@ -7,6 +7,7 @@ import {
   getTopPurchasedItems,
   listPurchasedVendors,
   listPurchasedOutlets,
+  previewPurchaseImport,
   importPurchases,
   deletePurchaseInvoice,
   listPurchaseBatches,
@@ -102,6 +103,45 @@ purchasesRouter.get("/api/purchases/invoices/:id", requireFeature("purchases"), 
   }
 });
 
+// Preview purchase invoices & detect duplicates before importing
+purchasesRouter.post(
+  "/api/purchases/preview",
+  requireMaster,
+  upload.single("file"),
+  async (req: Request, res: Response) => {
+    try {
+      let parsed;
+      let filename = "pasted_purchases.csv";
+
+      if (req.file) {
+        filename = req.file.originalname;
+        parsed = parsePurchaseBuffer(req.file.buffer);
+      } else if (req.body.text && typeof req.body.text === "string") {
+        parsed = parsePurchaseText(req.body.text);
+      } else {
+        return res.status(400).json({ error: "File Excel/CSV atau teks data pembelian wajib disertakan." });
+      }
+
+      if (parsed.invoices.length === 0) {
+        return res.status(400).json({
+          error: "Tidak ada faktur pembelian yang valid ditemukan dalam data yang diunggah.",
+          details: parsed.errors.map((e) => `Baris ${e.row}: ${e.message}`),
+        });
+      }
+
+      const preview = await previewPurchaseImport(parsed.invoices, parsed.errors);
+
+      return res.json({
+        ok: true,
+        filename,
+        ...preview,
+      });
+    } catch (err: any) {
+      return res.status(500).json({ error: err.message || "Gagal memproses pratinjau import data pembelian." });
+    }
+  }
+);
+
 // Import purchase invoices via file upload or pasted text
 purchasesRouter.post(
   "/api/purchases/import",
@@ -128,17 +168,20 @@ purchasesRouter.post(
         });
       }
 
-      const summary = await importPurchases(parsed.invoices, filename, parsed.errors.length);
+      const duplicateMode = req.body.duplicateMode === "overwrite" ? "overwrite" : "skip";
+      const summary = await importPurchases(parsed.invoices, filename, parsed.errors.length, duplicateMode);
 
-      await logActivity(
-        req,
-        "PURCHASE_IMPORT",
-        `Import ${summary.totalInvoices} nota (${summary.totalItems} baris item) dari "${filename}"`
-      );
+      const actionDesc =
+        duplicateMode === "skip"
+          ? `Import ${summary.insertedInvoices} nota baru (${summary.skippedInvoices} duplikat dilewati, ${summary.totalItems} baris item) dari "${filename}"`
+          : `Import ${summary.insertedInvoices} nota baru (${summary.updatedInvoices} diperbarui, ${summary.totalItems} baris item) dari "${filename}"`;
+
+      await logActivity(req, "PURCHASE_IMPORT", actionDesc);
 
       return res.json({
         ok: true,
         ...summary,
+        duplicateMode,
         errorsCount: parsed.errors.length,
         errors: parsed.errors.slice(0, 10),
       });
