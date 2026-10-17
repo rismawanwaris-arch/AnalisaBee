@@ -3,6 +3,7 @@ import { Link } from "react-router-dom";
 import { formatNumber, formatRupiah } from "@/lib/format";
 import { SortableTable, type Column } from "@/components/SortableTable";
 import { ItemPicker, type ItemOption } from "@/components/ItemPicker";
+import { EmployeeSoldItemsModal } from "@/components/EmployeeSoldItemsModal";
 import { todayStr } from "@/lib/dateDefaults";
 import { usePeriod } from "@/context/PeriodContext";
 
@@ -31,15 +32,25 @@ function startOfWeekStr(): string {
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
 }
 
-const makeColumns = (qs: string): Column<EmployeeRow>[] => [
+const makeColumns = (qs: string, onSelectEmployee: (e: EmployeeRow) => void): Column<EmployeeRow>[] => [
   {
     key: "name",
     label: "Pegawai",
     accessor: (e) => e.name,
     render: (e) => (
-      <Link to={`/employees/${e.id}${qs}`} className="hover:text-accent hover:underline font-medium text-foreground">
+      <a
+        href={`/employees/${e.id}${qs}`}
+        onClick={(evt) => {
+          if (!evt.ctrlKey && !evt.metaKey && !evt.shiftKey && !evt.altKey && evt.button === 0) {
+            evt.preventDefault();
+            onSelectEmployee(e);
+          }
+        }}
+        className="hover:text-accent hover:underline font-medium text-foreground cursor-pointer"
+        title="Klik untuk langsung melihat daftar barang yang dijual"
+      >
         {e.name}
-      </Link>
+      </a>
     ),
   },
   {
@@ -104,6 +115,7 @@ export function EmployeesPage() {
   const [itemGroup, setItemGroup] = useState("");
   const [brandInput, setBrandInput] = useState("");
   const [brand, setBrand] = useState("");
+  const [selectedEmployee, setSelectedEmployee] = useState<{ id: number; name: string } | null>(null);
 
   useEffect(() => {
     const t = setTimeout(() => setBrand(brandInput.trim()), 350);
@@ -196,7 +208,25 @@ export function EmployeesPage() {
     return s ? `?${s}` : "";
   }, [from, to, selectedItem, outletId, itemGroup, brand]);
 
-  const columns = useMemo(() => makeColumns(detailQs), [detailQs]);
+  const columns = useMemo(
+    () => makeColumns(detailQs, (e) => setSelectedEmployee({ id: e.id, name: e.name })),
+    [detailQs]
+  );
+
+  const activeFilterLabels = useMemo(() => {
+    const labels: string[] = [];
+    if (brand) labels.push(`Merk/Kata Kunci: ${brand}`);
+    if (selectedItem) labels.push(`Item: ${selectedItem.name}`);
+    if (itemGroup) labels.push(`Kategori: ${itemGroup}`);
+    if (outletId) {
+      const o = outlets.find((x) => String(x.id) === outletId);
+      labels.push(`Outlet: ${o?.name ?? outletId}`);
+    }
+    if (from || to) {
+      labels.push(`Periode: ${from || "…"} s/d ${to || "…"}`);
+    }
+    return labels;
+  }, [brand, selectedItem, itemGroup, outletId, outlets, from, to]);
 
   const hasFilter = employeeSearch || selectedItem || outletId || subtotalMin || subtotalMax
     || itemGroup || brandInput || from !== currentPeriod.from || to !== currentPeriod.to;
@@ -393,6 +423,16 @@ export function EmployeesPage() {
           defaultSortKey="subtotal"
           caption="Matrix Pegawai"
           showTotal
+        />
+      )}
+
+      {selectedEmployee && (
+        <EmployeeSoldItemsModal
+          employeeId={selectedEmployee.id}
+          employeeName={selectedEmployee.name}
+          filterQuery={detailQs}
+          filterLabels={activeFilterLabels}
+          onClose={() => setSelectedEmployee(null)}
         />
       )}
     </div>

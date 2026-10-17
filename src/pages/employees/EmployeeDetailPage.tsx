@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from "react";
 import { Link, useParams, useSearchParams } from "react-router-dom";
 import { StatCard } from "@/components/StatCard";
 import { TrendChart } from "@/components/TrendChart";
+import { EmployeeSoldItemsTable, type SoldItemRow } from "@/components/EmployeeSoldItemsTable";
 import { formatNumber, formatRupiah } from "@/lib/format";
 
 interface EmployeeDetail {
@@ -12,6 +13,7 @@ interface EmployeeDetail {
     labaRugi: number;
     transactionCount: number;
   };
+  items?: SoldItemRow[];
   trend: { tanggal: string; qty: number; subtotal: number }[];
   byOutlet: { outletId: number; outletName: string; qty: number; subtotal: number }[];
 }
@@ -101,6 +103,14 @@ export function EmployeeDetailPage() {
         <StatCard label="Total Omzet" value={formatRupiah(detail.totals.subtotal)} />
         <StatCard label="Total Laba" value={formatRupiah(detail.totals.labaRugi)} />
         <StatCard label="Jumlah Transaksi" value={`${formatNumber(detail.totals.transactionCount)} struk`} />
+      </div>
+
+      <div>
+        <h2 className="text-xs font-bold uppercase tracking-wider text-foreground mb-1">
+          Daftar Barang yang Dijual
+        </h2>
+        <p className="text-[11px] text-muted mb-3">Rincian item barang yang berhasil dijual sesuai filter yang aktif</p>
+        <EmployeeSoldItemsTable items={detail.items || []} maxHeight="max-h-[60vh]" />
       </div>
 
       <div className="rounded-xl border border-border/80 bg-surface p-5 shadow-xs">

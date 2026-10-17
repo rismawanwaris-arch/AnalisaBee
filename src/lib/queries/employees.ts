@@ -124,11 +124,18 @@ export async function getEmployeeDetail(employeeId: number, filters: EmployeeSum
   if (filters.itemId) saleWhere.itemId = filters.itemId;
   if (filters.outletId) saleWhere.outletId = filters.outletId;
 
-  const [totals, byOutlet, byDate] = await Promise.all([
+  const [totals, byItem, byOutlet, byDate, byItemOutlet] = await Promise.all([
     prisma.sale.aggregate({
       where: saleWhere,
       _sum: { qty: true, subtotal: true, labaRugi: true },
       _count: { _all: true },
+    }),
+    prisma.sale.groupBy({
+      by: ["itemId"],
+      where: saleWhere,
+      _sum: { qty: true, subtotal: true, labaRugi: true },
+      orderBy: { _sum: { subtotal: "desc" } },
+      take: 500,
     }),
     prisma.sale.groupBy({
       by: ["outletId"],
@@ -143,10 +150,60 @@ export async function getEmployeeDetail(employeeId: number, filters: EmployeeSum
       _sum: { qty: true, subtotal: true },
       orderBy: { tanggal: "asc" },
     }),
+    prisma.sale.groupBy({
+      by: ["itemId", "outletId"],
+      where: saleWhere,
+      _sum: { qty: true, subtotal: true },
+      orderBy: { _sum: { subtotal: "desc" } },
+      take: 1000,
+    }),
   ]);
 
-  const outlets = await prisma.outlet.findMany({ where: { id: { in: byOutlet.map((o) => o.outletId) } } });
+  const itemIds = byItem.map((i) => i.itemId);
+  const allOutletIds = [...new Set([...byOutlet.map((o) => o.outletId), ...byItemOutlet.map((r) => r.outletId)])];
+
+  const [items, outlets] = await Promise.all([
+    prisma.item.findMany({
+      where: { id: { in: itemIds } },
+      select: { id: true, code: true, name: true, itemGroup: true, brand: true },
+    }),
+    prisma.outlet.findMany({
+      where: { id: { in: allOutletIds } },
+      select: { id: true, name: true },
+    }),
+  ]);
+
+  const itemById = new Map(items.map((i) => [i.id, i]));
   const outletById = new Map(outlets.map((o) => [o.id, o]));
+
+  const outletsByItem = new Map<number, { outletId: number; outletName: string; qty: number; subtotal: number }[]>();
+  for (const r of byItemOutlet) {
+    if (!outletsByItem.has(r.itemId)) outletsByItem.set(r.itemId, []);
+    outletsByItem.get(r.itemId)!.push({
+      outletId: r.outletId,
+      outletName: outletById.get(r.outletId)?.name ?? "Tidak diketahui",
+      qty: r._sum.qty ?? 0,
+      subtotal: Number(r._sum.subtotal ?? 0),
+    });
+  }
+  for (const list of outletsByItem.values()) {
+    list.sort((a, b) => b.subtotal - a.subtotal);
+  }
+
+  const itemsList = byItem.map((g) => {
+    const it = itemById.get(g.itemId);
+    return {
+      itemId: g.itemId,
+      code: it?.code ?? "",
+      name: it?.name ?? "Tidak diketahui",
+      itemGroup: it?.itemGroup ?? null,
+      brand: it?.brand ?? null,
+      qty: g._sum.qty ?? 0,
+      subtotal: Number(g._sum.subtotal ?? 0),
+      labaRugi: Number(g._sum.labaRugi ?? 0),
+      outlets: outletsByItem.get(g.itemId) ?? [],
+    };
+  });
 
   return {
     employee: { id: employee.id, name: employee.name },
@@ -156,6 +213,7 @@ export async function getEmployeeDetail(employeeId: number, filters: EmployeeSum
       labaRugi: Number(totals._sum.labaRugi ?? 0),
       transactionCount: totals._count._all,
     },
+    items: itemsList,
     byOutlet: byOutlet.map((g) => ({
       outletId: g.outletId,
       outletName: outletById.get(g.outletId)?.name ?? "Tidak diketahui",
