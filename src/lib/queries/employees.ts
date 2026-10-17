@@ -1,5 +1,71 @@
 import { prisma } from "@/lib/prisma";
+import type { Prisma } from "@/generated/prisma/client";
 import { EXCLUDE_HIDDEN_ITEMS } from "@/lib/queries/_hiddenItems";
+
+export interface EmployeeSummaryFilters {
+  from?: Date;
+  to?: Date;
+  itemId?: number;
+  outletId?: number;
+  employeeId?: number;
+  subtotalMin?: number;
+  subtotalMax?: number;
+  itemGroup?: string;
+  brand?: string;
+  itemKeyword?: string;
+}
+
+export async function getEmployeeSummary(filters: EmployeeSummaryFilters = {}) {
+  const where: Prisma.SaleWhereInput = {
+    employee: { isHidden: false },
+    outlet: { isHidden: false },
+    item: {
+      isHidden: false,
+      ...(filters.itemGroup ? { itemGroup: filters.itemGroup } : {}),
+      ...(filters.brand ? { brand: filters.brand } : {}),
+      ...(filters.itemKeyword ? { name: { contains: filters.itemKeyword, mode: "insensitive" } } : {}),
+    },
+  };
+
+  if (filters.from || filters.to) {
+    where.tanggal = {
+      ...(filters.from ? { gte: filters.from } : {}),
+      ...(filters.to ? { lte: filters.to } : {}),
+    };
+  }
+  if (filters.itemId) where.itemId = filters.itemId;
+  if (filters.outletId) where.outletId = filters.outletId;
+  if (filters.employeeId) where.employeeId = filters.employeeId;
+
+  const [sums, employees] = await Promise.all([
+    prisma.sale.groupBy({
+      by: ["employeeId"],
+      where,
+      _sum: { qty: true, subtotal: true, labaRugi: true },
+      _count: { _all: true },
+    }),
+    prisma.employee.findMany({ where: { isHidden: false }, select: { id: true, name: true } }),
+  ]);
+
+  const employeeById = new Map(employees.map((e) => [e.id, e.name]));
+
+  let rows = sums
+    .filter((s) => employeeById.has(s.employeeId))
+    .map((s) => ({
+      id: s.employeeId,
+      name: employeeById.get(s.employeeId) ?? "—",
+      qty: s._sum.qty ?? 0,
+      subtotal: Number(s._sum.subtotal ?? 0),
+      labaRugi: Number(s._sum.labaRugi ?? 0),
+      transactionCount: s._count._all,
+    }))
+    .sort((a, b) => b.subtotal - a.subtotal);
+
+  if (filters.subtotalMin !== undefined) rows = rows.filter((r) => r.subtotal >= filters.subtotalMin!);
+  if (filters.subtotalMax !== undefined) rows = rows.filter((r) => r.subtotal <= filters.subtotalMax!);
+
+  return rows;
+}
 
 export async function getEmployeeList(includeHidden = false) {
   const [employees, sums] = await Promise.all([
@@ -33,11 +99,30 @@ export async function getEmployeeList(includeHidden = false) {
     .sort((a, b) => b.subtotal - a.subtotal);
 }
 
-export async function getEmployeeDetail(employeeId: number) {
+export async function getEmployeeDetail(employeeId: number, filters: EmployeeSummaryFilters = {}) {
   const employee = await prisma.employee.findUnique({ where: { id: employeeId } });
   if (!employee) return null;
 
-  const saleWhere = { employeeId, ...EXCLUDE_HIDDEN_ITEMS };
+  const saleWhere: Prisma.SaleWhereInput = {
+    employeeId,
+    outlet: { isHidden: false },
+    item: {
+      isHidden: false,
+      ...(filters.itemGroup ? { itemGroup: filters.itemGroup } : {}),
+      ...(filters.brand ? { brand: filters.brand } : {}),
+      ...(filters.itemKeyword ? { name: { contains: filters.itemKeyword, mode: "insensitive" } } : {}),
+    },
+  };
+
+  if (filters.from || filters.to) {
+    saleWhere.tanggal = {
+      ...(filters.from ? { gte: filters.from } : {}),
+      ...(filters.to ? { lte: filters.to } : {}),
+    };
+  }
+  if (filters.itemId) saleWhere.itemId = filters.itemId;
+  if (filters.outletId) saleWhere.outletId = filters.outletId;
+
   const [totals, byOutlet, byDate] = await Promise.all([
     prisma.sale.aggregate({
       where: saleWhere,

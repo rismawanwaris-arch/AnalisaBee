@@ -1,5 +1,5 @@
-import { useEffect, useState } from "react";
-import { Link, useParams } from "react-router-dom";
+import { useEffect, useMemo, useState } from "react";
+import { Link, useParams, useSearchParams } from "react-router-dom";
 import { StatCard } from "@/components/StatCard";
 import { TrendChart } from "@/components/TrendChart";
 import { formatNumber, formatRupiah } from "@/lib/format";
@@ -18,17 +18,41 @@ interface EmployeeDetail {
 
 export function EmployeeDetailPage() {
   const { id } = useParams<{ id: string }>();
+  const [searchParams] = useSearchParams();
   const [detail, setDetail] = useState<EmployeeDetail | null>(null);
   const [loading, setLoading] = useState(true);
+
+  // Filters carried over from the Performa Pegawai list (period, item, brand keyword, category, outlet)
+  const apiQuery = useMemo(() => {
+    const p = new URLSearchParams();
+    for (const k of ["from", "to", "itemId", "outletId", "itemGroup", "itemKeyword"]) {
+      const v = searchParams.get(k);
+      if (v) p.set(k, v);
+    }
+    const s = p.toString();
+    return s ? `?${s}` : "";
+  }, [searchParams]);
+
+  const filterLabels = [
+    searchParams.get("itemName") && `item: ${searchParams.get("itemName")}`,
+    searchParams.get("itemGroup") && `kategori: ${searchParams.get("itemGroup")}`,
+    searchParams.get("itemKeyword") && `merk/kata kunci: ${searchParams.get("itemKeyword")}`,
+    searchParams.get("from") && `${searchParams.get("from")} s/d ${searchParams.get("to") ?? "…"}`,
+  ].filter(Boolean) as string[];
+
+  const backHref = useMemo(() => {
+    const s = searchParams.toString();
+    return s ? `/employees?${s}` : "/employees";
+  }, [searchParams]);
 
   useEffect(() => {
     if (!id) return;
     setLoading(true);
-    fetch(`/api/employees/${id}`)
+    fetch(`/api/employees/${id}${apiQuery}`)
       .then((r) => (r.ok ? r.json() : null))
       .then((data) => setDetail(data))
       .finally(() => setLoading(false));
-  }, [id]);
+  }, [id, apiQuery]);
 
   if (loading) {
     return (
@@ -52,7 +76,7 @@ export function EmployeeDetailPage() {
       <div className="flex items-center justify-between">
         <div>
           <Link
-            to="/employees"
+            to={backHref}
             className="inline-flex items-center gap-1.5 text-xs font-semibold text-muted hover:text-foreground transition-colors mb-1"
           >
             <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
@@ -64,6 +88,11 @@ export function EmployeeDetailPage() {
             <span className="w-2.5 h-2.5 rounded-full bg-accent" />
             <h1 className="text-xl font-bold text-foreground tracking-tight">{detail.employee.name}</h1>
           </div>
+          {filterLabels.length > 0 && (
+            <p className="text-[11px] text-muted mt-1">
+              Difilter berdasarkan: {filterLabels.join(" · ")}
+            </p>
+          )}
         </div>
       </div>
 
