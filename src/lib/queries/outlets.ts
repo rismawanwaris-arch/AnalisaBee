@@ -1,6 +1,7 @@
 import { prisma } from "@/lib/prisma";
 import type { Prisma } from "@/generated/prisma/client";
 import { EXCLUDE_HIDDEN_ITEMS } from "@/lib/queries/_hiddenItems";
+import { buildItemKeywordWhere } from "@/lib/itemKeywords";
 
 export interface OutletSummaryFilters {
   from?: Date;
@@ -21,8 +22,7 @@ export interface OutletSummaryFilters {
   // Free-text substring match against the raw item NAME (case-insensitive) —
   // "tidak terpaku pada item baku yang sudah terdaftar": finds every item
   // whose name contains the keyword (e.g. "ufone" -> every UFONE-branded
-  // accessory) with zero setup, unlike itemGroup/brand which only work for
-  // values the catalog already has assigned.
+  // accessory). Supports multi-keyword combinations using '+' (e.g. "ufone+uime").
   itemKeyword?: string;
 }
 
@@ -36,7 +36,7 @@ export async function getOutletSummary(filters: OutletSummaryFilters = {}) {
       isHidden: false,
       ...(filters.itemGroup ? { itemGroup: filters.itemGroup } : {}),
       ...(filters.brand ? { brand: filters.brand } : {}),
-      ...(filters.itemKeyword ? { name: { contains: filters.itemKeyword, mode: "insensitive" } } : {}),
+      ...buildItemKeywordWhere(filters.itemKeyword),
     },
   };
 
@@ -126,7 +126,7 @@ export async function getOutletDetail(outletId: number, filters: OutletSummaryFi
       isHidden: false,
       ...(filters.itemGroup ? { itemGroup: filters.itemGroup } : {}),
       ...(filters.brand ? { brand: filters.brand } : {}),
-      ...(filters.itemKeyword ? { name: { contains: filters.itemKeyword, mode: "insensitive" } } : {}),
+      ...buildItemKeywordWhere(filters.itemKeyword),
     },
   };
   if (filters.from || filters.to) {

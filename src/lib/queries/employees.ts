@@ -1,6 +1,7 @@
 import { prisma } from "@/lib/prisma";
 import type { Prisma } from "@/generated/prisma/client";
 import { EXCLUDE_HIDDEN_ITEMS } from "@/lib/queries/_hiddenItems";
+import { buildItemKeywordWhere } from "@/lib/itemKeywords";
 
 export interface EmployeeSummaryFilters {
   from?: Date;
@@ -23,7 +24,7 @@ export async function getEmployeeSummary(filters: EmployeeSummaryFilters = {}) {
       isHidden: false,
       ...(filters.itemGroup ? { itemGroup: filters.itemGroup } : {}),
       ...(filters.brand ? { brand: filters.brand } : {}),
-      ...(filters.itemKeyword ? { name: { contains: filters.itemKeyword, mode: "insensitive" } } : {}),
+      ...buildItemKeywordWhere(filters.itemKeyword),
     },
   };
 
@@ -110,7 +111,7 @@ export async function getEmployeeDetail(employeeId: number, filters: EmployeeSum
       isHidden: false,
       ...(filters.itemGroup ? { itemGroup: filters.itemGroup } : {}),
       ...(filters.brand ? { brand: filters.brand } : {}),
-      ...(filters.itemKeyword ? { name: { contains: filters.itemKeyword, mode: "insensitive" } } : {}),
+      ...buildItemKeywordWhere(filters.itemKeyword),
     },
   };
 

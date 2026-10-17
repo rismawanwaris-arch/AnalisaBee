@@ -311,7 +311,8 @@ export function EmployeesPage() {
               list="employees-brand-suggestions"
               value={brandInput}
               onChange={(e) => setBrandInput(e.target.value)}
-              placeholder="cth: robot"
+              placeholder="cth: ufone+uime"
+              title="Bisa beberapa kata kunci dengan tanda +, contoh: ufone+uime"
               className="rounded-lg border border-border/80 bg-surface-subtle px-3 py-1.5 text-xs text-foreground placeholder:text-muted focus:outline-none focus:ring-2 focus:ring-accent/20 focus:border-accent transition-all"
             />
             <datalist id="employees-brand-suggestions">
