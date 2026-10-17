@@ -1,6 +1,8 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { formatDate, formatNumber, formatRupiah } from "@/lib/format";
 import { PurchaseBatchHistory, type PurchaseBatchHistoryHandle } from "@/components/PurchaseBatchHistory";
+import { usePeriod } from "@/context/PeriodContext";
+import { computePreviousPeriod } from "@/lib/useMonthPeriod";
 
 interface PurchaseKpiSummary {
   totalSpend: number;
@@ -114,11 +116,23 @@ interface PurchaseImportPreviewData {
 
 export function PurchasesPage() {
   const [activeTab, setActiveTab] = useState<"vendors" | "invoices" | "items">("vendors");
+  const { currentPeriod, periodStartDay, loaded: periodLoaded } = usePeriod();
 
-  // Date Filters
-  const [datePreset, setDatePreset] = useState<"this_month" | "last_month" | "all" | "custom">("all");
-  const [fromDate, setFromDate] = useState("");
-  const [toDate, setToDate] = useState("");
+  // Date Filters — defaults to current month / running month period
+  const [datePreset, setDatePreset] = useState<"this_month" | "last_month" | "all" | "custom">("this_month");
+  const [fromDate, setFromDate] = useState(() => currentPeriod.from);
+  const [toDate, setToDate] = useState(() => currentPeriod.to);
+
+  const periodInitialised = useRef(false);
+  useEffect(() => {
+    if (periodLoaded && !periodInitialised.current) {
+      periodInitialised.current = true;
+      if (datePreset === "this_month") {
+        setFromDate(currentPeriod.from);
+        setToDate(currentPeriod.to);
+      }
+    }
+  }, [periodLoaded, currentPeriod.from, currentPeriod.to, datePreset]);
 
   // Select Filters
   const [selectedVendor, setSelectedVendor] = useState("");
@@ -158,20 +172,16 @@ export function PurchasesPage() {
   // Quick Date Presets
   function applyDatePreset(preset: "this_month" | "last_month" | "all" | "custom") {
     setDatePreset(preset);
-    const now = new Date();
     if (preset === "all") {
       setFromDate("");
       setToDate("");
     } else if (preset === "this_month") {
-      const start = new Date(Date.UTC(now.getFullYear(), now.getMonth(), 1));
-      const end = new Date(Date.UTC(now.getFullYear(), now.getMonth() + 1, 0));
-      setFromDate(start.toISOString().slice(0, 10));
-      setToDate(end.toISOString().slice(0, 10));
+      setFromDate(currentPeriod.from);
+      setToDate(currentPeriod.to);
     } else if (preset === "last_month") {
-      const start = new Date(Date.UTC(now.getFullYear(), now.getMonth() - 1, 1));
-      const end = new Date(Date.UTC(now.getFullYear(), now.getMonth(), 0));
-      setFromDate(start.toISOString().slice(0, 10));
-      setToDate(end.toISOString().slice(0, 10));
+      const prev = computePreviousPeriod(periodStartDay);
+      setFromDate(prev.from);
+      setToDate(prev.to);
     }
   }
 
@@ -426,9 +436,9 @@ export function PurchasesPage() {
           <div className="inline-flex rounded-lg bg-surface-subtle p-1 border border-border/60">
             {(
               [
+                ["this_month", periodStartDay > 1 ? "Periode Berjalan" : "Bulan Ini"],
+                ["last_month", periodStartDay > 1 ? "Periode Lalu" : "Bulan Lalu"],
                 ["all", "Semua Data"],
-                ["this_month", "Bulan Ini"],
-                ["last_month", "Bulan Lalu"],
               ] as const
             ).map(([p, label]) => (
               <button
@@ -445,20 +455,18 @@ export function PurchasesPage() {
           </div>
 
           {/* Reset Filters */}
-          {(fromDate || toDate || selectedVendor || selectedOutlet || searchQuery) && (
+          {(datePreset !== "this_month" || fromDate !== currentPeriod.from || toDate !== currentPeriod.to || selectedVendor || selectedOutlet || searchQuery) && (
             <button
               type="button"
               onClick={() => {
-                setDatePreset("all");
-                setFromDate("");
-                setToDate("");
+                applyDatePreset("this_month");
                 setSelectedVendor("");
                 setSelectedOutlet("");
                 setSearchQuery("");
               }}
               className="text-xs text-rose-500 hover:text-rose-600 font-semibold transition-colors"
             >
-              ✕ Reset Semua Filter
+              ✕ Reset Filter
             </button>
           )}
         </div>

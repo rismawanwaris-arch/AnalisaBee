@@ -35,6 +35,39 @@ export function computeCurrentPeriod(periodStartDay: number): { from: string; to
   };
 }
 
+/** Computes the previous business period boundaries based on periodStartDay. */
+export function computePreviousPeriod(periodStartDay: number): { from: string; to: string } {
+  const current = computeCurrentPeriod(periodStartDay);
+  const [curYear, curMonth] = current.from.split("-").map(Number);
+
+  let prevFromYear = curYear;
+  let prevFromMonth = curMonth - 1;
+  if (prevFromMonth === 0) {
+    prevFromMonth = 12;
+    prevFromYear -= 1;
+  }
+
+  if (periodStartDay === 1) {
+    const to = new Date(Date.UTC(prevFromYear, prevFromMonth, 0));
+    const from = new Date(Date.UTC(prevFromYear, prevFromMonth - 1, 1));
+    return {
+      from: from.toISOString().slice(0, 10),
+      to: to.toISOString().slice(0, 10),
+    };
+  }
+
+  const prevToYear = curYear;
+  const prevToMonth = curMonth;
+
+  const from = new Date(Date.UTC(prevFromYear, prevFromMonth - 1, periodStartDay));
+  const to = new Date(Date.UTC(prevToYear, prevToMonth - 1, periodStartDay - 1));
+
+  return {
+    from: from.toISOString().slice(0, 10),
+    to: to.toISOString().slice(0, 10),
+  };
+}
+
 /** Fetches the business periodStartDay from settings and exposes the current
  * period boundaries. Falls back to calendar month (day 1) if fetch fails. */
 export function useMonthPeriod() {
