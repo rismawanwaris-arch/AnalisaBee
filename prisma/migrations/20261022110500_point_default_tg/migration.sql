@@ -1,0 +1,2 @@
+-- AlterTable
+ALTER TABLE "point_settings" ADD COLUMN IF NOT EXISTS "pointDefaultTG" INTEGER NOT NULL DEFAULT 0;

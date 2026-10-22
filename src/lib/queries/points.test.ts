@@ -92,6 +92,37 @@ describe("computeItemPoints", () => {
     expect(computeItemPoints(itemTws, chainRules, [], [], "2026-11-01").get(11)).toBe(65);
     expect(computeItemPoints(itemTws, chainRules, [], [], "2026-12-10").get(11)).toBe(65);
   });
+
+  it("applies tgDefaultPoints automatically to items matching isTGItem when no explicit rule exists", () => {
+    const tgItems = [
+      { id: 20, name: "TG SPY SAMSUNG A12", itemGroup: "ACC CAMPURAN LAMA" },
+      { id: 21, name: "HYDROGEL BENING VIVO Y12", itemGroup: "ACC CAMPURAN NEW" },
+      { id: 22, name: "TEMPERED GLASS IPHONE 11", itemGroup: null },
+      { id: 23, name: "Kabel Data Type C", itemGroup: "ACC CAMPURAN LAMA" },
+    ];
+    const groupDefaults = [
+      { itemGroup: "ACC CAMPURAN LAMA", points: 2 },
+      { itemGroup: "ACC CAMPURAN NEW", points: 3 },
+    ];
+    const explicitRules = [
+      { pattern: "TG SPY SAMSUNG A12", points: 25 },
+    ];
+    const exclusions = [
+      { pattern: "TEMPERED GLASS IPHONE 11" },
+    ];
+
+    // tgDefaultPoints = 10
+    const result = computeItemPoints(tgItems, explicitRules, groupDefaults, exclusions, "2026-10-22", 10);
+
+    // id 20: has explicit rule (25 pts) -> explicit rule overrides TG default
+    expect(result.get(20)).toBe(25);
+    // id 21: TG item (HYDROGEL) without explicit rule -> gets TG default (10 pts) instead of group default (3 pts)
+    expect(result.get(21)).toBe(10);
+    // id 22: TG item in exclusion -> gets 0
+    expect(result.get(22)).toBe(0);
+    // id 23: non-TG item -> gets its group default (2 pts), unaffected by tgDefaultPoints
+    expect(result.get(23)).toBe(2);
+  });
 });
 
 describe("computeMonthPeriod", () => {

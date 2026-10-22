@@ -262,6 +262,7 @@ export function SettingsPage() {
   const [pointTargetTGDaily, setPointTargetTGDaily] = useState("0");
   const [pointTargetTGWeekly, setPointTargetTGWeekly] = useState("0");
   const [pointTargetTGMonthly, setPointTargetTGMonthly] = useState("0");
+  const [pointDefaultTG, setPointDefaultTG] = useState("0");
   const [pointRupiahRate, setPointRupiahRate] = useState("100");
   const [periodBusy, setPeriodBusy] = useState(false);
   const [periodSaved, setPeriodSaved] = useState(false);
@@ -305,6 +306,7 @@ export function SettingsPage() {
         setPointTargetTGDaily(String(d.pointTargetTGDaily ?? 0));
         setPointTargetTGWeekly(String(d.pointTargetTGWeekly ?? 0));
         setPointTargetTGMonthly(String(d.pointTargetTGMonthly ?? 0));
+        setPointDefaultTG(String(d.pointDefaultTG ?? 0));
         setPointRupiahRate(String(d.pointRupiahRate ?? 100));
       }
     } catch {
@@ -1026,6 +1028,7 @@ export function SettingsPage() {
           pointTargetTGDaily: Number(pointTargetTGDaily),
           pointTargetTGWeekly: Number(pointTargetTGWeekly),
           pointTargetTGMonthly: Number(pointTargetTGMonthly),
+          pointDefaultTG: Number(pointDefaultTG),
           pointRupiahRate: Number(pointRupiahRate),
         }),
       });
@@ -2643,7 +2646,10 @@ export function SettingsPage() {
             <span className="text-sm font-bold uppercase tracking-wider text-foreground">Siklus &amp; Target Poin</span>
             <span className="text-[11px] font-mono text-muted bg-surface-subtle border border-border/60 rounded px-2 py-0.5">Tanggal {periodStartDay}</span>
             <span className="text-[11px] font-mono text-muted bg-surface-subtle border border-border/60 rounded px-2 py-0.5">
-              H {pointTargetDaily} · M {pointTargetWeekly} · B {pointTargetMonthly}
+              Aks: H {pointTargetDaily} · M {pointTargetWeekly} · B {pointTargetMonthly}
+            </span>
+            <span className="text-[11px] font-mono text-muted bg-surface-subtle border border-border/60 rounded px-2 py-0.5">
+              TG: H {pointTargetTGDaily} · M {pointTargetTGWeekly} · B {pointTargetTGMonthly} · Def {pointDefaultTG} pts
             </span>
           </div>
           <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"
@@ -2661,6 +2667,9 @@ export function SettingsPage() {
             </p>
             <p className="text-xs text-muted leading-relaxed">
               Nilai Rupiah per Poin dipakai untuk menghitung estimasi insentif di halaman <strong>Poin Penjualan</strong> (khusus admin/master — tidak ditampilkan di Papan Poin publik). Ubah nilainya di sini kapan pun tanpa perlu ubah kode.
+            </p>
+            <p className="text-xs text-muted leading-relaxed">
+              <strong>Poin Default Barang TG:</strong> Nilai poin otomatis per pcs untuk seluruh barang berawalan <strong>TG</strong> atau mengandung <strong>TEMPERED / HYDROGEL</strong> (saat ini terdeteksi ±470 item). Seluruh item TG akan otomatis memperoleh poin ini. Jika ada item TG yang diberi aturan khusus di daftar poin per item, aturan khusus tersebut tetap menjadi prioritas.
             </p>
             <div className="flex flex-wrap items-end gap-3 pt-1">
               <div>
@@ -2753,6 +2762,21 @@ export function SettingsPage() {
                   value={pointTargetTGMonthly}
                   onChange={(e) => setPointTargetTGMonthly(e.target.value)}
                   className="w-32 rounded-lg border border-border/80 bg-surface-subtle px-3 py-1.5 text-xs font-mono text-foreground focus:outline-none focus:ring-2 focus:ring-accent/20 focus:border-accent transition-all"
+                />
+              </div>
+              <div>
+                <label htmlFor="settings-point-default-tg" className="block text-[11px] font-semibold uppercase tracking-wider text-emerald-600 dark:text-emerald-400 mb-1">
+                  Poin Default TG / pcs
+                </label>
+                <input
+                  id="settings-point-default-tg"
+                  type="number"
+                  min={0}
+                  value={pointDefaultTG}
+                  onChange={(e) => setPointDefaultTG(e.target.value)}
+                  placeholder="0"
+                  className="w-32 rounded-lg border border-emerald-500/50 bg-emerald-500/10 px-3 py-1.5 text-xs font-mono font-bold text-foreground focus:outline-none focus:ring-2 focus:ring-emerald-500/30 focus:border-emerald-500 transition-all"
+                  title="Poin default otomatis per pcs untuk semua barang TG/Tempered/Hydrogel"
                 />
               </div>
               <div>

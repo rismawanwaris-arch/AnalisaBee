@@ -265,6 +265,9 @@ model PointSettings {
   pointTargetTGMonthly Int @default(0)
   pointTargetTGWeekly  Int @default(0)
   pointTargetTGDaily   Int @default(0)
+  // Default point value specifically for TG items (Tempered Glass & Hydrogel).
+  // Applies automatically to all items matching isTGItem when no explicit ItemPoint rule exists.
+  pointDefaultTG       Int @default(0)
   // Rupiah value of 1 point, for the incentive column on the internal
   // Poin Penjualan page (admin-only — never exposed on the public Papan
   // Poin wallboard). Configurable here instead of hardcoded so it can be

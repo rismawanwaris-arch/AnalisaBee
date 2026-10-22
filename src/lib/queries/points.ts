@@ -391,7 +391,8 @@ export function createPointResolver(
   items: PointItemInput[],
   rules: PointRuleInput[],
   groupDefaults: GroupDefaultInput[],
-  exclusions: ExclusionInput[]
+  exclusions: ExclusionInput[],
+  tgDefaultPoints: number = 0
 ) {
   const itemMap = new Map(items.map((i) => [i.id, i]));
   const groupPointByGroup = new Map(groupDefaults.map((g) => [g.itemGroup, g.points]));
@@ -442,6 +443,11 @@ export function createPointResolver(
       }
     }
 
+    if (tgDefaultPoints > 0 && isTGItem(item.name)) {
+      cache.set(cacheKey, tgDefaultPoints);
+      return tgDefaultPoints;
+    }
+
     if (item.itemGroup && groupPointByGroup.has(item.itemGroup)) {
       const pts = groupPointByGroup.get(item.itemGroup)!;
       cache.set(cacheKey, pts);
@@ -456,16 +462,17 @@ export function createPointResolver(
 /** Pure resolution algorithm, split out from its Prisma fetches so it can be
  * unit-tested without a database. Priority: an ItemPointExclusion match
  * always wins (forces 0, no matter what) > an explicit ItemPoint pattern
- * match (longest/most-specific pattern wins, latest startDate <= asOfDate) > the item's
- * ItemGroupPointDefault fallback > 0. */
+ * match (longest/most-specific pattern wins, latest startDate <= asOfDate) >
+ * tgDefaultPoints (when isTGItem) > the item's ItemGroupPointDefault fallback > 0. */
 export function computeItemPoints(
   items: PointItemInput[],
   rules: PointRuleInput[],
   groupDefaults: GroupDefaultInput[],
   exclusions: ExclusionInput[],
-  asOfDate?: Date | string
+  asOfDate?: Date | string,
+  tgDefaultPoints: number = 0
 ): Map<number, number> {
-  const resolver = createPointResolver(items, rules, groupDefaults, exclusions);
+  const resolver = createPointResolver(items, rules, groupDefaults, exclusions, tgDefaultPoints);
   const result = new Map<number, number>();
   for (const item of items) {
     result.set(item.id, resolver(item.id, asOfDate));
@@ -474,7 +481,7 @@ export function computeItemPoints(
 }
 
 export async function getItemPointResolver(itemIds: number[]) {
-  const [items, rules, groupDefaults, exclusions] = await Promise.all([
+  const [items, rules, groupDefaults, exclusions, pointSetting] = await Promise.all([
     prisma.item.findMany({
       where: { id: { in: itemIds } },
       select: { id: true, name: true, itemGroup: true },
@@ -482,10 +489,12 @@ export async function getItemPointResolver(itemIds: number[]) {
     prisma.itemPoint.findMany({ orderBy: { startDate: "desc" } }),
     prisma.itemGroupPointDefault.findMany(),
     prisma.itemPointExclusion.findMany(),
+    prisma.pointSettings.findUnique({ where: { id: 1 }, select: { pointDefaultTG: true } }),
   ]);
+  const tgDefaultPoints = pointSetting?.pointDefaultTG ?? 0;
   return {
     items,
-    resolver: createPointResolver(items, rules, groupDefaults, exclusions),
+    resolver: createPointResolver(items, rules, groupDefaults, exclusions, tgDefaultPoints),
   };
 }
 
@@ -510,6 +519,7 @@ export interface PointPeriodSetting {
   pointTargetTGDaily: number;
   pointTargetTGWeekly: number;
   pointTargetTGMonthly: number;
+  pointDefaultTG: number;
   /** Rupiah value of 1 point — admin-only incentive column on the internal
    *  Poin Penjualan page, never sent to the public Papan Poin endpoint. */
   pointRupiahRate: number;
@@ -528,6 +538,7 @@ export async function getPointPeriodSetting(): Promise<PointPeriodSetting> {
       pointTargetTGDaily: 0,
       pointTargetTGWeekly: 0,
       pointTargetTGMonthly: 0,
+      pointDefaultTG: 0,
       pointRupiahRate: 100,
     },
   });
@@ -539,6 +550,7 @@ export async function getPointPeriodSetting(): Promise<PointPeriodSetting> {
     pointTargetTGDaily: setting.pointTargetTGDaily ?? 0,
     pointTargetTGWeekly: setting.pointTargetTGWeekly ?? 0,
     pointTargetTGMonthly: setting.pointTargetTGMonthly ?? 0,
+    pointDefaultTG: setting.pointDefaultTG ?? 0,
     pointRupiahRate: setting.pointRupiahRate,
   };
 }
@@ -550,6 +562,7 @@ export interface PointTargetUpdate {
   tgDaily?: number;
   tgWeekly?: number;
   tgMonthly?: number;
+  tgDefault?: number;
   rupiahRate?: number;
 }
 
@@ -564,6 +577,7 @@ export async function setPointPeriodSetting(periodStartDay: number, targets?: Po
       ...(targets?.tgDaily !== undefined ? { pointTargetTGDaily: targets.tgDaily } : {}),
       ...(targets?.tgWeekly !== undefined ? { pointTargetTGWeekly: targets.tgWeekly } : {}),
       ...(targets?.tgMonthly !== undefined ? { pointTargetTGMonthly: targets.tgMonthly } : {}),
+      ...(targets?.tgDefault !== undefined ? { pointDefaultTG: targets.tgDefault } : {}),
       ...(targets?.rupiahRate !== undefined ? { pointRupiahRate: targets.rupiahRate } : {}),
     },
     create: {
@@ -575,6 +589,7 @@ export async function setPointPeriodSetting(periodStartDay: number, targets?: Po
       pointTargetTGDaily: targets?.tgDaily ?? 0,
       pointTargetTGWeekly: targets?.tgWeekly ?? 0,
       pointTargetTGMonthly: targets?.tgMonthly ?? 0,
+      pointDefaultTG: targets?.tgDefault ?? 0,
       pointRupiahRate: targets?.rupiahRate ?? 100,
     },
   });

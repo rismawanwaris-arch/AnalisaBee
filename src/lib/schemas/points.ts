@@ -75,6 +75,11 @@ export const periodSettingSchema = z.object({
     .int("Target poin TG harus berupa angka bulat >= 0.")
     .min(0, "Target poin TG harus berupa angka bulat >= 0.")
     .optional(),
+  pointDefaultTG: z.coerce
+    .number({ error: "Poin default TG harus berupa angka bulat >= 0." })
+    .int("Poin default TG harus berupa angka bulat >= 0.")
+    .min(0, "Poin default TG harus berupa angka bulat >= 0.")
+    .optional(),
   pointRupiahRate: z.coerce
     .number({ error: "Nilai rupiah per poin harus berupa angka bulat >= 0." })
     .int("Nilai rupiah per poin harus berupa angka bulat >= 0.")

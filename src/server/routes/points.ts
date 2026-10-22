@@ -138,6 +138,7 @@ function parsePointSettingsBody(
     pointTargetTGDaily,
     pointTargetTGWeekly,
     pointTargetTGMonthly,
+    pointDefaultTG,
     pointRupiahRate,
   } = req.body;
   const day = Number(periodStartDay);
@@ -153,6 +154,7 @@ function parsePointSettingsBody(
     ["tgDaily", pointTargetTGDaily],
     ["tgWeekly", pointTargetTGWeekly],
     ["tgMonthly", pointTargetTGMonthly],
+    ["tgDefault", pointDefaultTG],
     ["rupiahRate", pointRupiahRate],
   ] as const) {
     if (raw === undefined) continue;
