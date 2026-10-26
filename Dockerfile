@@ -4,7 +4,7 @@ WORKDIR /app
 
 COPY package*.json ./
 # install everything (dev deps needed for vite build + tsx + tsc)
-RUN npm ci
+RUN npm ci --no-audit || npm install --no-audit
 
 COPY . .
 
