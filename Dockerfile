@@ -1,10 +1,12 @@
 # ── Stage 1: build Vite frontend ──────────────────────────────────────────────
-FROM node:22-alpine AS builder
+FROM node:22-slim AS builder
 WORKDIR /app
+
+RUN apt-get update && apt-get install -y openssl ca-certificates && rm -rf /var/lib/apt/lists/*
 
 COPY package*.json ./
 # install everything (dev deps needed for vite build + tsx + tsc)
-RUN npm ci --no-audit || npm install --no-audit
+RUN npm ci --no-audit
 
 COPY . .
 
@@ -15,8 +17,10 @@ RUN DATABASE_URL="postgresql://x:x@localhost:5432/x" npx prisma generate
 RUN npm run build
 
 # ── Stage 2: production image ──────────────────────────────────────────────────
-FROM node:22-alpine AS runner
+FROM node:22-slim AS runner
 WORKDIR /app
+
+RUN apt-get update && apt-get install -y openssl ca-certificates && rm -rf /var/lib/apt/lists/*
 
 ENV NODE_ENV=production
 
