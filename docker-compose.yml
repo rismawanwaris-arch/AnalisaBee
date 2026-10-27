@@ -21,7 +21,9 @@ services:
       retries: 10
 
   app:
-    build: .
+    build:
+      context: .
+      network: host
     restart: unless-stopped
     ports:
       - "8080:3001"
