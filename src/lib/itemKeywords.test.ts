@@ -24,17 +24,19 @@ describe("itemKeywords", () => {
       expect(parseItemKeywords("ufone, robot")).toEqual(["ufone", "robot"]);
     });
 
-    it("expands uime into ui me and vice versa", () => {
+    it("expands uime into ui me / ui-me and vice versa", () => {
       const parsed = parseItemKeywords("ufone+uime");
       expect(parsed).toContain("ufone");
       expect(parsed).toContain("uime");
       expect(parsed).toContain("ui me");
+      expect(parsed).toContain("ui-me");
     });
 
-    it("expands powerbank into power bank and vice versa", () => {
+    it("expands powerbank into power bank / power-bank and vice versa", () => {
       const parsed = parseItemKeywords("powerbank+kabel");
       expect(parsed).toContain("powerbank");
       expect(parsed).toContain("power bank");
+      expect(parsed).toContain("power-bank");
       expect(parsed).toContain("kabel");
     });
   });
@@ -45,9 +47,12 @@ describe("itemKeywords", () => {
       expect(buildItemKeywordWhere(null)).toEqual({});
     });
 
-    it("returns single contains condition when 1 keyword and no expansion", () => {
+    it("returns OR condition across name and brand when 1 keyword and no expansion", () => {
       expect(buildItemKeywordWhere("robot")).toEqual({
-        name: { contains: "robot", mode: "insensitive" },
+        OR: [
+          { name: { contains: "robot", mode: "insensitive" } },
+          { brand: { contains: "robot", mode: "insensitive" } },
+        ],
       });
     });
 
@@ -56,7 +61,9 @@ describe("itemKeywords", () => {
       expect(where).toEqual({
         OR: [
           { name: { contains: "ufone", mode: "insensitive" } },
+          { brand: { contains: "ufone", mode: "insensitive" } },
           { name: { contains: "robot", mode: "insensitive" } },
+          { brand: { contains: "robot", mode: "insensitive" } },
         ],
       });
     });
@@ -64,12 +71,16 @@ describe("itemKeywords", () => {
     it("returns OR condition with aliases for ufone+uime", () => {
       const where = buildItemKeywordWhere("ufone+uime");
       expect(where.OR).toBeDefined();
-      expect(where.OR?.length).toBe(3);
       expect(where.OR).toEqual(
         expect.arrayContaining([
           { name: { contains: "ufone", mode: "insensitive" } },
+          { brand: { contains: "ufone", mode: "insensitive" } },
           { name: { contains: "uime", mode: "insensitive" } },
+          { brand: { contains: "uime", mode: "insensitive" } },
           { name: { contains: "ui me", mode: "insensitive" } },
+          { brand: { contains: "ui me", mode: "insensitive" } },
+          { name: { contains: "ui-me", mode: "insensitive" } },
+          { brand: { contains: "ui-me", mode: "insensitive" } },
         ])
       );
     });

@@ -189,12 +189,35 @@ export function MasterItemImport() {
               if (file) handleFileSelected(file);
             }}
           />
-          <label
-            htmlFor="master-item-file-input"
-            className="inline-flex items-center gap-1.5 cursor-pointer rounded-xl bg-accent text-accent-foreground px-4 py-2 text-xs font-semibold hover:bg-accent-hover transition-all shadow-xs"
-          >
-            {previewLoading ? "Membaca file..." : `Unggah Master Item ${BRANCH_LABEL[branch]}`}
-          </label>
+          <div className="flex flex-wrap items-center gap-2">
+            <label
+              htmlFor="master-item-file-input"
+              className="inline-flex items-center gap-1.5 cursor-pointer rounded-xl bg-accent text-accent-foreground px-4 py-2 text-xs font-semibold hover:bg-accent-hover transition-all shadow-xs"
+            >
+              {previewLoading ? "Membaca file..." : `Unggah Master Item ${BRANCH_LABEL[branch]}`}
+            </label>
+            <a
+              href={`/api/settings/master-items/template?branch=${branch}&mode=catalog`}
+              download
+              className="inline-flex items-center gap-1.5 rounded-xl border border-border/80 bg-surface-subtle hover:bg-surface-hover text-foreground px-3.5 py-2 text-xs font-semibold transition-all shadow-2xs"
+              title="Unduh seluruh katalog item saat ini untuk cabang ini lengkap dengan kolom Merk untuk diedit dan diunggah kembali"
+            >
+              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2">
+                <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
+                <polyline points="7 10 12 15 17 10" />
+                <line x1="12" y1="15" x2="12" y2="3" />
+              </svg>
+              <span>Unduh Template + Data {BRANCH_LABEL[branch]} (.xlsx)</span>
+            </a>
+            <a
+              href={`/api/settings/master-items/template?branch=${branch}&mode=empty`}
+              download
+              className="inline-flex items-center gap-1.5 rounded-xl border border-border/80 bg-surface-subtle hover:bg-surface-hover text-muted hover:text-foreground px-3 py-2 text-xs font-medium transition-all"
+              title="Unduh template Excel kosong (hanya header & contoh baris)"
+            >
+              <span>Template Kosong (.xlsx)</span>
+            </a>
+          </div>
           <p className="text-[11px] text-muted mt-2">
             Format export "Table List" dari POS (.xls / .xlsx) — kolom wajib: Kode Item, Nama Item.
             Kolom Item Grup dan Merk opsional — Merk bukan bagian dari export POS, tambahkan sendiri

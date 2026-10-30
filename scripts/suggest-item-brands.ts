@@ -33,13 +33,14 @@ const KNOWN_BRANDS = [
   "FURLOVE", "BOLT", "KUCINGKU", "CHESTER", "CUTIES", "CUTTIES", "EXCEL",
   "FELIBITE", "LUMINA", "WHISKAS", "LIEBAO", "BEAUTY",
   // Aksesoris HP
-  "ROBOT", "UFONE", "VIVAN", "MINIMO", "REXI", "RAPA", "UI ME",
+  "ROBOT", "UFONE", "VIVAN", "MINIMO", "REXI", "RAPA", "UI ME", "OLIKE", "FOOMEE", "JETE", "REDSKULL", "VGEN", "JOYKO",
   // Voucher / SP (provider, treated the same as a "brand" for filtering)
   "TELKOMSEL", "INDOSAT", "SMARTFREN", "SMART", "AXIS", "TRI", "XL",
 ].sort((a, b) => b.length - a.length); // longest first
 
 function suggestBrand(name: string): string | null {
   const upper = name.toUpperCase();
+  if (/\bUIME\b|\bUI[- ]ME\b|\bDCG01\b/.test(upper)) return "UI ME";
   for (const brand of KNOWN_BRANDS) {
     const re = new RegExp(`(^|[^A-Z0-9])${brand.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}([^A-Z0-9]|$)`);
     if (re.test(upper)) return brand;

@@ -5,7 +5,7 @@
 // ==========================================
 import { Router } from "express";
 import { prisma } from "../../lib/prisma";
-import { previewMasterItemImport, importMasterItems } from "../../lib/queries/items";
+import { previewMasterItemImport, importMasterItems, generateMasterItemTemplateBuffer } from "../../lib/queries/items";
 import { requireMaster, logActivity } from "../middleware";
 import { upload } from "../uploads";
 
@@ -14,6 +14,26 @@ export const masterItemsRouter = Router();
 function parseBranchBody(v: unknown): "BANDUNG" | "CIMAHI" | null {
   return v === "BANDUNG" || v === "CIMAHI" ? v : null;
 }
+
+masterItemsRouter.get("/api/settings/master-items/template", requireMaster, async (req, res) => {
+  try {
+    const branch = parseBranchBody(req.query.branch) ?? "BANDUNG";
+    const mode = req.query.mode === "empty" ? "empty" : "catalog";
+    const buffer = await generateMasterItemTemplateBuffer(branch, mode);
+    const filename =
+      mode === "empty"
+        ? `template-master-item-kosong-${branch}.xlsx`
+        : `template-master-item-${branch}.xlsx`;
+    res.setHeader(
+      "Content-Type",
+      "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+    );
+    res.setHeader("Content-Disposition", `attachment; filename="${filename}"`);
+    return res.send(buffer);
+  } catch (err: any) {
+    return res.status(500).json({ error: err.message || "Gagal membuat template Master Item." });
+  }
+});
 
 masterItemsRouter.get("/api/settings/master-items/summary", requireMaster, async (_req, res) => {
   try {

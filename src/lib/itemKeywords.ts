@@ -14,14 +14,10 @@ export function parseItemKeywords(raw?: string | null): string[] {
   for (const part of parts) {
     result.push(part);
     const lower = part.toLowerCase();
-    if (lower === "uime") {
-      result.push("ui me");
-    } else if (lower === "ui me") {
-      result.push("uime");
-    } else if (lower === "powerbank") {
-      result.push("power bank");
-    } else if (lower === "power bank") {
-      result.push("powerbank");
+    if (lower === "uime" || lower === "ui me" || lower === "ui-me") {
+      result.push("uime", "ui me", "ui-me");
+    } else if (lower === "powerbank" || lower === "power bank" || lower === "power-bank") {
+      result.push("powerbank", "power bank", "power-bank");
     }
   }
 
@@ -30,16 +26,16 @@ export function parseItemKeywords(raw?: string | null): string[] {
 
 /**
  * Builds Prisma `item` where condition for multi-keyword search.
- * When multiple keywords are provided (e.g. ufone+uime), generates an OR clause
- * so items matching ANY of the keywords are included.
+ * Matches against BOTH `Item.name` and `Item.brand` (Merk) so items curated
+ * via Master Item's "Merk" column or items matching by name are all selected.
  */
 export function buildItemKeywordWhere(rawKeyword?: string | null): Prisma.ItemWhereInput {
   const keywords = parseItemKeywords(rawKeyword);
   if (keywords.length === 0) return {};
-  if (keywords.length === 1) {
-    return { name: { contains: keywords[0], mode: "insensitive" } };
-  }
   return {
-    OR: keywords.map((kw) => ({ name: { contains: kw, mode: "insensitive" } })),
+    OR: keywords.flatMap((kw) => [
+      { name: { contains: kw, mode: "insensitive" } },
+      { brand: { contains: kw, mode: "insensitive" } },
+    ]),
   };
 }

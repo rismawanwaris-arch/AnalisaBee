@@ -1,3 +1,4 @@
+import * as XLSX from "xlsx";
 import { prisma } from "@/lib/prisma";
 import { parseMasterItemBuffer } from "@/lib/parseMasterItems";
 
@@ -274,6 +275,105 @@ export async function importMasterItems(
     duplicateInFileCount,
     errorCount: errors.length,
   };
+}
+
+const KNOWN_BRANDS_FOR_TEMPLATE = [
+  // Petshop
+  "CAT CHOIZE", "CAT LEZATO", "LIFE CAT", "CATTIE CARE", "CRYSTAL KITTY",
+  "FURLOVE", "BOLT", "KUCINGKU", "CHESTER", "CUTIES", "CUTTIES", "EXCEL",
+  "FELIBITE", "LUMINA", "WHISKAS", "LIEBAO", "BEAUTY",
+  // Aksesoris HP
+  "ROBOT", "UFONE", "VIVAN", "MINIMO", "REXI", "RAPA", "UI ME", "OLIKE", "FOOMEE", "JETE", "REDSKULL", "VGEN", "JOYKO",
+  // Voucher / SP
+  "TELKOMSEL", "INDOSAT", "SMARTFREN", "SMART", "AXIS", "TRI", "XL",
+].sort((a, b) => b.length - a.length);
+
+function suggestBrandFromName(name: string): string {
+  const upper = name.toUpperCase();
+  if (/\bUIME\b|\bUI[- ]ME\b|\bDCG01\b/.test(upper)) return "UI ME";
+  for (const brand of KNOWN_BRANDS_FOR_TEMPLATE) {
+    const re = new RegExp(`(^|[^A-Z0-9])${brand.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}([^A-Z0-9]|$)`);
+    if (re.test(upper)) return brand;
+  }
+  return "";
+}
+
+/**
+ * Generates an Excel (.xlsx) buffer formatted for Master Item import per branch.
+ * - `mode = "catalog"` (default): exports all existing items in `branch` with
+ *   columns `Kode Item`, `Nama Item`, `Item Grup`, `Merk` (auto-suggested if blank).
+ * - `mode = "empty"`: exports a starter template with example rows for `branch`.
+ */
+export async function generateMasterItemTemplateBuffer(
+  branch: ItemBranch,
+  mode: "catalog" | "empty" = "catalog"
+): Promise<Buffer> {
+  let rows: { "Kode Item": string; "Nama Item": string; "Item Grup": string; Merk: string }[];
+
+  if (mode === "empty") {
+    rows =
+      branch === "BANDUNG"
+        ? [
+            {
+              "Kode Item": "002953",
+              "Nama Item": "KABEL DATA UI ME DCG01-CC 60W C TO C",
+              "Item Grup": "ACC CAMPURAN NEW",
+              Merk: "UI ME",
+            },
+            {
+              "Kode Item": "002604",
+              "Nama Item": "KABEL DATA UI ME DCG01-M FLEX TUBE 2.4A USB MIKRO",
+              "Item Grup": "ACC CAMPURAN NEW",
+              Merk: "UI ME",
+            },
+            {
+              "Kode Item": "002592",
+              "Nama Item": "BATOK UFONE GC01 2.4A",
+              "Item Grup": "ACC CAMPURAN NEW",
+              Merk: "UFONE",
+            },
+          ]
+        : [
+            {
+              "Kode Item": "001100",
+              "Nama Item": "BATOK CHARGER UI ME PC09 TYPE C PD30W",
+              "Item Grup": "ACC CAMPURAN NEW",
+              Merk: "UI ME",
+            },
+            {
+              "Kode Item": "001273",
+              "Nama Item": "KABEL DATA UI ME DCG01-M FLEX TUBE 2.4A USB MIKRO",
+              "Item Grup": "ACC CAMPURAN NEW",
+              Merk: "UI ME",
+            },
+            {
+              "Kode Item": "001104",
+              "Nama Item": "BATOK UFONE GC01 2.4A",
+              "Item Grup": "ACC CAMPURAN NEW",
+              Merk: "UFONE",
+            },
+          ];
+  } else {
+    const items = await prisma.item.findMany({
+      where: { branch },
+      select: { code: true, name: true, itemGroup: true, brand: true },
+      orderBy: [{ itemGroup: "asc" }, { name: "asc" }],
+    });
+    rows = items.map((i) => ({
+      "Kode Item": i.code,
+      "Nama Item": i.name,
+      "Item Grup": i.itemGroup ?? "",
+      Merk: i.brand?.trim() || suggestBrandFromName(i.name),
+    }));
+  }
+
+  const ws = XLSX.utils.json_to_sheet(rows, {
+    header: ["Kode Item", "Nama Item", "Item Grup", "Merk"],
+  });
+  ws["!cols"] = [{ wch: 15 }, { wch: 48 }, { wch: 22 }, { wch: 18 }];
+  const wb = XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(wb, ws, "Table List");
+  return XLSX.write(wb, { type: "buffer", bookType: "xlsx" }) as Buffer;
 }
 
 export interface ItemCategoryRow {
