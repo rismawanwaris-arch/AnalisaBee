@@ -50,6 +50,10 @@ function parseSheet(
       errors.push({ rowNumber, message: "Nama outlet/reseller kosong" });
       return;
     }
+    const upper = name.toUpperCase();
+    if (upper === "TOTAL" || upper === "GRAND TOTAL" || upper === "JUMLAH" || upper.startsWith("TOTAL ")) {
+      return; // Skip summary / grand total row from source export
+    }
     const sales = toNumber(salesKeys.map((k) => r[k]).find((v) => v !== null && v !== undefined));
     const trx = toNumber(trxKeys.map((k) => r[k]).find((v) => v !== null && v !== undefined));
     rows.push({ rowNumber, name, sales, trx });
@@ -96,6 +100,10 @@ export function parseServerText(text: string): { rows: TartunServerRow[]; errors
     if (!name) {
       errors.push({ rowNumber, message: "Nama reseller kosong" });
       continue;
+    }
+    const upper = name.toUpperCase();
+    if (upper === "TOTAL" || upper === "GRAND TOTAL" || upper === "JUMLAH" || upper.startsWith("TOTAL ")) {
+      continue; // Skip summary / grand total row
     }
     const trx = parseInt(cols[2]?.trim(), 10) || 0;
     const komisiStr = (cols[4] || "").trim().replace(/\./g, "");

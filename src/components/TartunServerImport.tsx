@@ -232,21 +232,21 @@ function ResultSummary({ result }: { result: ImportResult }) {
         · Total {formatRupiah(result.totalSales)} · {formatNumber(result.totalTrx)} trx
       </div>
       {result.unmatchedNames.length > 0 && (
-        <details className="text-rose-600 dark:text-rose-400">
+        <details className="text-amber-600 dark:text-amber-400 mt-2">
           <summary className="cursor-pointer font-medium">
-            {result.unmatchedNames.length} nama tidak cocok ke outlet mana pun
+            ▼ {result.unmatchedNames.length} nama belum ada mapping (dialokasikan ke "BELUM DIPETAKAN")
           </summary>
-          <ul className="mt-1 pl-4 list-disc space-y-0.5">
+          <ul className="mt-1 pl-4 list-disc space-y-0.5 text-rose-500">
             {result.unmatchedNames.map((n) => (
               <li key={n}>{n}</li>
             ))}
           </ul>
-          <p className="mt-1 text-muted">
-            Tambahkan mapping di{" "}
-            <Link to="/settings?tab=target" className="underline text-accent">
-              Pengaturan
+          <p className="mt-1.5 text-muted text-[11px] leading-relaxed">
+            Data ini <strong>tetap tersimpan aman 100%</strong> di outlet sementara <em>BELUM DIPETAKAN</em>. Cukup tambahkan alias di{" "}
+            <Link to="/settings" className="underline text-accent font-medium">
+              Pengaturan Outlet Alias
             </Link>
-            .
+            , maka angka penjualan & transaksi akan otomatis dipindahkan ke outlet tujuan tanpa perlu upload ulang!
           </p>
         </details>
       )}

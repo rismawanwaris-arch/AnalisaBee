@@ -118,6 +118,21 @@ export async function ensureDefaults(branch: "BANDUNG" | "CIMAHI" = "BANDUNG"): 
     await prisma.$executeRawUnsafe(`CREATE INDEX IF NOT EXISTS "purchase_items_invoiceId_idx" ON "purchase_items"("invoiceId");`);
     await prisma.$executeRawUnsafe(`CREATE INDEX IF NOT EXISTS "purchase_items_itemCode_idx" ON "purchase_items"("itemCode");`);
     await prisma.$executeRawUnsafe(`CREATE INDEX IF NOT EXISTS "purchase_items_itemName_idx" ON "purchase_items"("itemName");`);
+    await prisma.$executeRawUnsafe(`
+      CREATE TABLE IF NOT EXISTS "unmatched_daily_metrics" (
+        "id" SERIAL PRIMARY KEY,
+        "kind" TEXT NOT NULL,
+        "tanggal" DATE NOT NULL,
+        "rawName" TEXT NOT NULL,
+        "sales" DECIMAL(14,2) NOT NULL,
+        "trx" INTEGER NOT NULL,
+        "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP
+      );
+    `);
+    await prisma.$executeRawUnsafe(`
+      CREATE UNIQUE INDEX IF NOT EXISTS "unmatched_daily_metrics_kind_tanggal_rawName_key"
+        ON "unmatched_daily_metrics"("kind", "tanggal", "rawName");
+    `);
   } catch {
     // ignore error if tables not yet created
   }
@@ -155,6 +170,12 @@ export async function ensureDefaults(branch: "BANDUNG" | "CIMAHI" = "BANDUNG"): 
   const outletNames = [...new Set(Object.values(DEFAULT_ALIAS_MAP))];
   const outlets = await prisma.outlet.findMany({ where: { name: { in: outletNames } } });
   const outletIdByName = new Map(outlets.map((o) => [o.name, o.id]));
+
+  await prisma.outlet.upsert({
+    where: { name: "BELUM DIPETAKAN" },
+    update: {},
+    create: { name: "BELUM DIPETAKAN", branch: "BANDUNG", isHidden: false },
+  });
 
   await Promise.all(
     Object.entries(DEFAULT_ALIAS_MAP).map(([alias, outletName]) => {

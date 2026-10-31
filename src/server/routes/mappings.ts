@@ -5,6 +5,7 @@
 import { Router } from "express";
 import { prisma } from "../../lib/prisma";
 import type { ReportCategory } from "@/generated/prisma/client";
+import { createOutletAlias, listUnmatchedMetrics } from "../../lib/queries/mappings";
 import { requireMaster, logActivity } from "../middleware";
 
 export const mappingsRouter = Router();
@@ -96,6 +97,15 @@ mappingsRouter.delete("/api/mappings/point-group/:id", requireMaster, async (req
   }
 });
 
+mappingsRouter.get("/api/mappings/unmatched-metrics", requireMaster, async (req, res) => {
+  try {
+    const list = await listUnmatchedMetrics();
+    return res.json(list);
+  } catch (err: any) {
+    return res.status(500).json({ error: err.message });
+  }
+});
+
 mappingsRouter.get("/api/mappings/outlet-alias", requireMaster, async (req, res) => {
   try {
     const list = await prisma.outletAlias.findMany({
@@ -124,14 +134,14 @@ mappingsRouter.post("/api/mappings/outlet-alias", requireMaster, async (req, res
     if (!al) return res.status(400).json({ error: "Alias wajib diisi." });
     if (Number.isNaN(oid)) return res.status(400).json({ error: "Pilih outlet." });
 
-    const mapping = await prisma.outletAlias.upsert({
-      where: { alias: al },
-      update: { outletId: oid, isDefault: false },
-      create: { alias: al, outletId: oid, isDefault: false },
-    });
+    const { mapping, transferredCount } = await createOutletAlias(al, oid);
     const outlet = await prisma.outlet.findUnique({ where: { id: oid }, select: { name: true } });
-    await logActivity(req, "ALIAS_ADD", `"${al}" → ${outlet?.name ?? oid}`);
-    return res.json(mapping);
+    await logActivity(
+      req,
+      "ALIAS_ADD",
+      `"${al}" → ${outlet?.name ?? oid}${transferredCount > 0 ? ` (${transferredCount} data penampungan dipindahkan)` : ""}`
+    );
+    return res.json({ ...mapping, transferredCount });
   } catch (err: any) {
     return res.status(500).json({ error: err.message });
   }

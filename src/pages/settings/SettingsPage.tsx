@@ -68,6 +68,13 @@ interface GroupRow {
   category: ReportCategory;
   isDefault: boolean;
 }
+interface UnmatchedMetricItem {
+  rawName: string;
+  kind: "TARTUN" | "SERVER";
+  totalSales: number;
+  totalTrx: number;
+  rowCount: number;
+}
 
 // Points Types
 interface ItemPointRule {
@@ -178,6 +185,8 @@ export function SettingsPage() {
   const [aliasFrom, setAliasFrom] = useState("");
   const [aliasTo, setAliasTo] = useState<string>("");
   const [aliasError, setAliasError] = useState<string | null>(null);
+  const [aliasSuccessToast, setAliasSuccessToast] = useState<string | null>(null);
+  const [unmatchedMetrics, setUnmatchedMetrics] = useState<UnmatchedMetricItem[]>([]);
 
   const [groups, setGroups] = useState<GroupRow[]>([]);
   const [groupFrom, setGroupFrom] = useState("");
@@ -214,6 +223,15 @@ export function SettingsPage() {
     try {
       const res = await fetch("/api/mappings/outlet-alias");
       if (res.ok) setAliases(await res.json());
+    } catch {
+      // ignore
+    }
+  }, []);
+
+  const loadUnmatchedMetrics = useCallback(async () => {
+    try {
+      const res = await fetch("/api/mappings/unmatched-metrics");
+      if (res.ok) setUnmatchedMetrics(await res.json());
     } catch {
       // ignore
     }
@@ -523,6 +541,7 @@ export function SettingsPage() {
   useEffect(() => {
     loadTargets();
     loadAliases();
+    loadUnmatchedMetrics();
     loadGroups();
     loadPointGroups();
     loadItemRules();
@@ -539,6 +558,7 @@ export function SettingsPage() {
   }, [
     loadTargets,
     loadAliases,
+    loadUnmatchedMetrics,
     loadGroups,
     loadPointGroups,
     loadItemRules,
@@ -911,6 +931,7 @@ export function SettingsPage() {
 
   async function addAlias() {
     setAliasError(null);
+    setAliasSuccessToast(null);
     const alias = aliasFrom.trim();
     if (!alias) {
       setAliasError("Isi nama alias terlebih dahulu.");
@@ -928,7 +949,13 @@ export function SettingsPage() {
         return;
       }
       setAliasFrom("");
-      await loadAliases();
+      await Promise.all([loadAliases(), loadUnmatchedMetrics()]);
+      if (data.transferredCount && data.transferredCount > 0) {
+        setAliasSuccessToast(
+          `Berhasil menyimpan alias! ${data.transferredCount} record data di penampungan otomatis dipindahkan ke outlet tujuan.`
+        );
+        setTimeout(() => setAliasSuccessToast(null), 6000);
+      }
     } catch {
       setAliasError("Terjadi kesalahan jaringan.");
     }
@@ -937,7 +964,7 @@ export function SettingsPage() {
   async function deleteAlias(id: number) {
     try {
       await fetch(`/api/mappings/outlet-alias/${id}`, { method: "DELETE" });
-      await loadAliases();
+      await Promise.all([loadAliases(), loadUnmatchedMetrics()]);
     } catch {
       // ignore
     }
@@ -2540,6 +2567,11 @@ export function SettingsPage() {
             <span className="w-2.5 h-2.5 rounded-full bg-violet-500 shrink-0" />
             <span className="text-sm font-bold uppercase tracking-wider text-foreground">Pemetaan Alias Nama Outlet</span>
             <span className="text-[11px] font-mono text-muted bg-surface-subtle border border-border/60 rounded px-2 py-0.5">{aliases.length} alias</span>
+            {unmatchedMetrics.length > 0 && (
+              <span className="text-[10px] font-semibold text-amber-600 dark:text-amber-400 bg-amber-500/10 border border-amber-500/30 rounded-full px-2 py-0.5">
+                {unmatchedMetrics.length} menunggu pemetaan
+              </span>
+            )}
           </div>
           <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"
             className={`shrink-0 text-muted transition-transform duration-200 ${openSections.has("alias-outlet") ? "rotate-180" : ""}`}>
@@ -2551,6 +2583,54 @@ export function SettingsPage() {
             <p className="text-xs text-muted leading-relaxed">
               Menghubungkan nama outlet / reseller yang tertulis di file Tarik Tunai atau Server ke nama outlet resmi.
             </p>
+
+            {aliasSuccessToast && (
+              <div className="p-3 rounded-lg bg-emerald-500/10 border border-emerald-500/30 text-emerald-600 dark:text-emerald-400 text-xs flex items-center gap-2">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                  <polyline points="20 6 9 17 4 12" />
+                </svg>
+                <span>{aliasSuccessToast}</span>
+              </div>
+            )}
+
+            {unmatchedMetrics.length > 0 && (
+              <div className="rounded-xl border border-amber-500/30 bg-amber-500/5 p-4 space-y-3">
+                <div className="flex items-center gap-2 text-xs font-semibold text-amber-600 dark:text-amber-400">
+                  <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                    <circle cx="12" cy="12" r="10" />
+                    <line x1="12" y1="8" x2="12" y2="12" />
+                    <line x1="12" y1="16" x2="12.01" y2="16" />
+                  </svg>
+                  <span>Ada {unmatchedMetrics.length} nama mentah di penampungan sementara ("BELUM DIPETAKAN"):</span>
+                </div>
+                <div className="flex flex-wrap gap-2">
+                  {unmatchedMetrics.map((um) => (
+                    <button
+                      key={`${um.kind}-${um.rawName}`}
+                      type="button"
+                      onClick={() => {
+                        setAliasFrom(um.rawName);
+                      }}
+                      title="Klik untuk memilih nama ini ke form alias"
+                      className="inline-flex items-center gap-2 px-3 py-1.5 rounded-lg bg-surface border border-amber-500/40 hover:border-amber-500 text-xs text-foreground transition-all shadow-xs group cursor-pointer"
+                    >
+                      <span className="font-semibold text-amber-600 dark:text-amber-400 group-hover:underline">
+                        {um.rawName}
+                      </span>
+                      <span className="text-[10px] text-muted font-mono">
+                        [{um.kind}] {formatRupiah(um.totalSales)} ({formatNumber(um.totalTrx)} trx)
+                      </span>
+                      <span className="text-[10px] font-bold text-accent group-hover:translate-x-0.5 transition-transform">
+                        Petakan ➔
+                      </span>
+                    </button>
+                  ))}
+                </div>
+                <p className="text-[11px] text-muted leading-relaxed">
+                  💡 Klik nama di atas untuk langsung mengisi form. Setelah alias ditambahkan, data penjualan & transaksi akan <strong>langsung dipindahkan secara otomatis</strong> ke outlet tujuan tanpa perlu upload ulang file!
+                </p>
+              </div>
+            )}
             <div className="flex flex-wrap items-end gap-3 pt-1">
               <div className="flex-1 min-w-56">
                 <label htmlFor="mapping-alias-from" className="block text-[11px] font-semibold uppercase tracking-wider text-muted mb-1">
