@@ -85,7 +85,7 @@ export async function importDailyMetric(
 
   // Jika tidak ada data yang unmatched pada upload ini, bersihkan data fallback lama pada tanggal ini
   if (!unmatchedAgg.size) {
-    const fbWhere = { tanggal_outletId: { tanggal: date, outletId: fallbackOutletId } };
+    const fbWhere = { tanggal: date, outletId: fallbackOutletId };
     if (kind === "TARTUN") {
       await prisma.tartunDaily.deleteMany({ where: fbWhere });
     } else {
