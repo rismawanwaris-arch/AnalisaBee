@@ -24,8 +24,14 @@ outletsRouter.get("/api/outlets", requireAuth, cacheBriefly(30), async (req, res
 
 outletsRouter.get("/api/outlets/summary", requireFeature("outlets"), async (req, res) => {
   try {
-    const from = parseDateParam(req.query.from);
-    const to = parseDateParam(req.query.to);
+    const isAll = req.query.all === "1" || req.query.all === "true";
+    let from = parseDateParam(req.query.from);
+    let to = parseDateParam(req.query.to);
+    if (!from && !to && !isAll) {
+      const now = new Date();
+      from = new Date(now.getFullYear(), now.getMonth(), 1);
+      to = new Date(now.getFullYear(), now.getMonth() + 1, 0);
+    }
     const itemId = req.query.itemId ? Number(req.query.itemId) : undefined;
     const employeeId = req.query.employeeId ? Number(req.query.employeeId) : undefined;
     const subtotalMin = req.query.subtotalMin ? Number(req.query.subtotalMin) : undefined;
@@ -84,9 +90,17 @@ outletsRouter.get("/api/outlets/:id", requireFeature("outlets"), async (req, res
     if (Number.isNaN(id)) return res.status(400).json({ error: "ID tidak valid" });
     const q = req.query;
     const str = (v: unknown) => (typeof v === "string" && v.trim() ? v.trim() : undefined);
+    const isAll = q.all === "1" || q.all === "true";
+    let from = parseDateParam(q.from);
+    let to = parseDateParam(q.to);
+    if (!from && !to && !isAll) {
+      const now = new Date();
+      from = new Date(now.getFullYear(), now.getMonth(), 1);
+      to = new Date(now.getFullYear(), now.getMonth() + 1, 0);
+    }
     const detail = await getOutletDetail(id, {
-      from: parseDateParam(q.from),
-      to: parseDateParam(q.to),
+      from,
+      to,
       itemId: q.itemId ? Number(q.itemId) : undefined,
       employeeId: q.employeeId ? Number(q.employeeId) : undefined,
       itemGroup: str(q.itemGroup),

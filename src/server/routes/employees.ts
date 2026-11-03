@@ -20,8 +20,14 @@ employeesRouter.get("/api/employees", requireAuth, cacheBriefly(30), async (req,
 
 employeesRouter.get("/api/employees/summary", requireFeature("employees"), async (req, res) => {
   try {
-    const from = parseDateParam(req.query.from);
-    const to = parseDateParam(req.query.to);
+    const isAll = req.query.all === "1" || req.query.all === "true";
+    let from = parseDateParam(req.query.from);
+    let to = parseDateParam(req.query.to);
+    if (!from && !to && !isAll) {
+      const now = new Date();
+      from = new Date(now.getFullYear(), now.getMonth(), 1);
+      to = new Date(now.getFullYear(), now.getMonth() + 1, 0);
+    }
     const itemId = req.query.itemId ? Number(req.query.itemId) : undefined;
     const outletId = req.query.outletId ? Number(req.query.outletId) : undefined;
     const subtotalMin = req.query.subtotalMin ? Number(req.query.subtotalMin) : undefined;
@@ -59,8 +65,14 @@ employeesRouter.get("/api/employees/:id", requireFeature("employees"), async (re
   try {
     const id = Number(req.params.id);
     if (Number.isNaN(id)) return res.status(400).json({ error: "ID tidak valid" });
-    const from = parseDateParam(req.query.from);
-    const to = parseDateParam(req.query.to);
+    const isAll = req.query.all === "1" || req.query.all === "true";
+    let from = parseDateParam(req.query.from);
+    let to = parseDateParam(req.query.to);
+    if (!from && !to && !isAll) {
+      const now = new Date();
+      from = new Date(now.getFullYear(), now.getMonth(), 1);
+      to = new Date(now.getFullYear(), now.getMonth() + 1, 0);
+    }
     const itemId = req.query.itemId ? Number(req.query.itemId) : undefined;
     const outletId = req.query.outletId ? Number(req.query.outletId) : undefined;
     const itemGroup = typeof req.query.itemGroup === "string" && req.query.itemGroup ? req.query.itemGroup : undefined;

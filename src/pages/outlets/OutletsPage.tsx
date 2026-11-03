@@ -3,7 +3,7 @@ import { Link } from "react-router-dom";
 import { formatNumber, formatRupiah } from "@/lib/format";
 import { SortableTable, type Column } from "@/components/SortableTable";
 import { ItemPicker, type ItemOption } from "@/components/ItemPicker";
-import { todayStr } from "@/lib/dateDefaults";
+import { todayStr, currentMonthRange } from "@/lib/dateDefaults";
 import { usePeriod } from "@/context/PeriodContext";
 
 interface OutletRow {
@@ -84,9 +84,9 @@ export function OutletsPage() {
   const [filterOptions, setFilterOptions] = useState<ItemFilterOptions>({ itemGroups: [], brands: [] });
   const [loading, setLoading] = useState(true);
 
-  // Filter state — initialised from custom period once loaded
-  const [from, setFrom] = useState("");
-  const [to, setTo] = useState("");
+  // Filter state — initialised from current month / period by default
+  const [from, setFrom] = useState(() => currentPeriod.from || currentMonthRange().from);
+  const [to, setTo] = useState(() => currentPeriod.to || currentMonthRange().to);
 
   const periodInitialised = useRef(false);
   useEffect(() => {
@@ -131,30 +131,34 @@ export function OutletsPage() {
     return () => ctrl.abort();
   }, []);
 
-  const loadData = useCallback(async () => {
-    setLoading(true);
-    try {
-      const params = new URLSearchParams();
-      if (from) params.set("from", from);
-      if (to) params.set("to", to);
-      if (selectedItem) params.set("itemId", String(selectedItem.id));
-      if (employeeId) params.set("employeeId", employeeId);
-      if (subtotalMin) params.set("subtotalMin", subtotalMin);
-      if (subtotalMax) params.set("subtotalMax", subtotalMax);
-      if (itemGroup) params.set("itemGroup", itemGroup);
-      if (brand) params.set("itemKeyword", brand);
-      const res = await fetch(`/api/outlets/summary?${params}`);
-      if (res.ok) setOutlets(await res.json());
-    } catch {
-      // ignore
-    } finally {
-      setLoading(false);
-    }
-  }, [from, to, selectedItem, employeeId, subtotalMin, subtotalMax, itemGroup, brand]);
-
   useEffect(() => {
-    loadData();
-  }, [loadData]);
+    const ctrl = new AbortController();
+    setLoading(true);
+    const params = new URLSearchParams();
+    if (from) params.set("from", from);
+    if (to) params.set("to", to);
+    if (!from && !to) params.set("all", "1");
+    if (selectedItem) params.set("itemId", String(selectedItem.id));
+    if (employeeId) params.set("employeeId", employeeId);
+    if (subtotalMin) params.set("subtotalMin", subtotalMin);
+    if (subtotalMax) params.set("subtotalMax", subtotalMax);
+    if (itemGroup) params.set("itemGroup", itemGroup);
+    if (brand) params.set("itemKeyword", brand);
+
+    fetch(`/api/outlets/summary?${params}`, { signal: ctrl.signal })
+      .then((res) => (res.ok ? res.json() : []))
+      .then((data) => setOutlets(data))
+      .catch((err) => {
+        if (err.name !== "AbortError") {
+          // ignore
+        }
+      })
+      .finally(() => {
+        if (!ctrl.signal.aborted) setLoading(false);
+      });
+
+    return () => ctrl.abort();
+  }, [from, to, selectedItem, employeeId, subtotalMin, subtotalMax, itemGroup, brand]);
 
   const SHORTCUTS = useMemo(() => [
     { label: "Hari Ini", from: todayStr(), to: todayStr() },
