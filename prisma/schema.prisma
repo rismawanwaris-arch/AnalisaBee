@@ -75,6 +75,7 @@ model Outlet {
   aliases  OutletAlias[]
   tartun   TartunDaily[]
   server   ServerDaily[]
+  spPoints SpActivationPoint[]
 
   @@map("outlets")
 }
@@ -284,6 +285,7 @@ model Employee {
   name     String            @unique
   isHidden Boolean           @default(false)
   sales    Sale[]
+  spPoints SpActivationPoint[]
   excluded PointsExclusion?
 
   @@map("employees")
@@ -347,6 +349,7 @@ model Sale {
   employee   Employee @relation(fields: [employeeId], references: [id])
   importId   Int
   import     ImportBatch @relation(fields: [importId], references: [id], onDelete: Cascade)
+  spPoints   SpActivationPoint[]
 
   @@index([itemId, tanggal])
   @@index([outletId, tanggal])
@@ -493,4 +496,39 @@ model PurchaseItem {
   @@index([itemCode])
   @@index([itemName])
   @@map("purchase_items")
+}
+
+model SpPointBatch {
+  id          Int                 @id @default(autoincrement())
+  filename    String
+  uploadedAt  DateTime            @default(now())
+  rowCount    Int                 @default(0)
+  totalPoints Int                 @default(0)
+  points      SpActivationPoint[]
+
+  @@map("sp_point_batches")
+}
+
+model SpActivationPoint {
+  id          Int           @id @default(autoincrement())
+  noPenjualan String
+  namaBarang  String
+  qty         Int           @default(1)
+  points      Int           @default(0)
+  tanggal     DateTime      @db.Date
+  employeeId  Int
+  employee    Employee      @relation(fields: [employeeId], references: [id])
+  outletId    Int
+  outlet      Outlet        @relation(fields: [outletId], references: [id])
+  saleId      Int?
+  sale        Sale?         @relation(fields: [saleId], references: [id], onDelete: SetNull)
+  batchId     Int?
+  batch       SpPointBatch? @relation(fields: [batchId], references: [id], onDelete: Cascade)
+  createdAt   DateTime      @default(now())
+
+  @@index([tanggal])
+  @@index([employeeId])
+  @@index([outletId])
+  @@index([noPenjualan])
+  @@map("sp_activation_points")
 }

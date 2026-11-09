@@ -724,6 +724,33 @@ export async function getLeaderboard(
     }
   }
 
+  if (category === "SP_VOUCHER" || !category) {
+    const spPoints = await prisma.spActivationPoint.findMany({
+      where: {
+        tanggal: { gte: from, lte: to },
+        ...(excludedIds.length > 0 ? { employeeId: { notIn: excludedIds } } : {}),
+        ...(branch ? { outlet: { branch } } : {}),
+      },
+      include: { employee: { select: { id: true, name: true } } },
+    });
+
+    for (const sp of spPoints) {
+      if (sp.points === 0 && sp.qty === 0) continue;
+      const existing = byEmployee.get(sp.employeeId);
+      if (existing) {
+        existing.totalPoints += sp.points;
+        existing.pointItemsQty += sp.qty;
+      } else {
+        byEmployee.set(sp.employeeId, {
+          employeeId: sp.employeeId,
+          employeeName: sp.employee.name,
+          totalPoints: sp.points,
+          pointItemsQty: sp.qty,
+        });
+      }
+    }
+  }
+
   const rows = [...byEmployee.values()].sort((a, b) => b.totalPoints - a.totalPoints);
   return { rows, from: from.toISOString(), to: to.toISOString() };
 }
@@ -814,6 +841,52 @@ export async function getLeaderboardExport(
     }
   }
 
+  if (category === "SP_VOUCHER" || !category) {
+    const spPoints = await prisma.spActivationPoint.findMany({
+      where: {
+        tanggal: { gte: from, lte: to },
+        ...(excludedIds.length > 0 ? { employeeId: { notIn: excludedIds } } : {}),
+        ...(branch ? { outlet: { branch } } : {}),
+      },
+      include: { employee: { select: { id: true, name: true } } },
+    });
+
+    for (const sp of spPoints) {
+      if (sp.points === 0 && sp.qty === 0) continue;
+      const itemKey = `sp:${sp.namaBarang}:${sp.points}`;
+      let empData = byEmployee.get(sp.employeeId);
+      if (!empData) {
+        empData = {
+          row: {
+            employeeId: sp.employeeId,
+            employeeName: sp.employee.name,
+            totalPoints: 0,
+            pointItemsQty: 0,
+          },
+          itemsMap: new Map(),
+        };
+        byEmployee.set(sp.employeeId, empData);
+      }
+      empData.row.totalPoints += sp.points;
+      empData.row.pointItemsQty += sp.qty;
+
+      const existingLine = empData.itemsMap.get(itemKey);
+      if (existingLine) {
+        existingLine.qty += sp.qty;
+        existingLine.totalPoints += sp.points;
+      } else {
+        empData.itemsMap.set(itemKey, {
+          itemId: -sp.id,
+          itemName: `${sp.namaBarang} (di aktivasi)`,
+          itemGroup: "SP / Starterpack",
+          qty: sp.qty,
+          pointsPerUnit: sp.qty > 0 ? Math.round(sp.points / sp.qty) : sp.points,
+          totalPoints: sp.points,
+        });
+      }
+    }
+  }
+
   const rows: LeaderboardExportRow[] = [...byEmployee.values()].map((d) => {
     const sortedItems = [...d.itemsMap.values()].sort((a, b) => b.totalPoints - a.totalPoints);
     return {
@@ -878,6 +951,43 @@ export async function getEmployeePointBreakdown(
         pointsPerUnit,
         totalPoints: earned,
       });
+    }
+  }
+
+  if (category === "SP_VOUCHER" || !category) {
+    const spPoints = await prisma.spActivationPoint.findMany({
+      where: {
+        employeeId,
+        tanggal: { gte: from, lte: to },
+        ...(outletId ? { outletId } : {}),
+        ...(branch ? { outlet: { branch } } : {}),
+      },
+      select: {
+        id: true,
+        noPenjualan: true,
+        namaBarang: true,
+        qty: true,
+        points: true,
+      },
+    });
+
+    for (const sp of spPoints) {
+      if (sp.points === 0 && sp.qty === 0) continue;
+      const key = `sp:${sp.namaBarang}:${sp.points}`;
+      const existing = breakdownMap.get(key);
+      if (existing) {
+        existing.qty += sp.qty;
+        existing.totalPoints += sp.points;
+      } else {
+        breakdownMap.set(key, {
+          itemId: -sp.id,
+          itemName: `${sp.namaBarang} (di aktivasi - ${sp.noPenjualan})`,
+          itemGroup: "SP / Starterpack",
+          qty: sp.qty,
+          pointsPerUnit: sp.qty > 0 ? Math.round(sp.points / sp.qty) : sp.points,
+          totalPoints: sp.points,
+        });
+      }
     }
   }
 
@@ -1023,6 +1133,38 @@ export async function getPublicPointsDashboard(
     catRow.points += earned;
     catRow.qty += qty;
     stat.categories.set(category, catRow);
+  }
+
+  if (category === "SP_VOUCHER" || !category) {
+    const spPoints = await prisma.spActivationPoint.findMany({
+      where: {
+        tanggal: { gte: from, lte: to },
+        ...excludeClause,
+        ...branchClause,
+        ...(outletId ? { outletId } : {}),
+      },
+      select: { employeeId: true, points: true, qty: true, outletId: true },
+    });
+
+    for (const sp of spPoints) {
+      if (sp.points === 0 && sp.qty === 0) continue;
+      let stat = statsByEmployee.get(sp.employeeId);
+      if (!stat) {
+        stat = { totalPoints: 0, pointItemsQty: 0, categories: new Map() };
+        statsByEmployee.set(sp.employeeId, stat);
+      }
+      stat.totalPoints += sp.points;
+      stat.pointItemsQty += sp.qty;
+      const catName = "SP (di aktivasi)";
+      const catRow = stat.categories.get(catName) ?? { category: catName, points: 0, qty: 0 };
+      catRow.points += sp.points;
+      catRow.qty += sp.qty;
+      stat.categories.set(catName, catRow);
+
+      const counts = outletCountsByEmployee.get(sp.employeeId) ?? new Map<number, number>();
+      counts.set(sp.outletId, (counts.get(sp.outletId) ?? 0) + 1);
+      outletCountsByEmployee.set(sp.employeeId, counts);
+    }
   }
 
   // When viewing one outlet's board or a branch-specific board, only

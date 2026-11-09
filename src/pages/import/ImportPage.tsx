@@ -3,6 +3,7 @@ import { formatNumber, formatDate } from "@/lib/format";
 import { ConfirmDeleteModal } from "@/components/ConfirmDeleteModal";
 import { ImportPreviewPanel, type ImportPreview } from "@/components/ImportPreviewPanel";
 import { TartunServerImport } from "@/components/TartunServerImport";
+import { SpPointsImport } from "@/components/SpPointsImport";
 import { SalesReturnImport } from "@/components/SalesReturnImport";
 import { PurchaseBatchHistory } from "@/components/PurchaseBatchHistory";
 
@@ -265,6 +266,8 @@ export function ImportPage() {
       )}
 
       <TartunServerImport />
+
+      <SpPointsImport />
 
       <div>
         <h2 className="text-sm font-bold text-foreground uppercase tracking-wider mb-3">Retur Penjualan</h2>

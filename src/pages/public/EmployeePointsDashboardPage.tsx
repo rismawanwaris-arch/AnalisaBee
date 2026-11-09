@@ -49,7 +49,7 @@ const CATEGORY_META: Record<PublicCategory, { title: string; subtitle: string; p
   AKSESORIS: { title: "Aksesoris", subtitle: "aksesoris", path: "/papan-poin" },
   TG: { title: "Tempered Glass", subtitle: "tempered glass (TG)", path: "/papan-poin/tg" },
   PETSHOP: { title: "Petshop", subtitle: "petshop", path: "/papan-poin/petshop" },
-  SP_VOUCHER: { title: "SP/Voucher", subtitle: "SP/voucher", path: "/papan-poin/sp" },
+  SP_VOUCHER: { title: "SP/Voucher (di aktivasi)", subtitle: "SP/voucher (di aktivasi)", path: "/papan-poin/sp" },
 };
 
 function getCategoryPath(category: PublicCategory, branch: "BANDUNG" | "CIMAHI"): string {

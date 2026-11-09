@@ -203,7 +203,7 @@ export function PointsLeaderboardPage({ branch = "BANDUNG", category }: PointsLe
           : category === "PETSHOP"
           ? " — Petshop"
           : category === "SP_VOUCHER"
-          ? " — SP/Voucher"
+          ? " — SP/Voucher (di aktivasi)"
           : category === "AKSESORIS"
           ? " — Aksesoris"
           : "";

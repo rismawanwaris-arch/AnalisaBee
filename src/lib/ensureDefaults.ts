@@ -133,6 +133,34 @@ export async function ensureDefaults(branch: "BANDUNG" | "CIMAHI" = "BANDUNG"): 
       CREATE UNIQUE INDEX IF NOT EXISTS "unmatched_daily_metrics_kind_tanggal_rawName_key"
         ON "unmatched_daily_metrics"("kind", "tanggal", "rawName");
     `);
+    await prisma.$executeRawUnsafe(`
+      CREATE TABLE IF NOT EXISTS "sp_point_batches" (
+        "id" SERIAL PRIMARY KEY,
+        "filename" TEXT NOT NULL,
+        "uploadedAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+        "rowCount" INTEGER NOT NULL DEFAULT 0,
+        "totalPoints" INTEGER NOT NULL DEFAULT 0
+      );
+    `);
+    await prisma.$executeRawUnsafe(`
+      CREATE TABLE IF NOT EXISTS "sp_activation_points" (
+        "id" SERIAL PRIMARY KEY,
+        "noPenjualan" TEXT NOT NULL,
+        "namaBarang" TEXT NOT NULL,
+        "qty" INTEGER NOT NULL DEFAULT 1,
+        "points" INTEGER NOT NULL DEFAULT 0,
+        "tanggal" DATE NOT NULL,
+        "employeeId" INTEGER NOT NULL REFERENCES "employees"("id") ON DELETE CASCADE,
+        "outletId" INTEGER NOT NULL REFERENCES "outlets"("id") ON DELETE CASCADE,
+        "saleId" INTEGER REFERENCES "sales"("id") ON DELETE SET NULL,
+        "batchId" INTEGER REFERENCES "sp_point_batches"("id") ON DELETE CASCADE,
+        "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP
+      );
+    `);
+    await prisma.$executeRawUnsafe(`CREATE INDEX IF NOT EXISTS "sp_activation_points_tanggal_idx" ON "sp_activation_points"("tanggal");`);
+    await prisma.$executeRawUnsafe(`CREATE INDEX IF NOT EXISTS "sp_activation_points_employeeId_idx" ON "sp_activation_points"("employeeId");`);
+    await prisma.$executeRawUnsafe(`CREATE INDEX IF NOT EXISTS "sp_activation_points_outletId_idx" ON "sp_activation_points"("outletId");`);
+    await prisma.$executeRawUnsafe(`CREATE INDEX IF NOT EXISTS "sp_activation_points_noPenjualan_idx" ON "sp_activation_points"("noPenjualan");`);
   } catch {
     // ignore error if tables not yet created
   }

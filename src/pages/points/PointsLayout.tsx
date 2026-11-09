@@ -24,13 +24,13 @@ export function PointsLayout({ branch = "BANDUNG" }: PointsLayoutProps = {}) {
           { href: "/points", label: "Aksesoris", exact: true },
           { href: "/points/tg", label: "Tempered Glass (TG)", exact: true },
           { href: "/points/petshop", label: "Petshop", exact: true },
-          { href: "/points/sp", label: "SP/Voucher", exact: true },
+          { href: "/points/sp", label: "SP/Voucher (di aktivasi)", exact: true },
         ]
       : [
           { href: "/cimahi/points", label: "Aksesoris", exact: true },
           { href: "/cimahi/points/tg", label: "Tempered Glass (TG)", exact: true },
           { href: "/cimahi/points/petshop", label: "Petshop", exact: true },
-          { href: "/cimahi/points/sp", label: "SP/Voucher", exact: true },
+          { href: "/cimahi/points/sp", label: "SP/Voucher (di aktivasi)", exact: true },
         ];
 
   const titleSuffix =
@@ -40,14 +40,14 @@ export function PointsLayout({ branch = "BANDUNG" }: PointsLayoutProps = {}) {
         : isPetshop
         ? " — Petshop (Cimahi)"
         : isSp
-        ? " — SP/Voucher (Cimahi)"
+        ? " — SP/Voucher (di aktivasi) (Cimahi)"
         : " — Aksesoris (Cimahi)"
       : isTg
       ? " — Tempered Glass (Bandung)"
       : isPetshop
       ? " — Petshop (Bandung)"
       : isSp
-      ? " — SP/Voucher (Bandung)"
+      ? " — SP/Voucher (di aktivasi) (Bandung)"
       : " — Aksesoris (Bandung)";
 
   const publicBoardHref =
@@ -97,6 +97,15 @@ export function PointsLayout({ branch = "BANDUNG" }: PointsLayoutProps = {}) {
               );
             })}
           </nav>
+          {isSp && (
+            <Link
+              to="/import#sp-points"
+              className="inline-flex items-center gap-1.5 rounded-xl border border-accent/40 bg-accent/10 px-3 py-1.5 text-xs font-semibold text-accent hover:bg-accent/20 transition-all shadow-2xs"
+              title="Import Poin SP dari Excel"
+            >
+              + Import Poin SP
+            </Link>
+          )}
           <a
             href={publicBoardHref}
             target="_blank"
