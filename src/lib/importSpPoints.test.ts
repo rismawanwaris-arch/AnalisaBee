@@ -9,7 +9,7 @@ describe("SP Points Import & Leaderboard Integration", () => {
   let outletId: number;
   let itemId: number;
   let testSaleId: number;
-  const testNoTransaksi = `TEST-JL-${Date.now()}`;
+  let testNoTransaksi: string;
   const testDate = new Date("2026-11-05T00:00:00.000Z");
 
   afterAll(async () => {
@@ -24,6 +24,7 @@ describe("SP Points Import & Leaderboard Integration", () => {
   });
 
   beforeEach(async () => {
+    testNoTransaksi = `TEST-JL-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`;
     // Ensure clean employee & outlet
     const emp = await prisma.employee.upsert({
       where: { name: "TEST EMP SP" },
@@ -114,5 +115,86 @@ describe("SP Points Import & Leaderboard Integration", () => {
     if (summary.batchId) {
       await deleteSpPointBatch(summary.batchId);
     }
+  });
+
+  it("only awards points to SP item in a multi-item receipt and ignores non-SP items (preventing 7 lines from giving 70 points)", async () => {
+    const multiNo = `TEST-JL-MULTI-${Date.now()}`;
+    // Create an accessory item
+    const accItem = await prisma.item.upsert({
+      where: { code_branch: { code: "TEST_ACC_01", branch: "BANDUNG" } },
+      update: {},
+      create: { code: "TEST_ACC_01", name: "KABEL DATA VIVAN TEST", itemGroup: "ACC CAMPURAN NEW", branch: "BANDUNG" },
+    });
+
+    const batch = await prisma.importBatch.create({
+      data: { filename: "test_multi.xlsx", rowCount: 2 },
+    });
+
+    // Receipt with 2 lines in POS: 1 accessory and 1 SP
+    await prisma.sale.createMany({
+      data: [
+        {
+          noTransaksi: multiNo,
+          tanggal: testDate,
+          jamBuat: "10:00:00",
+          customer: "UMUM",
+          qty: 1,
+          unit: "PCS",
+          hargaJual: 25000,
+          diskon: 0,
+          subtotal: 25000,
+          hpp: 15000,
+          labaRugi: 10000,
+          rowHash: `hash-${multiNo}-1`,
+          outletId,
+          itemId: accItem.id,
+          employeeId,
+          importId: batch.id,
+        },
+        {
+          noTransaksi: multiNo,
+          tanggal: testDate,
+          jamBuat: "10:00:00",
+          customer: "UMUM",
+          qty: 1,
+          unit: "PCS",
+          hargaJual: 15000,
+          diskon: 0,
+          subtotal: 15000,
+          hpp: 10000,
+          labaRugi: 5000,
+          rowHash: `hash-${multiNo}-2`,
+          outletId,
+          itemId,
+          employeeId,
+          importId: batch.id,
+        },
+      ],
+    });
+
+    // User imports an Excel containing both items from the receipt, each with Point: 10
+    const wsData = [
+      ["No Penjualan", "Nama Barang", "Qty", "Point"],
+      [multiNo, "KABEL DATA VIVAN TEST", 1, 10], // should be skipped!
+      [multiNo, "SP AXIS 3 GB TEST", 1, 10], // should match!
+    ];
+    const wb = XLSX.utils.book_new();
+    const ws = XLSX.utils.aoa_to_sheet(wsData);
+    XLSX.utils.book_append_sheet(wb, ws, "Sheet1");
+    const buf = XLSX.write(wb, { type: "buffer", bookType: "xlsx" });
+
+    const summary = await importSpPointsFile("test_multi_sp.xlsx", buf);
+    expect(summary.totalRows).toBe(2);
+    expect(summary.matchedCount).toBe(1); // Only 1 row matched!
+    expect(summary.unmatchedCount).toBe(1); // Kabel data rejected!
+    expect(summary.totalPoints).toBe(10); // NOT 20!
+    expect(summary.unmatchedRows[0].reason).toContain("Bukan item SP");
+
+    if (summary.batchId) {
+      await deleteSpPointBatch(summary.batchId);
+    }
+    await prisma.sale.deleteMany({ where: { noTransaksi: multiNo } });
+    await prisma.item.deleteMany({ where: { code: "TEST_ACC_01" } });
+    await prisma.importBatch.delete({ where: { id: batch.id } });
   });
 });

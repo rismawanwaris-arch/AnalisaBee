@@ -6,6 +6,7 @@ export interface ParsedSpPointRow {
   namaBarang: string;
   qty: number;
   points: number;
+  tanggal?: Date | null;
 }
 
 export interface ParseSpPointsResult {
@@ -20,6 +21,29 @@ function normalizeHeader(val: unknown): string {
     .toLowerCase()
     .replace(/[._\-/\\]+/g, " ")
     .replace(/\s+/g, " ");
+}
+
+const EXCEL_EPOCH_OFFSET_DAYS = 25569;
+
+function parseDateCell(v: unknown): Date | null {
+  if (v instanceof Date && !Number.isNaN(v.getTime())) {
+    return new Date(Date.UTC(v.getFullYear(), v.getMonth(), v.getDate()));
+  }
+  if (typeof v === "number" && Number.isFinite(v)) {
+    const utcDays = Math.floor(v) - EXCEL_EPOCH_OFFSET_DAYS;
+    const ms = utcDays * 86400 * 1000;
+    const date = new Date(ms);
+    if (!Number.isNaN(date.getTime())) {
+      return new Date(Date.UTC(date.getUTCFullYear(), date.getUTCMonth(), date.getUTCDate()));
+    }
+  }
+  if (typeof v === "string" && v.trim()) {
+    const parsed = new Date(v);
+    if (!Number.isNaN(parsed.getTime())) {
+      return new Date(Date.UTC(parsed.getFullYear(), parsed.getMonth(), parsed.getDate()));
+    }
+  }
+  return null;
 }
 
 export function parseSpPointsBuffer(buffer: Buffer | ArrayBuffer): ParseSpPointsResult {
@@ -39,12 +63,13 @@ export function parseSpPointsBuffer(buffer: Buffer | ArrayBuffer): ParseSpPoints
     return { rows: [], errors: [{ rowNumber: 0, message: "Sheet Excel tidak memiliki data." }] };
   }
 
-  // Find header row (first row that contains "penjualan" or "transaksi" or "barang" or "point")
+  // Find header row
   let headerRowIndex = -1;
   let colNoPenjualan = -1;
   let colNamaBarang = -1;
   let colQty = -1;
   let colPoint = -1;
+  let colTanggal = -1;
 
   for (let r = 0; r < Math.min(rawRows.length, 10); r++) {
     const row = rawRows[r] as unknown[];
@@ -54,6 +79,7 @@ export function parseSpPointsBuffer(buffer: Buffer | ArrayBuffer): ParseSpPoints
     let itemIdx = -1;
     let qtyIdx = -1;
     let ptIdx = -1;
+    let dateIdx = -1;
 
     for (let c = 0; c < row.length; c++) {
       const h = normalizeHeader(row[c]);
@@ -88,6 +114,11 @@ export function parseSpPointsBuffer(buffer: Buffer | ArrayBuffer): ParseSpPoints
         (h === "point" || h === "poin" || h === "points" || h.includes("point") || h.includes("poin"))
       ) {
         ptIdx = c;
+      } else if (
+        dateIdx === -1 &&
+        (h.includes("tanggal") || h.includes("tgl") || h === "date")
+      ) {
+        dateIdx = c;
       }
     }
 
@@ -98,6 +129,7 @@ export function parseSpPointsBuffer(buffer: Buffer | ArrayBuffer): ParseSpPoints
       colNamaBarang = itemIdx;
       colQty = qtyIdx;
       colPoint = ptIdx;
+      colTanggal = dateIdx;
       break;
     }
   }
@@ -110,6 +142,7 @@ export function parseSpPointsBuffer(buffer: Buffer | ArrayBuffer): ParseSpPoints
     colNamaBarang = 1;
     colQty = 2;
     colPoint = 3;
+    colTanggal = -1;
   }
 
   const rows: ParsedSpPointRow[] = [];
@@ -123,6 +156,7 @@ export function parseSpPointsBuffer(buffer: Buffer | ArrayBuffer): ParseSpPoints
     const rawItem = colNamaBarang >= 0 ? String(row[colNamaBarang] ?? "").trim() : "";
     const rawQty = colQty >= 0 ? row[colQty] : 1;
     const rawPoint = colPoint >= 0 ? row[colPoint] : 0;
+    const rawDate = colTanggal >= 0 ? row[colTanggal] : null;
 
     // Skip empty rows
     if (!rawNo && !rawItem) continue;
@@ -148,12 +182,15 @@ export function parseSpPointsBuffer(buffer: Buffer | ArrayBuffer): ParseSpPoints
       if (!Number.isNaN(pNum)) points = Math.round(pNum);
     }
 
+    const tanggal = rawDate ? parseDateCell(rawDate) : undefined;
+
     rows.push({
       rowNumber: r + 1,
       noPenjualan: rawNo,
       namaBarang: rawItem || "SP (Starterpack)",
       qty,
       points,
+      ...(tanggal ? { tanggal } : {}),
     });
   }
 

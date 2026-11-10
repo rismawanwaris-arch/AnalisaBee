@@ -21,6 +21,17 @@ export interface ImportSpPointsSummary {
   parseErrors: { rowNumber: number; message: string }[];
 }
 
+export function isSpItem(name: string, itemGroup?: string | null): boolean {
+  const g = (itemGroup ?? "").toUpperCase().trim();
+  const n = (name ?? "").toUpperCase().trim();
+
+  if (g === "SP" || g === "VOUCHER") return true;
+  if (n.startsWith("SP ") || n.startsWith("SP-") || n.startsWith("SP_") || n === "SP") return true;
+  if (n.startsWith("V. ") || n.startsWith("V-") || n.startsWith("VOUCHER")) return true;
+  if (n.includes("STARTERPACK") || n.includes("STARTER PACK") || n.includes("PERDANA")) return true;
+  return false;
+}
+
 export async function importSpPointsFile(
   filename: string,
   buffer: Buffer | ArrayBuffer
@@ -45,7 +56,7 @@ export async function importSpPointsFile(
   // Collect unique transaction numbers
   const uniqueNos = [...new Set(rows.map((r) => r.noPenjualan.trim()))];
 
-  // Batch-fetch matching sales
+  // Batch-fetch matching sales with item group info
   const sales = await prisma.sale.findMany({
     where: { noTransaksi: { in: uniqueNos } },
     select: {
@@ -54,7 +65,7 @@ export async function importSpPointsFile(
       employeeId: true,
       outletId: true,
       tanggal: true,
-      item: { select: { name: true } },
+      item: { select: { id: true, name: true, itemGroup: true } },
     },
   });
 
@@ -81,6 +92,14 @@ export async function importSpPointsFile(
   let totalPoints = 0;
   let totalQty = 0;
 
+  // Default point date to today UTC so imported activation points immediately appear
+  // in the current active month/period on Papan Poin.
+  const today = new Date();
+  const defaultDate = new Date(Date.UTC(today.getFullYear(), today.getMonth(), today.getDate()));
+
+  // Track matched sale IDs in this batch so multiple non-SP items don't falsely claim an SP item
+  const usedSaleIds = new Set<number>();
+
   for (const row of rows) {
     const matchingSales = salesByNo.get(row.noPenjualan.trim());
     if (!matchingSales || matchingSales.length === 0) {
@@ -93,23 +112,61 @@ export async function importSpPointsFile(
       continue;
     }
 
-    // If multiple lines in same receipt, try to match by item name
+    const rowIsSp = isSpItem(row.namaBarang);
+    const spCandidates = matchingSales.filter((s) => isSpItem(s.item?.name ?? "", s.item?.itemGroup));
+
+    // If receipt has SP items, but this row in Excel is an accessory/non-SP item:
+    // SKIP IT so that a multi-item receipt export doesn't give points to non-SP items!
+    if (!rowIsSp && spCandidates.length > 0) {
+      unmatchedRows.push({
+        rowNumber: row.rowNumber,
+        noPenjualan: row.noPenjualan,
+        namaBarang: row.namaBarang,
+        reason: "Bukan item SP / Starterpack (item non-SP dalam struk diabaikan).",
+      });
+      continue;
+    }
+
+    // If neither the row nor any item in the receipt is an SP item:
+    if (!rowIsSp && spCandidates.length === 0) {
+      unmatchedRows.push({
+        rowNumber: row.rowNumber,
+        noPenjualan: row.noPenjualan,
+        namaBarang: row.namaBarang,
+        reason: "Bukan item SP / Starterpack dan transaksi ini tidak memuat item SP.",
+      });
+      continue;
+    }
+
+    // Try matching specific SP item in the receipt
     const itemUpper = row.namaBarang.toUpperCase().trim();
-    let pickedSale = matchingSales.find((s) => {
+    let pickedSale = spCandidates.find((s) => {
+      if (usedSaleIds.has(s.id)) return false;
       const sItemUpper = (s.item?.name ?? "").toUpperCase().trim();
       return sItemUpper.includes(itemUpper) || itemUpper.includes(sItemUpper);
     });
 
     if (!pickedSale) {
-      pickedSale = matchingSales[0];
+      pickedSale = spCandidates.find((s) => !usedSaleIds.has(s.id));
     }
+
+    if (!pickedSale) {
+      pickedSale = spCandidates[0] ?? matchingSales[0];
+    }
+
+    if (pickedSale) {
+      usedSaleIds.add(pickedSale.id);
+    }
+
+    // Determine point date: prefer explicit row date if given, otherwise today's date
+    const pointDate = row.tanggal ?? defaultDate;
 
     validRecords.push({
       noPenjualan: row.noPenjualan.trim(),
-      namaBarang: row.namaBarang.trim(),
+      namaBarang: pickedSale?.item?.name ?? row.namaBarang.trim(),
       qty: row.qty,
       points: row.points,
-      tanggal: pickedSale.tanggal,
+      tanggal: pointDate,
       employeeId: pickedSale.employeeId,
       outletId: pickedSale.outletId,
       saleId: pickedSale.id,
