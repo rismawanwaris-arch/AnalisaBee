@@ -197,4 +197,57 @@ describe("SP Points Import & Leaderboard Integration", () => {
     await prisma.item.deleteMany({ where: { code: "TEST_ACC_01" } });
     await prisma.importBatch.delete({ where: { id: batch.id } });
   });
+
+  it("rejects when admin enters Qty 3 pcs but POS sale only has 1 pcs", async () => {
+    // testSaleId in beforeEach has qty = 1
+    const wsData = [
+      ["No Penjualan", "Nama Barang", "Qty", "Point"],
+      [testNoTransaksi, "SP AXIS 3 GB TEST", 3, 30], // admin input 3 pcs, POS only 1 pcs!
+    ];
+    const wb = XLSX.utils.book_new();
+    const ws = XLSX.utils.aoa_to_sheet(wsData);
+    XLSX.utils.book_append_sheet(wb, ws, "Sheet1");
+    const buf = XLSX.write(wb, { type: "buffer", bookType: "xlsx" });
+
+    const summary = await importSpPointsFile("test_over_qty.xlsx", buf);
+    expect(summary.totalRows).toBe(1);
+    expect(summary.matchedCount).toBe(0); // Protected! Rejected!
+    expect(summary.unmatchedCount).toBe(1);
+    expect(summary.totalPoints).toBe(0);
+    expect(summary.unmatchedRows[0].reason).toContain("melebihi qty pada nomor penjualan POS");
+  });
+
+  it("prevents duplicate claiming when available qty in POS has already been claimed", async () => {
+    // 1st import with valid 1 pcs
+    const wsData1 = [
+      ["No Penjualan", "Nama Barang", "Qty", "Point"],
+      [testNoTransaksi, "SP AXIS 3 GB TEST", 1, 10],
+    ];
+    const wb1 = XLSX.utils.book_new();
+    const ws1 = XLSX.utils.aoa_to_sheet(wsData1);
+    XLSX.utils.book_append_sheet(wb1, ws1, "Sheet1");
+    const buf1 = XLSX.write(wb1, { type: "buffer", bookType: "xlsx" });
+
+    const summary1 = await importSpPointsFile("test_claim_1.xlsx", buf1);
+    expect(summary1.matchedCount).toBe(1);
+
+    // 2nd import trying to claim the same 1 pcs again
+    const wsData2 = [
+      ["No Penjualan", "Nama Barang", "Qty", "Point"],
+      [testNoTransaksi, "SP AXIS 3 GB TEST", 1, 10],
+    ];
+    const wb2 = XLSX.utils.book_new();
+    const ws2 = XLSX.utils.aoa_to_sheet(wsData2);
+    XLSX.utils.book_append_sheet(wb2, ws2, "Sheet1");
+    const buf2 = XLSX.write(wb2, { type: "buffer", bookType: "xlsx" });
+
+    const summary2 = await importSpPointsFile("test_claim_2.xlsx", buf2);
+    expect(summary2.matchedCount).toBe(0); // Blocked!
+    expect(summary2.unmatchedCount).toBe(1);
+    expect(summary2.unmatchedRows[0].reason).toContain("sudah pernah di-klaim");
+
+    if (summary1.batchId) {
+      await deleteSpPointBatch(summary1.batchId);
+    }
+  });
 });

@@ -56,7 +56,7 @@ export async function importSpPointsFile(
   // Collect unique transaction numbers
   const uniqueNos = [...new Set(rows.map((r) => r.noPenjualan.trim()))];
 
-  // Batch-fetch matching sales with item group info
+  // Batch-fetch matching sales with item group info and qty
   const sales = await prisma.sale.findMany({
     where: { noTransaksi: { in: uniqueNos } },
     select: {
@@ -65,9 +65,28 @@ export async function importSpPointsFile(
       employeeId: true,
       outletId: true,
       tanggal: true,
+      qty: true,
       item: { select: { id: true, name: true, itemGroup: true } },
     },
   });
+
+  // Query already claimed points for these transactions to prevent over-claiming
+  const existingClaimedPoints = await prisma.spActivationPoint.findMany({
+    where: { noPenjualan: { in: uniqueNos } },
+    select: {
+      saleId: true,
+      qty: true,
+    },
+  });
+  const previouslyClaimedBySaleId = new Map<number, number>();
+  for (const ep of existingClaimedPoints) {
+    if (ep.saleId) {
+      previouslyClaimedBySaleId.set(
+        ep.saleId,
+        (previouslyClaimedBySaleId.get(ep.saleId) ?? 0) + ep.qty
+      );
+    }
+  }
 
   // Group sales by noTransaksi
   const salesByNo = new Map<string, typeof sales>();
@@ -97,8 +116,8 @@ export async function importSpPointsFile(
   const today = new Date();
   const defaultDate = new Date(Date.UTC(today.getFullYear(), today.getMonth(), today.getDate()));
 
-  // Track matched sale IDs in this batch so multiple non-SP items don't falsely claim an SP item
-  const usedSaleIds = new Set<number>();
+  // Track claimed qty per sale line in this current batch
+  const batchClaimedBySaleId = new Map<number, number>();
 
   for (const row of rows) {
     const matchingSales = salesByNo.get(row.noPenjualan.trim());
@@ -138,25 +157,72 @@ export async function importSpPointsFile(
       continue;
     }
 
-    // Try matching specific SP item in the receipt
+    // Try matching specific SP item in the receipt with remaining available qty
     const itemUpper = row.namaBarang.toUpperCase().trim();
     let pickedSale = spCandidates.find((s) => {
-      if (usedSaleIds.has(s.id)) return false;
+      const remaining =
+        s.qty -
+        (previouslyClaimedBySaleId.get(s.id) ?? 0) -
+        (batchClaimedBySaleId.get(s.id) ?? 0);
+      if (remaining <= 0) return false;
       const sItemUpper = (s.item?.name ?? "").toUpperCase().trim();
       return sItemUpper.includes(itemUpper) || itemUpper.includes(sItemUpper);
     });
 
     if (!pickedSale) {
-      pickedSale = spCandidates.find((s) => !usedSaleIds.has(s.id));
+      pickedSale = spCandidates.find((s) => {
+        const remaining =
+          s.qty -
+          (previouslyClaimedBySaleId.get(s.id) ?? 0) -
+          (batchClaimedBySaleId.get(s.id) ?? 0);
+        return remaining > 0;
+      });
     }
 
     if (!pickedSale) {
       pickedSale = spCandidates[0] ?? matchingSales[0];
     }
 
-    if (pickedSale) {
-      usedSaleIds.add(pickedSale.id);
+    const saleQty = pickedSale.qty;
+    const prevClaimed = previouslyClaimedBySaleId.get(pickedSale.id) ?? 0;
+    const batchClaimed = batchClaimedBySaleId.get(pickedSale.id) ?? 0;
+    const totalClaimed = prevClaimed + batchClaimed;
+    const availableQty = saleQty - totalClaimed;
+
+    // Proteksi 1: Input Qty melebihi total Qty pada penjualan POS
+    if (row.qty > saleQty) {
+      unmatchedRows.push({
+        rowNumber: row.rowNumber,
+        noPenjualan: row.noPenjualan,
+        namaBarang: row.namaBarang,
+        reason: `Qty diinput (${row.qty} pcs) melebihi qty pada nomor penjualan POS (${saleQty} pcs).`,
+      });
+      continue;
     }
+
+    // Proteksi 2: Qty pada penjualan POS sudah habis di-klaim sebelumnya
+    if (availableQty <= 0) {
+      unmatchedRows.push({
+        rowNumber: row.rowNumber,
+        noPenjualan: row.noPenjualan,
+        namaBarang: row.namaBarang,
+        reason: `Poin untuk nomor penjualan ini (${saleQty} pcs) sudah pernah di-klaim seluruhnya.`,
+      });
+      continue;
+    }
+
+    // Proteksi 3: Input Qty melebihi sisa Qty yang belum di-klaim
+    if (row.qty > availableQty) {
+      unmatchedRows.push({
+        rowNumber: row.rowNumber,
+        noPenjualan: row.noPenjualan,
+        namaBarang: row.namaBarang,
+        reason: `Qty diinput (${row.qty} pcs) melebihi sisa qty yang belum di-klaim (${availableQty} pcs tersisa dari ${saleQty} pcs).`,
+      });
+      continue;
+    }
+
+    batchClaimedBySaleId.set(pickedSale.id, batchClaimed + row.qty);
 
     // Determine point date: prefer explicit row date if given, otherwise today's date
     const pointDate = row.tanggal ?? defaultDate;
