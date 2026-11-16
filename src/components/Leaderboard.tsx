@@ -9,11 +9,22 @@ export interface LeaderboardRow {
   subtotal: number;
 }
 
-export function Leaderboard({ title, rows }: { title: string; rows: LeaderboardRow[] }) {
+export function Leaderboard({
+  title,
+  rows,
+  delayMs = 0,
+}: {
+  title: string;
+  rows: LeaderboardRow[];
+  delayMs?: number;
+}) {
   const max = Math.max(1, ...rows.map((r) => r.subtotal));
 
   return (
-    <div className="rounded-xl border border-border/80 bg-surface shadow-xs overflow-hidden">
+    <div
+      style={{ animationDelay: `${delayMs}ms` }}
+      className="animate-enter rounded-xl border border-border/80 bg-surface shadow-xs overflow-hidden"
+    >
       <div className="px-4 py-3 bg-surface-subtle/70 border-b border-border/80 flex items-center justify-between">
         <h3 className="text-xs font-bold uppercase tracking-wider text-foreground">{title}</h3>
         <span className="text-[11px] font-mono text-muted bg-surface border border-border/60 rounded px-2 py-0.5">
@@ -33,7 +44,8 @@ export function Leaderboard({ title, rows }: { title: string; rows: LeaderboardR
               <Link
                 key={r.id}
                 to={r.href}
-                className="group block px-4 py-3 hover:bg-surface-hover/70 transition-all"
+                style={{ animationDelay: `${delayMs + i * 40}ms` }}
+                className="animate-enter group block px-4 py-3 hover:bg-surface-hover/70 transition-all"
               >
                 <div className="flex items-center justify-between gap-3 mb-2">
                   <div className="flex items-center min-w-0 gap-2.5">
@@ -63,12 +75,15 @@ export function Leaderboard({ title, rows }: { title: string; rows: LeaderboardR
 
                 <div className="w-full h-1.5 bg-surface-subtle rounded-full overflow-hidden ml-8.5" style={{ width: "calc(100% - 2.25rem)" }}>
                   <div
-                    className={`h-full rounded-full transition-all duration-300 ${
+                    className={`animate-bar-grow h-full rounded-full transition-all duration-300 ${
                       isTop3
                         ? "bg-gradient-to-r from-blue-500 to-sky-400"
                         : "bg-slate-500/60"
                     }`}
-                    style={{ width: `${pct}%` }}
+                    style={{
+                      width: `${pct}%`,
+                      animationDelay: `${delayMs + i * 45 + 140}ms`,
+                    }}
                   />
                 </div>
               </Link>

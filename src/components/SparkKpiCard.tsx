@@ -1,30 +1,51 @@
 
 import { useEffect, useId, useState } from "react";
 import { Area, AreaChart, ResponsiveContainer } from "recharts";
+import { useCountUp } from "@/hooks/useCountUp";
 
 interface SparkKpiCardProps {
   label: string;
   value: string;
+  numericValue?: number;
+  formatValue?: (n: number) => string;
   trendPct: number | null;
   series: number[];
   hint?: string;
+  delayMs?: number;
 }
 
-export function SparkKpiCard({ label, value, trendPct, series, hint }: SparkKpiCardProps) {
+export function SparkKpiCard({
+  label,
+  value,
+  numericValue,
+  formatValue,
+  trendPct,
+  series,
+  hint,
+  delayMs = 0,
+}: SparkKpiCardProps) {
   const rawId = useId();
   const gradientId = `spark_${rawId.replace(/[^a-zA-Z0-9_-]/g, "_")}`;
   const [mounted, setMounted] = useState(false);
+  const animatedNumeric = useCountUp(numericValue);
 
   useEffect(() => {
     setMounted(true);
   }, []);
+
+  const displayValue =
+    numericValue !== undefined && formatValue ? formatValue(animatedNumeric) : value;
 
   const positive = (trendPct ?? 0) >= 0;
   const data = series.map((v) => ({ v }));
   const sparkData = data.length === 1 ? [{ v: data[0].v }, { v: data[0].v }] : data;
 
   return (
-    <div className="group relative rounded-xl border border-border/80 bg-surface p-4 shadow-xs hover:border-border hover:shadow-sm transition-all duration-200 flex flex-col justify-between overflow-hidden">
+    <div
+      style={{ animationDelay: `${delayMs}ms` }}
+      className="animate-enter group relative rounded-xl border border-border/80 bg-surface p-4 shadow-xs hover:-translate-y-0.5 hover:border-accent/40 hover:shadow-md transition-all duration-200 flex flex-col justify-between overflow-hidden"
+    >
+      <div className="pointer-events-none absolute inset-x-0 top-0 h-0.5 bg-gradient-to-r from-transparent via-accent/60 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-300" />
       <div>
         <div className="flex items-center justify-between gap-2 mb-2">
           <span className="text-xs font-semibold uppercase tracking-wider text-muted/80">
@@ -61,7 +82,7 @@ export function SparkKpiCard({ label, value, trendPct, series, hint }: SparkKpiC
         </div>
 
         <div className="text-xl xl:text-2xl font-bold font-mono tracking-tight tabular-nums text-foreground">
-          {value}
+          {displayValue}
         </div>
 
         {hint && (
@@ -87,7 +108,9 @@ export function SparkKpiCard({ label, value, trendPct, series, hint }: SparkKpiC
                 stroke="var(--chart-line)"
                 strokeWidth={2}
                 fill={`url(#${gradientId})`}
-                isAnimationActive={false}
+                isAnimationActive={true}
+                animationDuration={750}
+                animationEasing="ease-out"
               />
             </AreaChart>
           </ResponsiveContainer>

@@ -16,21 +16,31 @@ interface TrendPoint {
   tanggal: string;
   subtotal: number;
   labaRugi: number;
+  laporanHarianTotal?: number;
 }
 
-type Metric = "subtotal" | "labaRugi";
+type Metric = "subtotal" | "labaRugi" | "laporanHarianTotal";
 
 const METRIC_LABEL: Record<Metric, string> = {
   subtotal: "Total Omzet",
   labaRugi: "Total Laba",
+  laporanHarianTotal: "Total Laporan Harian",
+};
+
+const METRIC_BUTTON_LABEL: Record<Metric, string> = {
+  subtotal: "Omzet",
+  labaRugi: "Laba",
+  laporanHarianTotal: "Total Laporan Harian",
 };
 
 export function RevenueAreaChart({
   data,
   labaTargetPerDay,
+  laporanTargetPerDay,
 }: {
   data: TrendPoint[];
   labaTargetPerDay?: number | null;
+  laporanTargetPerDay?: number | null;
 }) {
   const rawId = useId();
   const gradientId = `rev_${rawId.replace(/[^a-zA-Z0-9_-]/g, "_")}`;
@@ -41,7 +51,13 @@ export function RevenueAreaChart({
     setMounted(true);
   }, []);
 
-  const showBaseline = metric === "labaRugi" && !!labaTargetPerDay && labaTargetPerDay > 0;
+  const activeTarget =
+    metric === "labaRugi"
+      ? labaTargetPerDay
+      : metric === "laporanHarianTotal"
+      ? laporanTargetPerDay
+      : null;
+  const showBaseline = !!activeTarget && activeTarget > 0;
 
   // If there is only 1 point, create a twin point across the day so AreaChart draws a visible line/area
   const chartData =
@@ -64,7 +80,8 @@ export function RevenueAreaChart({
           </div>
           {showBaseline ? (
             <p className="text-xs text-muted font-mono mt-0.5">
-              Baseline target laba: <span className="font-semibold text-foreground">{formatRupiah(labaTargetPerDay!)}</span>/hari
+              {metric === "laporanHarianTotal" ? "Baseline target laporan harian:" : "Baseline target laba:"}{" "}
+              <span className="font-semibold text-foreground">{formatRupiah(activeTarget!)}</span>/hari
             </p>
           ) : (
             <p className="text-xs text-muted mt-0.5">
@@ -74,8 +91,8 @@ export function RevenueAreaChart({
         </div>
 
         {/* Segmented Control Pill */}
-        <div className="inline-flex rounded-lg border border-border/80 p-1 bg-surface-subtle shadow-2xs">
-          {(["subtotal", "labaRugi"] as Metric[]).map((m) => (
+        <div className="inline-flex flex-wrap rounded-lg border border-border/80 p-1 bg-surface-subtle shadow-2xs">
+          {(["subtotal", "labaRugi", "laporanHarianTotal"] as Metric[]).map((m) => (
             <button
               key={m}
               type="button"
@@ -86,7 +103,7 @@ export function RevenueAreaChart({
                   : "text-muted hover:text-foreground"
               }`}
             >
-              {m === "subtotal" ? "Omzet" : "Laba"}
+              {METRIC_BUTTON_LABEL[m]}
             </button>
           ))}
         </div>
@@ -103,7 +120,7 @@ export function RevenueAreaChart({
       ) : (
         <div className="w-full pt-2">
           <ResponsiveContainer width="100%" height={280}>
-            <AreaChart data={chartData} margin={{ left: 0, right: 12, top: 12, bottom: 0 }}>
+            <AreaChart key={metric} data={chartData} margin={{ left: 0, right: 12, top: 12, bottom: 0 }}>
               <defs>
                 <linearGradient id={gradientId} x1="0" y1="0" x2="0" y2="1">
                   <stop offset="0%" stopColor="var(--chart-line)" stopOpacity={0.25} />
@@ -150,12 +167,12 @@ export function RevenueAreaChart({
               />
               {showBaseline && (
                 <ReferenceLine
-                  y={labaTargetPerDay!}
+                  y={activeTarget!}
                   stroke="var(--chart-baseline)"
                   strokeWidth={1.5}
                   strokeDasharray="4 4"
                   label={{
-                    value: "TARGET LABA",
+                    value: metric === "laporanHarianTotal" ? "TARGET HARIAN" : "TARGET LABA",
                     position: "insideTopRight",
                     fontSize: 10,
                     fontFamily: "var(--font-mono)",
@@ -172,7 +189,9 @@ export function RevenueAreaChart({
                 fill={`url(#${gradientId})`}
                 dot={{ r: 4, fill: "var(--surface)", stroke: "var(--chart-line)", strokeWidth: 2 }}
                 activeDot={{ r: 6, fill: "var(--chart-line)", stroke: "var(--surface)", strokeWidth: 2 }}
-                isAnimationActive={false}
+                isAnimationActive={true}
+                animationDuration={800}
+                animationEasing="ease-out"
               />
             </AreaChart>
           </ResponsiveContainer>
