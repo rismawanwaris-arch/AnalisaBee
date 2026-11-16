@@ -15,6 +15,7 @@ const AnalitikPage = lazy(() => import("./pages/target/AnalitikPage").then((m) =
 const JamOperasionalPage = lazy(() => import("./pages/target/JamOperasionalPage").then((m) => ({ default: m.JamOperasionalPage })));
 const PointsLayout = lazy(() => import("./pages/points/PointsLayout").then((m) => ({ default: m.PointsLayout })));
 const PointsLeaderboardPage = lazy(() => import("./pages/points/PointsLeaderboardPage").then((m) => ({ default: m.PointsLeaderboardPage })));
+const AttentionPointsPage = lazy(() => import("./pages/points/AttentionPointsPage").then((m) => ({ default: m.AttentionPointsPage })));
 const ItemsPage = lazy(() => import("./pages/items/ItemsPage").then((m) => ({ default: m.ItemsPage })));
 const ItemsByCategoryPage = lazy(() => import("./pages/items/ItemsByCategoryPage").then((m) => ({ default: m.ItemsByCategoryPage })));
 const OutletsPage = lazy(() => import("./pages/outlets/OutletsPage").then((m) => ({ default: m.OutletsPage })));
@@ -78,6 +79,7 @@ export function App() {
               <Route path="/papan-poin/tg" element={<EmployeePointsDashboardPage branch="BANDUNG" category="TG" />} />
               <Route path="/papan-poin/petshop" element={<EmployeePointsDashboardPage branch="BANDUNG" category="PETSHOP" />} />
               <Route path="/papan-poin/sp" element={<EmployeePointsDashboardPage branch="BANDUNG" category="SP_VOUCHER" />} />
+              <Route path="/papan-poin/atensi" element={<EmployeePointsDashboardPage branch="BANDUNG" category="ATENSI" />} />
 
               {/* Public Cimahi points wallboards */}
               <Route path="/papan-poin/cimahi" element={<EmployeePointsDashboardPage branch="CIMAHI" category="AKSESORIS" />} />
@@ -85,6 +87,7 @@ export function App() {
               <Route path="/papan-poin/cimahi/tg" element={<EmployeePointsDashboardPage branch="CIMAHI" category="TG" />} />
               <Route path="/papan-poin/cimahi/petshop" element={<EmployeePointsDashboardPage branch="CIMAHI" category="PETSHOP" />} />
               <Route path="/papan-poin/cimahi/sp" element={<EmployeePointsDashboardPage branch="CIMAHI" category="SP_VOUCHER" />} />
+              <Route path="/papan-poin/cimahi/atensi" element={<EmployeePointsDashboardPage branch="CIMAHI" category="ATENSI" />} />
 
               {/* Protected Application Routes */}
               <Route element={<AppLayout />}>
@@ -106,6 +109,7 @@ export function App() {
                   <Route path="tg" element={<PointsLeaderboardPage category="TG" />} />
                   <Route path="petshop" element={<PointsLeaderboardPage category="PETSHOP" />} />
                   <Route path="sp" element={<PointsLeaderboardPage category="SP_VOUCHER" />} />
+                  <Route path="atensi" element={<AttentionPointsPage branch="BANDUNG" />} />
                   <Route path="pengaturan" element={<Navigate to="/settings?tab=points" replace />} />
                 </Route>
 
@@ -134,6 +138,7 @@ export function App() {
                   <Route path="tg" element={<PointsLeaderboardPage branch="CIMAHI" category="TG" />} />
                   <Route path="petshop" element={<PointsLeaderboardPage branch="CIMAHI" category="PETSHOP" />} />
                   <Route path="sp" element={<PointsLeaderboardPage branch="CIMAHI" category="SP_VOUCHER" />} />
+                  <Route path="atensi" element={<AttentionPointsPage branch="CIMAHI" />} />
                   <Route path="pengaturan" element={<Navigate to="/settings?tab=points" replace />} />
                 </Route>
 

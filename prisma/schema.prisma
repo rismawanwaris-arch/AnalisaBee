@@ -281,12 +281,13 @@ model PointSettings {
 }
 
 model Employee {
-  id       Int               @id @default(autoincrement())
-  name     String            @unique
-  isHidden Boolean           @default(false)
-  sales    Sale[]
-  spPoints SpActivationPoint[]
-  excluded PointsExclusion?
+  id              Int                   @id @default(autoincrement())
+  name            String                @unique
+  isHidden        Boolean               @default(false)
+  sales           Sale[]
+  spPoints        SpActivationPoint[]
+  attentionPoints AttentionPointEntry[]
+  excluded        PointsExclusion?
 
   @@map("employees")
 }
@@ -531,4 +532,43 @@ model SpActivationPoint {
   @@index([outletId])
   @@index([noPenjualan])
   @@map("sp_activation_points")
+}
+
+// Standalone Attention Point ("Poin Atensi") programs such as Google Review
+// or special promos. Managed via toggle Aktif/Tidak Aktif so deactivated
+// programs cannot be chosen for new entries without affecting past history.
+model AttentionProgram {
+  id          Int                   @id @default(autoincrement())
+  name        String                @unique
+  points      Int
+  description String?
+  isActive    Boolean               @default(true)
+  createdAt   DateTime              @default(now())
+  updatedAt   DateTime              @updatedAt
+  entries     AttentionPointEntry[]
+
+  @@map("attention_programs")
+}
+
+// Manual point entries awarded to existing employees for attention programs,
+// independent of POS sales or transaction numbers.
+model AttentionPointEntry {
+  id            Int              @id @default(autoincrement())
+  tanggal       DateTime         @db.Date
+  employeeId    Int
+  employee      Employee         @relation(fields: [employeeId], references: [id])
+  programId     Int
+  program       AttentionProgram @relation(fields: [programId], references: [id])
+  qty           Int              @default(1)
+  pointsPerUnit Int
+  totalPoints   Int
+  note          String?
+  createdBy     String?
+  createdAt     DateTime         @default(now())
+  updatedAt     DateTime         @updatedAt
+
+  @@index([tanggal])
+  @@index([employeeId, tanggal])
+  @@index([programId])
+  @@map("attention_point_entries")
 }

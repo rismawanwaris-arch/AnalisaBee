@@ -7,7 +7,6 @@ interface PointsLayoutProps {
 export function PointsLayout({ branch = "BANDUNG" }: PointsLayoutProps = {}) {
   const location = useLocation();
   const pathname = location.pathname;
-  const basePath = branch === "CIMAHI" ? "/cimahi/points" : "/points";
   const isTg =
     (branch === "BANDUNG" && pathname.startsWith("/points/tg")) ||
     (branch === "CIMAHI" && pathname.startsWith("/cimahi/points/tg"));
@@ -17,6 +16,9 @@ export function PointsLayout({ branch = "BANDUNG" }: PointsLayoutProps = {}) {
   const isSp =
     (branch === "BANDUNG" && pathname.startsWith("/points/sp")) ||
     (branch === "CIMAHI" && pathname.startsWith("/cimahi/points/sp"));
+  const isAtensi =
+    (branch === "BANDUNG" && pathname.startsWith("/points/atensi")) ||
+    (branch === "CIMAHI" && pathname.startsWith("/cimahi/points/atensi"));
 
   const TABS =
     branch === "BANDUNG"
@@ -25,12 +27,14 @@ export function PointsLayout({ branch = "BANDUNG" }: PointsLayoutProps = {}) {
           { href: "/points/tg", label: "Tempered Glass (TG)", exact: true },
           { href: "/points/petshop", label: "Petshop", exact: true },
           { href: "/points/sp", label: "SP/Voucher (di aktivasi)", exact: true },
+          { href: "/points/atensi", label: "Poin Atensi", exact: true },
         ]
       : [
           { href: "/cimahi/points", label: "Aksesoris", exact: true },
           { href: "/cimahi/points/tg", label: "Tempered Glass (TG)", exact: true },
           { href: "/cimahi/points/petshop", label: "Petshop", exact: true },
           { href: "/cimahi/points/sp", label: "SP/Voucher (di aktivasi)", exact: true },
+          { href: "/cimahi/points/atensi", label: "Poin Atensi", exact: true },
         ];
 
   const titleSuffix =
@@ -41,6 +45,8 @@ export function PointsLayout({ branch = "BANDUNG" }: PointsLayoutProps = {}) {
         ? " — Petshop (Cimahi)"
         : isSp
         ? " — SP/Voucher (di aktivasi) (Cimahi)"
+        : isAtensi
+        ? " — Poin Atensi (Cimahi)"
         : " — Aksesoris (Cimahi)"
       : isTg
       ? " — Tempered Glass (Bandung)"
@@ -48,6 +54,8 @@ export function PointsLayout({ branch = "BANDUNG" }: PointsLayoutProps = {}) {
       ? " — Petshop (Bandung)"
       : isSp
       ? " — SP/Voucher (di aktivasi) (Bandung)"
+      : isAtensi
+      ? " — Poin Atensi (Bandung)"
       : " — Aksesoris (Bandung)";
 
   const publicBoardHref =
@@ -58,6 +66,8 @@ export function PointsLayout({ branch = "BANDUNG" }: PointsLayoutProps = {}) {
         ? "/papan-poin/cimahi/petshop"
         : isSp
         ? "/papan-poin/cimahi/sp"
+        : isAtensi
+        ? "/papan-poin/cimahi/atensi"
         : "/papan-poin/cimahi"
       : isTg
       ? "/papan-poin/tg"
@@ -65,6 +75,8 @@ export function PointsLayout({ branch = "BANDUNG" }: PointsLayoutProps = {}) {
       ? "/papan-poin/petshop"
       : isSp
       ? "/papan-poin/sp"
+      : isAtensi
+      ? "/papan-poin/atensi"
       : "/papan-poin";
 
   return (

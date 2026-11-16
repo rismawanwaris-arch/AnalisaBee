@@ -161,6 +161,35 @@ export async function ensureDefaults(branch: "BANDUNG" | "CIMAHI" = "BANDUNG"): 
     await prisma.$executeRawUnsafe(`CREATE INDEX IF NOT EXISTS "sp_activation_points_employeeId_idx" ON "sp_activation_points"("employeeId");`);
     await prisma.$executeRawUnsafe(`CREATE INDEX IF NOT EXISTS "sp_activation_points_outletId_idx" ON "sp_activation_points"("outletId");`);
     await prisma.$executeRawUnsafe(`CREATE INDEX IF NOT EXISTS "sp_activation_points_noPenjualan_idx" ON "sp_activation_points"("noPenjualan");`);
+    await prisma.$executeRawUnsafe(`
+      CREATE TABLE IF NOT EXISTS "attention_programs" (
+        "id" SERIAL PRIMARY KEY,
+        "name" TEXT NOT NULL UNIQUE,
+        "points" INTEGER NOT NULL,
+        "description" TEXT,
+        "isActive" BOOLEAN NOT NULL DEFAULT true,
+        "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+        "updatedAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP
+      );
+    `);
+    await prisma.$executeRawUnsafe(`
+      CREATE TABLE IF NOT EXISTS "attention_point_entries" (
+        "id" SERIAL PRIMARY KEY,
+        "tanggal" DATE NOT NULL,
+        "employeeId" INTEGER NOT NULL REFERENCES "employees"("id") ON DELETE RESTRICT ON UPDATE CASCADE,
+        "programId" INTEGER NOT NULL REFERENCES "attention_programs"("id") ON DELETE RESTRICT ON UPDATE CASCADE,
+        "qty" INTEGER NOT NULL DEFAULT 1,
+        "pointsPerUnit" INTEGER NOT NULL,
+        "totalPoints" INTEGER NOT NULL,
+        "note" TEXT,
+        "createdBy" TEXT,
+        "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+        "updatedAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP
+      );
+    `);
+    await prisma.$executeRawUnsafe(`CREATE INDEX IF NOT EXISTS "attention_point_entries_tanggal_idx" ON "attention_point_entries"("tanggal");`);
+    await prisma.$executeRawUnsafe(`CREATE INDEX IF NOT EXISTS "attention_point_entries_employeeId_tanggal_idx" ON "attention_point_entries"("employeeId", "tanggal");`);
+    await prisma.$executeRawUnsafe(`CREATE INDEX IF NOT EXISTS "attention_point_entries_programId_idx" ON "attention_point_entries"("programId");`);
   } catch {
     // ignore error if tables not yet created
   }

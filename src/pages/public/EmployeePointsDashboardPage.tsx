@@ -40,7 +40,7 @@ const RANK_BADGE = [
   "bg-orange-600/15 text-orange-600 dark:text-orange-400 border-orange-600/30",
 ];
 
-type PublicCategory = "PETSHOP" | "AKSESORIS" | "SP_VOUCHER" | "TG";
+type PublicCategory = "PETSHOP" | "AKSESORIS" | "SP_VOUCHER" | "TG" | "ATENSI";
 
 // Bandung sells accessories, tempered glass, petshop goods and SIM/voucher products, so
 // (like the internal /points split) the public wallboard is separate
@@ -50,6 +50,7 @@ const CATEGORY_META: Record<PublicCategory, { title: string; subtitle: string; p
   TG: { title: "Tempered Glass", subtitle: "tempered glass (TG)", path: "/papan-poin/tg" },
   PETSHOP: { title: "Petshop", subtitle: "petshop", path: "/papan-poin/petshop" },
   SP_VOUCHER: { title: "SP/Voucher (di aktivasi)", subtitle: "SP/voucher (di aktivasi)", path: "/papan-poin/sp" },
+  ATENSI: { title: "Poin Atensi", subtitle: "program poin atensi", path: "/papan-poin/atensi" },
 };
 
 function getCategoryPath(category: PublicCategory, branch: "BANDUNG" | "CIMAHI"): string {
@@ -57,6 +58,7 @@ function getCategoryPath(category: PublicCategory, branch: "BANDUNG" | "CIMAHI")
     if (category === "TG") return "/papan-poin/cimahi/tg";
     if (category === "PETSHOP") return "/papan-poin/cimahi/petshop";
     if (category === "SP_VOUCHER") return "/papan-poin/cimahi/sp";
+    if (category === "ATENSI") return "/papan-poin/cimahi/atensi";
     return "/papan-poin/cimahi";
   }
   return CATEGORY_META[category].path;
@@ -66,7 +68,14 @@ function getBranchSwitchPath(targetBranch: "BANDUNG" | "CIMAHI", category?: Publ
   if (!category || category === "AKSESORIS") {
     return targetBranch === "CIMAHI" ? "/papan-poin/cimahi" : "/papan-poin";
   }
-  const suffix = category === "TG" ? "tg" : category === "PETSHOP" ? "petshop" : "sp";
+  const suffix =
+    category === "TG"
+      ? "tg"
+      : category === "PETSHOP"
+      ? "petshop"
+      : category === "ATENSI"
+      ? "atensi"
+      : "sp";
   return targetBranch === "CIMAHI" ? `/papan-poin/cimahi/${suffix}` : `/papan-poin/${suffix}`;
 }
 
@@ -116,11 +125,16 @@ export function EmployeePointsDashboardPage({
     return params;
   }, [from, to, outletId, category, branch]);
 
+  const isAttention = category === "ATENSI";
+
   const load = useCallback(async () => {
     const seq = ++loadSeq.current;
     if (!hasLoadedOnce.current) setLoading(true); // only spin on the very first load, not on background auto-refresh
     try {
-      const res = await fetch(`/api/public/points/dashboard?${queryParams().toString()}`);
+      const endpoint = isAttention
+        ? `/api/public/points/attention/dashboard?${queryParams().toString()}`
+        : `/api/public/points/dashboard?${queryParams().toString()}`;
+      const res = await fetch(endpoint);
       if (seq !== loadSeq.current) return;
       if (!res.ok) {
         const body = await res.json().catch(() => ({}));
@@ -144,7 +158,7 @@ export function EmployeePointsDashboardPage({
         hasLoadedOnce.current = true;
       }
     }
-  }, [queryParams]);
+  }, [isAttention, queryParams]);
 
   useEffect(() => {
     load();
@@ -168,8 +182,27 @@ export function EmployeePointsDashboardPage({
     setBreakdown(null);
     setBreakdownLoading(true);
     try {
-      const res = await fetch(`/api/public/points/employee/${employeeId}?${queryParams().toString()}`);
-      if (res.ok) setBreakdown(await res.json());
+      const endpoint = isAttention
+        ? `/api/public/points/attention/employee/${employeeId}?${queryParams().toString()}`
+        : `/api/public/points/employee/${employeeId}?${queryParams().toString()}`;
+      const res = await fetch(endpoint);
+      if (res.ok) {
+        const raw = await res.json();
+        if (isAttention && Array.isArray(raw)) {
+          setBreakdown(
+            raw.map((r: { programId: number; programName: string; qty: number; pointsPerUnit: number; totalPoints: number }) => ({
+              itemId: r.programId,
+              itemName: r.programName,
+              itemGroup: null,
+              qty: r.qty,
+              pointsPerUnit: r.pointsPerUnit,
+              totalPoints: r.totalPoints,
+            }))
+          );
+        } else {
+          setBreakdown(raw);
+        }
+      }
     } catch {
       // ignore — the row just won't expand with detail
     } finally {
@@ -192,7 +225,9 @@ export function EmployeePointsDashboardPage({
             🏆 Papan Poin Karyawan{category ? ` — ${CATEGORY_META[category].title}` : ""}
           </h1>
           <p className="text-xs text-muted">
-            Peringkat pencapaian poin penjualan {category ? CATEGORY_META[category].subtitle : ""} · Cabang {branchLabel}
+            {isAttention
+              ? `Peringkat pencapaian program poin atensi · Cabang ${branchLabel}`
+              : `Peringkat pencapaian poin penjualan ${category ? CATEGORY_META[category].subtitle : ""} · Cabang ${branchLabel}`}
           </p>
           <div className="flex items-center justify-center gap-3 flex-wrap pt-1">
             {(Object.keys(CATEGORY_META) as PublicCategory[])
@@ -249,7 +284,7 @@ export function EmployeePointsDashboardPage({
               <option key={o.id} value={o.id}>{o.name}</option>
             ))}
           </select>
-          {data && (
+          {data && !isAttention && (
             data.pointTarget > 0 ? (
               <span className="text-[11px] font-mono text-muted bg-surface-subtle border border-border/60 rounded px-2 py-1">
                 Target: {formatNumber(data.pointTarget)} poin
@@ -358,9 +393,13 @@ export function EmployeePointsDashboardPage({
                           <table className="w-full text-xs">
                             <thead>
                               <tr className="border-b border-border/60 text-left">
-                                <th className="px-4 py-2 font-semibold text-[10px] uppercase text-muted">Nama Item</th>
+                                <th className="px-4 py-2 font-semibold text-[10px] uppercase text-muted">
+                                  {isAttention ? "Program Atensi" : "Nama Item"}
+                                </th>
                                 <th className="px-4 py-2 text-right font-semibold text-[10px] uppercase text-muted">Qty</th>
-                                <th className="px-4 py-2 text-right font-semibold text-[10px] uppercase text-muted">Poin / Pcs</th>
+                                <th className="px-4 py-2 text-right font-semibold text-[10px] uppercase text-muted">
+                                  {isAttention ? "Poin / Aktivitas" : "Poin / Pcs"}
+                                </th>
                                 <th className="px-4 py-2 text-right font-semibold text-[10px] uppercase text-muted">Subtotal Poin</th>
                               </tr>
                             </thead>

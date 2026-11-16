@@ -67,6 +67,13 @@ export const SIDEBAR_MENU_GROUPS: SidebarMenuGroup[] = [
         description: "Klasemen & komisi poin kategori SP/Voucher",
       },
       {
+        href: "/points/atensi",
+        label: "Poin Atensi",
+        group: "Cabang Bandung",
+        feature: "points_atensi",
+        description: "Input & papan poin program atensi karyawan",
+      },
+      {
         href: "/papan-poin",
         label: "Papan Poin (TV)",
         group: "Cabang Bandung",
@@ -121,6 +128,13 @@ export const SIDEBAR_MENU_GROUPS: SidebarMenuGroup[] = [
         group: "Cabang Cimahi",
         feature: "points_cimahi_sp",
         description: "Klasemen & komisi poin kategori SP/Voucher Cimahi",
+      },
+      {
+        href: "/cimahi/points/atensi",
+        label: "Poin Atensi",
+        group: "Cabang Cimahi",
+        feature: "points_cimahi_atensi",
+        description: "Input & papan poin program atensi karyawan Cimahi",
       },
       {
         href: "/papan-poin/cimahi",
