@@ -21,6 +21,7 @@ interface DashboardData {
   };
   trendPct: { qty: number | null; subtotal: number | null; labaRugi: number | null };
   trend: { tanggal: string; qty: number; subtotal: number; labaRugi: number; laporanHarianTotal: number }[];
+  trend7Days?: { tanggal: string; qty: number; subtotal: number; labaRugi: number; laporanHarianTotal: number }[];
   topItems: { itemId: number; code: string; name: string; qty: number; subtotal: number }[];
   topOutlets: { outletId: number; name: string; qty: number; subtotal: number }[];
   latestImport: { filename: string; uploadedAt: string; status: string } | null;
@@ -342,6 +343,7 @@ export function DashboardPage({ branch = "BANDUNG" }: DashboardPageProps) {
           >
             <RevenueAreaChart
               data={data.trend}
+              default7DaysData={data.trend7Days}
               labaTargetPerDay={data.labaTargetPerDay}
               laporanTargetPerDay={data.laporanTargetPerDay}
             />

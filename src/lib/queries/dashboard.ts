@@ -90,6 +90,69 @@ export function mergeDashboardTrend(
     });
 }
 
+async function fetchTrendWindow(
+  filters: DashboardFilters,
+  mappedItemIds: number[]
+): Promise<DailyTrendPoint[]> {
+  const { from, to, outletId, branch } = filters;
+  const where = buildWhere(filters);
+  const dailyMetricWhere = {
+    ...(outletId ? { outletId } : {}),
+    ...(branch ? { outlet: { branch } } : {}),
+    ...(from || to
+      ? {
+          tanggal: {
+            ...(from ? { gte: from } : {}),
+            ...(to ? { lte: to } : {}),
+          },
+        }
+      : {}),
+  };
+
+  const [byDate, tartunByDateRaw, serverByDateRaw, mappedPosByDateRaw] = await Promise.all([
+    prisma.sale.groupBy({
+      by: ["tanggal"],
+      where,
+      _sum: { qty: true, subtotal: true, labaRugi: true },
+      orderBy: { tanggal: "asc" },
+    }),
+    prisma.tartunDaily.groupBy({
+      by: ["tanggal"],
+      where: dailyMetricWhere,
+      _sum: { sales: true },
+    }),
+    prisma.serverDaily.groupBy({
+      by: ["tanggal"],
+      where: dailyMetricWhere,
+      _sum: { sales: true },
+    }),
+    mappedItemIds.length > 0
+      ? prisma.sale.groupBy({
+          by: ["tanggal"],
+          where: { ...where, itemId: { in: mappedItemIds } },
+          _sum: { labaRugi: true },
+        })
+      : Promise.resolve([]),
+  ]);
+
+  return mergeDashboardTrend(
+    byDate.map((g) => ({
+      tanggal: g.tanggal.toISOString(),
+      qty: g._sum.qty ?? 0,
+      subtotal: Number(g._sum.subtotal ?? 0),
+      labaRugi: Number(g._sum.labaRugi ?? 0),
+    })),
+    new Map(mappedPosByDateRaw.map((g) => [g.tanggal.toISOString(), Number(g._sum.labaRugi ?? 0)])),
+    new Map(tartunByDateRaw.map((g) => [g.tanggal.toISOString(), Number(g._sum.sales ?? 0)])),
+    new Map(serverByDateRaw.map((g) => [g.tanggal.toISOString(), Number(g._sum.sales ?? 0)]))
+  );
+}
+
+/** Returns a UTC date 6 days prior to `to` (an inclusive 7-day window ending on `to`). */
+export function computeSevenDayFrom(to: Date): Date {
+  return new Date(Date.UTC(to.getUTCFullYear(), to.getUTCMonth(), to.getUTCDate() - 6));
+}
+
 export async function getDashboardSummary(filters: DashboardFilters = {}) {
   const where = buildWhere(filters);
   const { from, to, outletId, branch } = filters;
@@ -228,6 +291,23 @@ export async function getDashboardSummary(filters: DashboardFilters = {}) {
     serverByDate
   );
 
+  // When the dashboard filter covers < 7 days (like the default today/yesterday
+  // window), fetch an inclusive 7-day trend ending at `to` so "Tren Performa
+  // Harian" always defaults to a meaningful 7-day chart without altering KPIs.
+  let trend7Days = trend.slice(-7);
+  if (to && from && trend.length < 7) {
+    const sevenFrom = computeSevenDayFrom(to);
+    if (from.getTime() > sevenFrom.getTime()) {
+      const expanded = await fetchTrendWindow(
+        { from: sevenFrom, to, outletId, branch },
+        mappedItemIds
+      );
+      if (expanded.length > trend.length) {
+        trend7Days = expanded.slice(-7);
+      }
+    }
+  }
+
   const posTargetSum = allTargets
     .filter((t) => t.category === "PETSHOP" || t.category === "AKSESORIS" || t.category === "SP_VOUCHER")
     .reduce((sum, t) => sum + Number(t.amount), 0);
@@ -249,6 +329,7 @@ export async function getDashboardSummary(filters: DashboardFilters = {}) {
       labaRugi: trendPct(trend.map((t) => t.labaRugi)),
     },
     trend,
+    trend7Days,
     topItems: topItemsRaw.map((g) => ({
       itemId: g.itemId,
       code: itemById.get(g.itemId)?.code ?? "",

@@ -1,5 +1,17 @@
 import { describe, expect, it } from "vitest";
-import { mergeDashboardTrend } from "./dashboard";
+import { computeSevenDayFrom, mergeDashboardTrend } from "./dashboard";
+
+describe("computeSevenDayFrom", () => {
+  it("returns an inclusive 7-day start date (6 days before `to`)", () => {
+    const to = new Date(Date.UTC(2026, 10, 16)); // 2026-11-16
+    expect(computeSevenDayFrom(to).toISOString()).toBe("2026-11-10T00:00:00.000Z");
+  });
+
+  it("rolls across month boundary cleanly", () => {
+    const to = new Date(Date.UTC(2026, 10, 3)); // 2026-11-03
+    expect(computeSevenDayFrom(to).toISOString()).toBe("2026-10-28T00:00:00.000Z");
+  });
+});
 
 describe("mergeDashboardTrend", () => {
   it("combines mapped POS laba, tartun, and server sales per date and sorts chronologically", () => {
