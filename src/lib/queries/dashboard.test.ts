@@ -1,5 +1,22 @@
 import { describe, expect, it } from "vitest";
-import { computeSevenDayFrom, mergeDashboardTrend } from "./dashboard";
+import { computePctChange, computePreviousDayDate, computeSevenDayFrom, mergeDashboardTrend } from "./dashboard";
+
+describe("computePreviousDayDate", () => {
+  it("returns the UTC calendar day before a date or ISO string", () => {
+    expect(computePreviousDayDate("2026-11-01T00:00:00.000Z").toISOString()).toBe("2026-10-31T00:00:00.000Z");
+    expect(computePreviousDayDate(new Date(Date.UTC(2026, 8, 28))).toISOString()).toBe("2026-09-27T00:00:00.000Z");
+  });
+});
+
+describe("computePctChange", () => {
+  it("computes increase and decrease percentage cleanly", () => {
+    expect(computePctChange(125, 100)).toBe(25);
+    expect(computePctChange(80, 100)).toBe(-20);
+    expect(computePctChange(0, 0)).toBe(0);
+    expect(computePctChange(50, 0)).toBe(100);
+    expect(computePctChange(-50, 0)).toBe(-100);
+  });
+});
 
 describe("computeSevenDayFrom", () => {
   it("returns an inclusive 7-day start date (6 days before `to`)", () => {

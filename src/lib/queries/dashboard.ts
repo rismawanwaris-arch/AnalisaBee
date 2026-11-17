@@ -153,6 +153,29 @@ export function computeSevenDayFrom(to: Date): Date {
   return new Date(Date.UTC(to.getUTCFullYear(), to.getUTCMonth(), to.getUTCDate() - 6));
 }
 
+/** Returns the UTC calendar day immediately preceding `date`. */
+export function computePreviousDayDate(date: Date | string): Date {
+  const d = typeof date === "string" ? new Date(date) : date;
+  return new Date(Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate() - 1));
+}
+
+/** Percentage change from `previous` to `current`, handling 0 and negative baselines safely. */
+export function computePctChange(current: number, previous: number): number {
+  if (previous === 0) {
+    if (current === 0) return 0;
+    return current > 0 ? 100 : -100;
+  }
+  return ((current - previous) / Math.abs(previous)) * 100;
+}
+
+export interface VsYesterdayComparison {
+  latestDate: string;
+  previousDate: string;
+  latest: { qty: number; subtotal: number; labaRugi: number };
+  previous: { qty: number; subtotal: number; labaRugi: number };
+  pct: { qty: number; subtotal: number; labaRugi: number };
+}
+
 export async function getDashboardSummary(filters: DashboardFilters = {}) {
   const where = buildWhere(filters);
   const { from, to, outletId, branch } = filters;
@@ -313,6 +336,46 @@ export async function getDashboardSummary(filters: DashboardFilters = {}) {
     .reduce((sum, t) => sum + Number(t.amount), 0);
   const laporanTargetSum = allTargets.reduce((sum, t) => sum + Number(t.amount), 0);
 
+  // Compare the latest POS sales day in the active filter against the
+  // immediately preceding calendar day (yesterday) so Total Omzet, Total Laba,
+  // and Qty Terjual always show whether performance rose or fell vs kemarin.
+  let vsYesterday: VsYesterdayComparison | null = null;
+  if (byDate.length > 0) {
+    const latestPos = byDate[byDate.length - 1];
+    const prevDate = computePreviousDayDate(latestPos.tanggal);
+    const prevAgg = await prisma.sale.aggregate({
+      where: {
+        ...buildWhere({ outletId, branch }),
+        tanggal: prevDate,
+      },
+      _sum: { qty: true, subtotal: true, labaRugi: true },
+      _count: { _all: true },
+    });
+    if (prevAgg._count._all > 0) {
+      const latestVals = {
+        qty: latestPos._sum.qty ?? 0,
+        subtotal: Number(latestPos._sum.subtotal ?? 0),
+        labaRugi: Number(latestPos._sum.labaRugi ?? 0),
+      };
+      const prevVals = {
+        qty: prevAgg._sum.qty ?? 0,
+        subtotal: Number(prevAgg._sum.subtotal ?? 0),
+        labaRugi: Number(prevAgg._sum.labaRugi ?? 0),
+      };
+      vsYesterday = {
+        latestDate: latestPos.tanggal.toISOString(),
+        previousDate: prevDate.toISOString(),
+        latest: latestVals,
+        previous: prevVals,
+        pct: {
+          qty: computePctChange(latestVals.qty, prevVals.qty),
+          subtotal: computePctChange(latestVals.subtotal, prevVals.subtotal),
+          labaRugi: computePctChange(latestVals.labaRugi, prevVals.labaRugi),
+        },
+      };
+    }
+  }
+
   return {
     totals: {
       qty: totals._sum.qty ?? 0,
@@ -328,6 +391,7 @@ export async function getDashboardSummary(filters: DashboardFilters = {}) {
       subtotal: trendPct(trend.map((t) => t.subtotal)),
       labaRugi: trendPct(trend.map((t) => t.labaRugi)),
     },
+    vsYesterday,
     trend,
     trend7Days,
     topItems: topItemsRaw.map((g) => ({

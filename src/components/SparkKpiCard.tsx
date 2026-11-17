@@ -11,6 +11,8 @@ interface SparkKpiCardProps {
   trendPct: number | null;
   series: number[];
   hint?: string;
+  compareLabel?: string;
+  compareTooltip?: string;
   delayMs?: number;
 }
 
@@ -22,6 +24,8 @@ export function SparkKpiCard({
   trendPct,
   series,
   hint,
+  compareLabel,
+  compareTooltip,
   delayMs = 0,
 }: SparkKpiCardProps) {
   const rawId = useId();
@@ -53,6 +57,7 @@ export function SparkKpiCard({
           </span>
           {trendPct !== null ? (
             <span
+              title={compareTooltip}
               className={`inline-flex items-center gap-1 text-[11px] font-mono font-medium px-2 py-0.5 rounded-full border shadow-2xs ${
                 positive
                   ? "text-emerald-600 dark:text-emerald-400 bg-emerald-500/10 border-emerald-500/20"
@@ -88,6 +93,14 @@ export function SparkKpiCard({
         {hint && (
           <div className="text-[11px] text-muted font-medium mt-1">
             {hint}
+          </div>
+        )}
+        {compareLabel && (
+          <div
+            title={compareTooltip}
+            className="text-[10px] font-medium mt-0.5 text-muted/90 truncate"
+          >
+            {compareLabel}
           </div>
         )}
       </div>

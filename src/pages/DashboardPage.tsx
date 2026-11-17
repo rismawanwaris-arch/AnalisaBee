@@ -5,7 +5,7 @@ import { StatCard } from "@/components/StatCard";
 import { SparkKpiCard } from "@/components/SparkKpiCard";
 import { RevenueAreaChart } from "@/components/RevenueAreaChart";
 import { Leaderboard } from "@/components/Leaderboard";
-import { formatDate, formatNumber, formatRupiah } from "@/lib/format";
+import { formatCompactRupiah, formatDate, formatNumber, formatRupiah } from "@/lib/format";
 import { todayStr, yesterdayStr } from "@/lib/dateDefaults";
 import { useOutlets } from "@/hooks/useOutlets";
 
@@ -20,6 +20,13 @@ interface DashboardData {
     employeeCount: number;
   };
   trendPct: { qty: number | null; subtotal: number | null; labaRugi: number | null };
+  vsYesterday?: {
+    latestDate: string;
+    previousDate: string;
+    latest: { qty: number; subtotal: number; labaRugi: number };
+    previous: { qty: number; subtotal: number; labaRugi: number };
+    pct: { qty: number; subtotal: number; labaRugi: number };
+  } | null;
   trend: { tanggal: string; qty: number; subtotal: number; labaRugi: number; laporanHarianTotal: number }[];
   trend7Days?: { tanggal: string; qty: number; subtotal: number; labaRugi: number; laporanHarianTotal: number }[];
   topItems: { itemId: number; code: string; name: string; qty: number; subtotal: number }[];
@@ -271,70 +278,98 @@ export function DashboardPage({ branch = "BANDUNG" }: DashboardPageProps) {
       ) : (
         <div key={`${branch}:${urlFrom}:${urlTo}:${urlOutlet}`} className="space-y-4">
           {/* KPI Metrics Row */}
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5 gap-3.5">
-            <SparkKpiCard
-              label="Total Omzet"
-              value={formatRupiah(data.totals.subtotal)}
-              numericValue={data.totals.subtotal}
-              formatValue={(n) => formatRupiah(n)}
-              trendPct={data.trendPct.subtotal}
-              series={data.trend.map((t) => t.subtotal)}
-              hint={`${formatNumber(data.totals.transactionCount)} transaksi`}
-              delayMs={0}
-            />
-            <SparkKpiCard
-              label="Total Laba"
-              value={formatRupiah(data.totals.labaRugi)}
-              numericValue={data.totals.labaRugi}
-              formatValue={(n) => formatRupiah(n)}
-              trendPct={data.trendPct.labaRugi}
-              series={data.trend.map((t) => t.labaRugi)}
-              hint={
-                data.totals.subtotal > 0
-                  ? `Margin ${((data.totals.labaRugi / data.totals.subtotal) * 100).toFixed(1)}%`
-                  : undefined
-              }
-              delayMs={60}
-            />
-            <SparkKpiCard
-              label="Qty Terjual"
-              value={`${formatNumber(data.totals.qty)} pcs`}
-              numericValue={data.totals.qty}
-              formatValue={(n) => `${formatNumber(n)} pcs`}
-              trendPct={data.trendPct.qty}
-              series={data.trend.map((t) => t.qty)}
-              hint={
-                data.totals.outletCount > 0
-                  ? `${formatNumber(
-                      Math.round(data.totals.qty / data.totals.outletCount)
-                    )} pcs/outlet`
-                  : undefined
-              }
-              delayMs={120}
-            />
-            <StatCard
-              label="Outlet Aktif"
-              value={formatNumber(data.totals.outletCount)}
-              numericValue={data.totals.outletCount}
-              formatValue={(n) => formatNumber(n)}
-              hint={`${formatNumber(data.totals.itemCount)} item terjual`}
-              delayMs={180}
-            />
-            <StatCard
-              label="Pegawai Aktif"
-              value={formatNumber(data.totals.employeeCount)}
-              numericValue={data.totals.employeeCount}
-              formatValue={(n) => formatNumber(n)}
-              hint={
-                data.totals.employeeCount > 0
-                  ? `${formatRupiah(
-                      Math.round(data.totals.subtotal / data.totals.employeeCount)
-                    )}/orang`
-                  : undefined
-              }
-              delayMs={240}
-            />
-          </div>
+          {(() => {
+            const vs = data.vsYesterday;
+            const shortPrevDate = vs ? formatDate(vs.previousDate).replace(/\s\d{4}$/, "") : "";
+            const shortLatestDate = vs ? formatDate(vs.latestDate).replace(/\s\d{4}$/, "") : "";
+            const prefix = data.trend.length > 1 && vs ? `${shortLatestDate} vs kemarin` : `vs kemarin (${shortPrevDate})`;
+            const sparkSeries = data.trend.length >= 2 ? data.trend : (data.trend7Days ?? data.trend);
+
+            return (
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5 gap-3.5">
+                <SparkKpiCard
+                  label="Total Omzet"
+                  value={formatRupiah(data.totals.subtotal)}
+                  numericValue={data.totals.subtotal}
+                  formatValue={(n) => formatRupiah(n)}
+                  trendPct={vs ? vs.pct.subtotal : data.trendPct.subtotal}
+                  series={sparkSeries.map((t) => t.subtotal)}
+                  hint={`${formatNumber(data.totals.transactionCount)} transaksi`}
+                  compareLabel={vs ? `${prefix}: ${formatCompactRupiah(vs.previous.subtotal)}` : undefined}
+                  compareTooltip={
+                    vs
+                      ? `${formatDate(vs.latestDate)}: ${formatRupiah(vs.latest.subtotal)} vs kemarin (${formatDate(vs.previousDate)}): ${formatRupiah(vs.previous.subtotal)}`
+                      : undefined
+                  }
+                  delayMs={0}
+                />
+                <SparkKpiCard
+                  label="Total Laba"
+                  value={formatRupiah(data.totals.labaRugi)}
+                  numericValue={data.totals.labaRugi}
+                  formatValue={(n) => formatRupiah(n)}
+                  trendPct={vs ? vs.pct.labaRugi : data.trendPct.labaRugi}
+                  series={sparkSeries.map((t) => t.labaRugi)}
+                  hint={
+                    data.totals.subtotal > 0
+                      ? `Margin ${((data.totals.labaRugi / data.totals.subtotal) * 100).toFixed(1)}%`
+                      : undefined
+                  }
+                  compareLabel={vs ? `${prefix}: ${formatCompactRupiah(vs.previous.labaRugi)}` : undefined}
+                  compareTooltip={
+                    vs
+                      ? `${formatDate(vs.latestDate)}: ${formatRupiah(vs.latest.labaRugi)} vs kemarin (${formatDate(vs.previousDate)}): ${formatRupiah(vs.previous.labaRugi)}`
+                      : undefined
+                  }
+                  delayMs={60}
+                />
+                <SparkKpiCard
+                  label="Qty Terjual"
+                  value={`${formatNumber(data.totals.qty)} pcs`}
+                  numericValue={data.totals.qty}
+                  formatValue={(n) => `${formatNumber(n)} pcs`}
+                  trendPct={vs ? vs.pct.qty : data.trendPct.qty}
+                  series={sparkSeries.map((t) => t.qty)}
+                  hint={
+                    data.totals.outletCount > 0
+                      ? `${formatNumber(
+                          Math.round(data.totals.qty / data.totals.outletCount)
+                        )} pcs/outlet`
+                      : undefined
+                  }
+                  compareLabel={vs ? `${prefix}: ${formatNumber(vs.previous.qty)} pcs` : undefined}
+                  compareTooltip={
+                    vs
+                      ? `${formatDate(vs.latestDate)}: ${formatNumber(vs.latest.qty)} pcs vs kemarin (${formatDate(vs.previousDate)}): ${formatNumber(vs.previous.qty)} pcs`
+                      : undefined
+                  }
+                  delayMs={120}
+                />
+                <StatCard
+                  label="Outlet Aktif"
+                  value={formatNumber(data.totals.outletCount)}
+                  numericValue={data.totals.outletCount}
+                  formatValue={(n) => formatNumber(n)}
+                  hint={`${formatNumber(data.totals.itemCount)} item terjual`}
+                  delayMs={180}
+                />
+                <StatCard
+                  label="Pegawai Aktif"
+                  value={formatNumber(data.totals.employeeCount)}
+                  numericValue={data.totals.employeeCount}
+                  formatValue={(n) => formatNumber(n)}
+                  hint={
+                    data.totals.employeeCount > 0
+                      ? `${formatRupiah(
+                          Math.round(data.totals.subtotal / data.totals.employeeCount)
+                        )}/orang`
+                      : undefined
+                  }
+                  delayMs={240}
+                />
+              </div>
+            );
+          })()}
 
           {/* Area Chart Section */}
           <div
