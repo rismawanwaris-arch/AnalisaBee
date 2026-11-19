@@ -592,6 +592,26 @@ export async function deleteAttentionPointEntry(id: number): Promise<void> {
   await prisma.attentionPointEntry.delete({ where: { id } });
 }
 
+async function resolveEmployeeBranchAtDate(employeeId: number, refDate: Date): Promise<BranchType | null> {
+  const start = new Date(Date.UTC(refDate.getUTCFullYear(), refDate.getUTCMonth(), 1));
+  const end = new Date(Date.UTC(refDate.getUTCFullYear(), refDate.getUTCMonth() + 1, 0, 23, 59, 59, 999));
+  const { contextByEmployee } = await resolveEmployeeSalesContext(start, end, [employeeId]);
+  return contextByEmployee.get(employeeId)?.homeBranch ?? null;
+}
+
+export async function getAttentionEmployeeBranch(employeeId: number): Promise<BranchType | null> {
+  return resolveEmployeeBranchAtDate(employeeId, new Date());
+}
+
+export async function getAttentionEntryBranch(id: number): Promise<BranchType | null | undefined> {
+  const entry = await prisma.attentionPointEntry.findUnique({
+    where: { id },
+    select: { employeeId: true, tanggal: true },
+  });
+  if (!entry) return undefined;
+  return resolveEmployeeBranchAtDate(entry.employeeId, entry.tanggal);
+}
+
 export async function listAttentionPointEntries(filters: {
   from: Date;
   to: Date;

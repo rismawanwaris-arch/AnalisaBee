@@ -25,15 +25,56 @@ async function insertChunked<T>(
   }
 }
 
+const DANGEROUS_KEYS = new Set(["__proto__", "constructor", "prototype"]);
+
+/** Validates that a backup section is an array of plain objects and strips
+ *  prototype-pollution keys before forwarding records to Prisma. */
+export function assertPlainObjectArray(arr: unknown, label: string): Record<string, any>[] {
+  if (!Array.isArray(arr)) {
+    throw new BackupError(`Struktur file backup tidak valid pada bagian "${label}".`);
+  }
+  return arr.map((item, idx) => {
+    if (typeof item !== "object" || item === null || Array.isArray(item)) {
+      throw new BackupError(`Baris ke-${idx + 1} pada bagian "${label}" bukan objek valid.`);
+    }
+    const clean: Record<string, any> = {};
+    for (const [k, v] of Object.entries(item)) {
+      if (DANGEROUS_KEYS.has(k)) continue;
+      clean[k] = v;
+    }
+    return clean;
+  });
+}
+
 // Every table this module ever calls resetSequence() with — kept here as a
 // hard allowlist so the function is safe by construction, not just safe
 // because every current caller happens to pass a hardcoded string. $executeRawUnsafe
 // can't parameterize an identifier, so this check is what stands between a
 // stray dynamic value and SQL injection if a future change ever wires one in.
 const RESETTABLE_TABLES = new Set([
-  "outlets", "employees", "items", "import_batches", "sales", "tartun_daily", "server_daily",
-  "targets", "outlet_aliases", "item_group_mappings", "point_group_mappings", "item_points", "item_point_exclusions",
-  "item_group_point_defaults", "points_exclusions", "custom_roles",
+  "outlets",
+  "employees",
+  "items",
+  "import_batches",
+  "sales",
+  "tartun_daily",
+  "server_daily",
+  "purchase_batches",
+  "purchase_invoices",
+  "purchase_items",
+  "sp_point_batches",
+  "sp_activation_points",
+  "attention_programs",
+  "attention_point_entries",
+  "targets",
+  "outlet_aliases",
+  "item_group_mappings",
+  "point_group_mappings",
+  "item_points",
+  "item_point_exclusions",
+  "item_group_point_defaults",
+  "points_exclusions",
+  "custom_roles",
 ]);
 
 async function resetSequence(table: string): Promise<void> {
@@ -46,20 +87,41 @@ async function resetSequence(table: string): Promise<void> {
 }
 
 // ==========================================
-// DATA IMPORT BACKUP (Outlet, Employee, Item, ImportBatch, Sale, TartunDaily, ServerDaily)
+// DATA IMPORT BACKUP
 // ==========================================
 
 export async function exportDataBackup() {
-  const [outlets, employees, items, importBatches, sales, tartunDaily, serverDaily] =
-    await Promise.all([
-      prisma.outlet.findMany(),
-      prisma.employee.findMany(),
-      prisma.item.findMany(),
-      prisma.importBatch.findMany(),
-      prisma.sale.findMany(),
-      prisma.tartunDaily.findMany(),
-      prisma.serverDaily.findMany(),
-    ]);
+  const [
+    outlets,
+    employees,
+    items,
+    importBatches,
+    sales,
+    tartunDaily,
+    serverDaily,
+    purchaseBatches,
+    purchaseInvoices,
+    purchaseItems,
+    spPointBatches,
+    spActivationPoints,
+    attentionPrograms,
+    attentionPointEntries,
+  ] = await Promise.all([
+    prisma.outlet.findMany(),
+    prisma.employee.findMany(),
+    prisma.item.findMany(),
+    prisma.importBatch.findMany(),
+    prisma.sale.findMany(),
+    prisma.tartunDaily.findMany(),
+    prisma.serverDaily.findMany(),
+    prisma.purchaseBatch.findMany(),
+    prisma.purchaseInvoice.findMany(),
+    prisma.purchaseItem.findMany(),
+    prisma.spPointBatch.findMany(),
+    prisma.spActivationPoint.findMany(),
+    prisma.attentionProgram.findMany(),
+    prisma.attentionPointEntry.findMany(),
+  ]);
 
   return {
     kind: DATA_BACKUP_KIND,
@@ -73,6 +135,13 @@ export async function exportDataBackup() {
       sales: sales.length,
       tartunDaily: tartunDaily.length,
       serverDaily: serverDaily.length,
+      purchaseBatches: purchaseBatches.length,
+      purchaseInvoices: purchaseInvoices.length,
+      purchaseItems: purchaseItems.length,
+      spPointBatches: spPointBatches.length,
+      spActivationPoints: spActivationPoints.length,
+      attentionPrograms: attentionPrograms.length,
+      attentionPointEntries: attentionPointEntries.length,
     },
     outlets,
     employees,
@@ -81,6 +150,13 @@ export async function exportDataBackup() {
     sales,
     tartunDaily,
     serverDaily,
+    purchaseBatches,
+    purchaseInvoices,
+    purchaseItems,
+    spPointBatches,
+    spActivationPoints,
+    attentionPrograms,
+    attentionPointEntries,
   };
 }
 
@@ -93,16 +169,34 @@ export async function restoreDataBackup(payload: any): Promise<DataRestoreResult
   if (!payload || payload.kind !== DATA_BACKUP_KIND) {
     throw new BackupError("File ini bukan backup Data Import yang valid.");
   }
-  const outlets: any[] = payload.outlets;
-  const employees: any[] = payload.employees;
-  const items: any[] = payload.items;
-  const importBatches: any[] = payload.importBatches;
-  const sales: any[] = payload.sales;
-  const tartunDaily: any[] = payload.tartunDaily;
-  const serverDaily: any[] = payload.serverDaily;
-  if (![outlets, employees, items, importBatches, sales, tartunDaily, serverDaily].every(Array.isArray)) {
-    throw new BackupError("Struktur file backup tidak lengkap atau rusak.");
-  }
+  const outlets = assertPlainObjectArray(payload.outlets, "outlets");
+  const employees = assertPlainObjectArray(payload.employees, "employees");
+  const items = assertPlainObjectArray(payload.items, "items");
+  const importBatches = assertPlainObjectArray(payload.importBatches, "importBatches");
+  const sales = assertPlainObjectArray(payload.sales, "sales");
+  const tartunDaily = assertPlainObjectArray(payload.tartunDaily, "tartunDaily");
+  const serverDaily = assertPlainObjectArray(payload.serverDaily, "serverDaily");
+  const purchaseBatches = Array.isArray(payload.purchaseBatches)
+    ? assertPlainObjectArray(payload.purchaseBatches, "purchaseBatches")
+    : [];
+  const purchaseInvoices = Array.isArray(payload.purchaseInvoices)
+    ? assertPlainObjectArray(payload.purchaseInvoices, "purchaseInvoices")
+    : [];
+  const purchaseItems = Array.isArray(payload.purchaseItems)
+    ? assertPlainObjectArray(payload.purchaseItems, "purchaseItems")
+    : [];
+  const spPointBatches = Array.isArray(payload.spPointBatches)
+    ? assertPlainObjectArray(payload.spPointBatches, "spPointBatches")
+    : [];
+  const spActivationPoints = Array.isArray(payload.spActivationPoints)
+    ? assertPlainObjectArray(payload.spActivationPoints, "spActivationPoints")
+    : [];
+  const attentionPrograms = Array.isArray(payload.attentionPrograms)
+    ? assertPlainObjectArray(payload.attentionPrograms, "attentionPrograms")
+    : [];
+  const attentionPointEntries = Array.isArray(payload.attentionPointEntries)
+    ? assertPlainObjectArray(payload.attentionPointEntries, "attentionPointEntries")
+    : [];
 
   let skippedAliases = 0;
   let skippedPointsExclusions = 0;
@@ -114,14 +208,20 @@ export async function restoreDataBackup(payload: any): Promise<DataRestoreResult
         // Pengaturan scope but carry a hard FK into this scope's tables, so
         // wiping Outlet/Employee here would violate that constraint. Lift
         // them out, restore this scope, then put back only the rows whose
-        // referenced outlet/employee still exists in the restored data —
-        // anything else in this backup predates the row it pointed to.
+        // referenced outlet/employee still exists in the restored data.
         const existingAliases = await tx.outletAlias.findMany();
         const existingExclusions = await tx.pointsExclusion.findMany();
         await tx.outletAlias.deleteMany();
         await tx.pointsExclusion.deleteMany();
 
-        // Children first.
+        // Children first (respecting RESTRICT/CASCADE FKs on Employee, Outlet, Sale, etc.).
+        await tx.attentionPointEntry.deleteMany();
+        await tx.attentionProgram.deleteMany();
+        await tx.spActivationPoint.deleteMany();
+        await tx.spPointBatch.deleteMany();
+        await tx.purchaseItem.deleteMany();
+        await tx.purchaseInvoice.deleteMany();
+        await tx.purchaseBatch.deleteMany();
         await tx.sale.deleteMany();
         await tx.tartunDaily.deleteMany();
         await tx.serverDaily.deleteMany();
@@ -131,13 +231,21 @@ export async function restoreDataBackup(payload: any): Promise<DataRestoreResult
         await tx.item.deleteMany();
 
         // Parents first, on the way back in.
-        if (outlets.length) await insertChunked(outlets, (c) => tx.outlet.createMany({ data: c }));
-        if (employees.length) await insertChunked(employees, (c) => tx.employee.createMany({ data: c }));
-        if (items.length) await insertChunked(items, (c) => tx.item.createMany({ data: c }));
-        if (importBatches.length) await insertChunked(importBatches, (c) => tx.importBatch.createMany({ data: c }));
-        if (sales.length) await insertChunked(sales, (c) => tx.sale.createMany({ data: c }));
-        if (tartunDaily.length) await insertChunked(tartunDaily, (c) => tx.tartunDaily.createMany({ data: c }));
-        if (serverDaily.length) await insertChunked(serverDaily, (c) => tx.serverDaily.createMany({ data: c }));
+        if (outlets.length) await insertChunked(outlets, (c) => tx.outlet.createMany({ data: c as any }));
+        if (employees.length) await insertChunked(employees, (c) => tx.employee.createMany({ data: c as any }));
+        if (items.length) await insertChunked(items, (c) => tx.item.createMany({ data: c as any }));
+        if (importBatches.length) await insertChunked(importBatches, (c) => tx.importBatch.createMany({ data: c as any }));
+        if (sales.length) await insertChunked(sales, (c) => tx.sale.createMany({ data: c as any }));
+        if (tartunDaily.length) await insertChunked(tartunDaily, (c) => tx.tartunDaily.createMany({ data: c as any }));
+        if (serverDaily.length) await insertChunked(serverDaily, (c) => tx.serverDaily.createMany({ data: c as any }));
+
+        if (purchaseBatches.length) await insertChunked(purchaseBatches, (c) => tx.purchaseBatch.createMany({ data: c as any }));
+        if (purchaseInvoices.length) await insertChunked(purchaseInvoices, (c) => tx.purchaseInvoice.createMany({ data: c as any }));
+        if (purchaseItems.length) await insertChunked(purchaseItems, (c) => tx.purchaseItem.createMany({ data: c as any }));
+        if (spPointBatches.length) await insertChunked(spPointBatches, (c) => tx.spPointBatch.createMany({ data: c as any }));
+        if (spActivationPoints.length) await insertChunked(spActivationPoints, (c) => tx.spActivationPoint.createMany({ data: c as any }));
+        if (attentionPrograms.length) await insertChunked(attentionPrograms, (c) => tx.attentionProgram.createMany({ data: c as any }));
+        if (attentionPointEntries.length) await insertChunked(attentionPointEntries, (c) => tx.attentionPointEntry.createMany({ data: c as any }));
 
         const restoredOutletIds = new Set(outlets.map((o) => o.id));
         const restoredEmployeeIds = new Set(employees.map((e) => e.id));
@@ -152,16 +260,33 @@ export async function restoreDataBackup(payload: any): Promise<DataRestoreResult
       { timeout: 5 * 60 * 1000, maxWait: 30 * 1000 },
     );
 
-    for (const table of ["outlets", "employees", "items", "import_batches", "sales", "tartun_daily", "server_daily"]) {
+    for (const table of [
+      "outlets",
+      "employees",
+      "items",
+      "import_batches",
+      "sales",
+      "tartun_daily",
+      "server_daily",
+      "purchase_batches",
+      "purchase_invoices",
+      "purchase_items",
+      "sp_point_batches",
+      "sp_activation_points",
+      "attention_programs",
+      "attention_point_entries",
+    ]) {
       await resetSequence(table);
     }
 
     return { skippedAliases, skippedPointsExclusions };
   } catch (err) {
     if (err instanceof BackupError) throw err;
-    const msg = err instanceof Error ? err.message : String(err);
+    console.error("restoreDataBackup error:", err);
+    const isDev = process.env.NODE_ENV !== "production";
+    const detail = isDev && err instanceof Error ? ` Detail: ${err.message}` : "";
     throw new BackupError(
-      `Gagal memulihkan data — kemungkinan ada data yang saling bertautan tidak cocok. Detail: ${msg}`,
+      `Gagal memulihkan data — kemungkinan ada data yang saling bertautan tidak cocok.${detail}`,
       500,
     );
   }
@@ -224,31 +349,39 @@ export async function exportSettingsBackup() {
   };
 }
 
-export async function restoreSettingsBackup(payload: any): Promise<void> {
+export interface SettingsRestoreResult {
+  deactivatedUsers: number;
+}
+
+export async function restoreSettingsBackup(payload: any): Promise<SettingsRestoreResult> {
   if (!payload || payload.kind !== SETTINGS_BACKUP_KIND) {
     throw new BackupError("File ini bukan backup Pengaturan yang valid.");
   }
-  const targets: any[] = payload.targets;
-  const outletAliases: any[] = payload.outletAliases;
-  const itemGroupMappings: any[] = payload.itemGroupMappings;
-  const pointGroupMappings: any[] = Array.isArray(payload.pointGroupMappings)
-    ? payload.pointGroupMappings
-    : payload.itemGroupMappings; // fallback to itemGroupMappings for older backups
-  const itemPoints: any[] = payload.itemPoints;
-  const itemPointExclusions: any[] = payload.itemPointExclusions;
-  const itemGroupPointDefaults: any[] = payload.itemGroupPointDefaults;
-  const pointSettings: any[] = payload.pointSettings;
-  const pointsExclusions: any[] = payload.pointsExclusions;
-  const customRoles: any[] = payload.customRoles;
-  if (
-    ![targets, outletAliases, itemGroupMappings, itemPoints, itemPointExclusions, itemGroupPointDefaults, pointSettings, pointsExclusions, customRoles].every(Array.isArray)
-  ) {
-    throw new BackupError("Struktur file backup tidak lengkap atau rusak.");
-  }
+  const targets = assertPlainObjectArray(payload.targets, "targets");
+  const outletAliases = assertPlainObjectArray(payload.outletAliases, "outletAliases");
+  const itemGroupMappings = assertPlainObjectArray(payload.itemGroupMappings, "itemGroupMappings");
+  const pointGroupMappings = Array.isArray(payload.pointGroupMappings)
+    ? assertPlainObjectArray(payload.pointGroupMappings, "pointGroupMappings")
+    : itemGroupMappings;
+  const itemPoints = assertPlainObjectArray(payload.itemPoints, "itemPoints");
+  const itemPointExclusions = assertPlainObjectArray(payload.itemPointExclusions, "itemPointExclusions");
+  const itemGroupPointDefaults = assertPlainObjectArray(payload.itemGroupPointDefaults, "itemGroupPointDefaults");
+  const pointSettings = assertPlainObjectArray(payload.pointSettings, "pointSettings");
+  const pointsExclusions = assertPlainObjectArray(payload.pointsExclusions, "pointsExclusions");
+  const customRoles = assertPlainObjectArray(payload.customRoles, "customRoles");
+
+  let deactivatedUsers = 0;
 
   try {
     await prisma.$transaction(
       async (tx) => {
+        // Snapshot custom-role assignments BEFORE wiping customRoles (onDelete: SetNull
+        // would otherwise clear roleId and silently promote restricted admins to "all").
+        const existingUserRoles = await tx.user.findMany({
+          where: { roleId: { not: null } },
+          select: { id: true, roleId: true },
+        });
+
         // Children first.
         await tx.pointsExclusion.deleteMany();
         await tx.outletAlias.deleteMany();
@@ -259,31 +392,61 @@ export async function restoreSettingsBackup(payload: any): Promise<void> {
         await tx.itemPointExclusion.deleteMany();
         await tx.itemGroupPointDefault.deleteMany();
         await tx.pointSettings.deleteMany();
-        // Clearing custom_roles just detaches members (onDelete: SetNull on User.roleId).
         await tx.customRole.deleteMany();
 
-        if (customRoles.length) await insertChunked(customRoles, (c) => tx.customRole.createMany({ data: c }));
-        if (targets.length) await insertChunked(targets, (c) => tx.target.createMany({ data: c }));
-        if (itemGroupMappings.length) await insertChunked(itemGroupMappings, (c) => tx.itemGroupMapping.createMany({ data: c }));
-        if (pointGroupMappings.length) await insertChunked(pointGroupMappings, (c) => tx.pointGroupMapping.createMany({ data: c }));
-        if (itemPoints.length) await insertChunked(itemPoints, (c) => tx.itemPoint.createMany({ data: c }));
-        if (itemPointExclusions.length) await insertChunked(itemPointExclusions, (c) => tx.itemPointExclusion.createMany({ data: c }));
-        if (itemGroupPointDefaults.length) await insertChunked(itemGroupPointDefaults, (c) => tx.itemGroupPointDefault.createMany({ data: c }));
-        if (pointSettings.length) await insertChunked(pointSettings, (c) => tx.pointSettings.createMany({ data: c }));
-        if (outletAliases.length) await insertChunked(outletAliases, (c) => tx.outletAlias.createMany({ data: c }));
-        if (pointsExclusions.length) await insertChunked(pointsExclusions, (c) => tx.pointsExclusion.createMany({ data: c }));
+        if (customRoles.length) await insertChunked(customRoles, (c) => tx.customRole.createMany({ data: c as any }));
+        if (targets.length) await insertChunked(targets, (c) => tx.target.createMany({ data: c as any }));
+        if (itemGroupMappings.length) await insertChunked(itemGroupMappings, (c) => tx.itemGroupMapping.createMany({ data: c as any }));
+        if (pointGroupMappings.length) await insertChunked(pointGroupMappings, (c) => tx.pointGroupMapping.createMany({ data: c as any }));
+        if (itemPoints.length) await insertChunked(itemPoints, (c) => tx.itemPoint.createMany({ data: c as any }));
+        if (itemPointExclusions.length) await insertChunked(itemPointExclusions, (c) => tx.itemPointExclusion.createMany({ data: c as any }));
+        if (itemGroupPointDefaults.length) await insertChunked(itemGroupPointDefaults, (c) => tx.itemGroupPointDefault.createMany({ data: c as any }));
+        if (pointSettings.length) await insertChunked(pointSettings, (c) => tx.pointSettings.createMany({ data: c as any }));
+        if (outletAliases.length) await insertChunked(outletAliases, (c) => tx.outletAlias.createMany({ data: c as any }));
+        if (pointsExclusions.length) await insertChunked(pointsExclusions, (c) => tx.pointsExclusion.createMany({ data: c as any }));
+
+        // Restore roleId for surviving roles; fail-closed (deactivate) if a user's
+        // custom role was absent from the restored backup, and revoke their sessions.
+        const restoredRoleIds = new Set(customRoles.map((r) => Number(r.id)).filter(Number.isInteger));
+        const now = new Date();
+        for (const u of existingUserRoles) {
+          if (u.roleId !== null && restoredRoleIds.has(u.roleId)) {
+            await tx.user.update({ where: { id: u.id }, data: { roleId: u.roleId } });
+          } else {
+            await tx.user.update({ where: { id: u.id }, data: { isActive: false, roleId: null } });
+            deactivatedUsers += 1;
+          }
+          await tx.session.updateMany({
+            where: { userId: u.id, revokedAt: null },
+            data: { revokedAt: now },
+          });
+        }
       },
       { timeout: 5 * 60 * 1000, maxWait: 30 * 1000 },
     );
 
-    for (const table of ["targets", "outlet_aliases", "item_group_mappings", "point_group_mappings", "item_points", "item_point_exclusions", "item_group_point_defaults", "points_exclusions", "custom_roles"]) {
+    for (const table of [
+      "targets",
+      "outlet_aliases",
+      "item_group_mappings",
+      "point_group_mappings",
+      "item_points",
+      "item_point_exclusions",
+      "item_group_point_defaults",
+      "points_exclusions",
+      "custom_roles",
+    ]) {
       await resetSequence(table);
     }
+
+    return { deactivatedUsers };
   } catch (err) {
     if (err instanceof BackupError) throw err;
-    const msg = err instanceof Error ? err.message : String(err);
+    console.error("restoreSettingsBackup error:", err);
+    const isDev = process.env.NODE_ENV !== "production";
+    const detail = isDev && err instanceof Error ? ` Detail: ${err.message}` : "";
     throw new BackupError(
-      `Gagal memulihkan pengaturan — kemungkinan ada referensi outlet/pegawai yang sudah tidak ada. Detail: ${msg}`,
+      `Gagal memulihkan pengaturan — kemungkinan ada referensi outlet/pegawai yang sudah tidak ada.${detail}`,
       500,
     );
   }

@@ -83,13 +83,19 @@ export async function updateCustomRole(
   }
 }
 
-/** Deleting a role clears roleId on its members via onDelete: SetNull at the
- *  DB level — they fall back to full admin access, same as an admin who was
- *  never assigned a role. Caller shows the affected count before confirming. */
+/** Fail-closed: refuse deleting a role that is still assigned to accounts
+ *  so those accounts never silently escalate back to full admin access. */
 export async function deleteCustomRole(id: number) {
-  try {
-    await prisma.customRole.delete({ where: { id } });
-  } catch {
-    throw new RoleError("Peran tidak ditemukan.", 404);
+  const existing = await prisma.customRole.findUnique({ where: { id }, select: { id: true } });
+  if (!existing) throw new RoleError("Peran tidak ditemukan.", 404);
+
+  const assigned = await prisma.user.count({ where: { roleId: id } });
+  if (assigned > 0) {
+    throw new RoleError(
+      `Peran masih dipakai oleh ${assigned} akun. Pindahkan atau nonaktifkan akun tersebut terlebih dahulu sebelum menghapus peran.`,
+      409,
+    );
   }
+
+  await prisma.customRole.delete({ where: { id } });
 }

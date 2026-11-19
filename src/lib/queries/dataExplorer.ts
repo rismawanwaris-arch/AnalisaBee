@@ -65,6 +65,7 @@ export async function getUnifiedTransactions(
         import: { select: { filename: true } },
       },
       orderBy: { tanggal: "desc" },
+      take: 50_000,
     }),
     prisma.tartunDaily.findMany({
       where: hasDateFilter ? { tanggal: dateWhere } : undefined,
@@ -77,6 +78,7 @@ export async function getUnifiedTransactions(
         outlet: { select: { id: true, name: true } },
       },
       orderBy: { tanggal: "desc" },
+      take: 50_000,
     }),
     prisma.serverDaily.findMany({
       where: hasDateFilter ? { tanggal: dateWhere } : undefined,
@@ -89,6 +91,7 @@ export async function getUnifiedTransactions(
         outlet: { select: { id: true, name: true } },
       },
       orderBy: { tanggal: "desc" },
+      take: 50_000,
     }),
   ]);
 

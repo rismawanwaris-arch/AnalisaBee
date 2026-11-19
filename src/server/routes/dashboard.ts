@@ -5,7 +5,7 @@ import { Router, type Request } from "express";
 import { getSystemStatus } from "../../lib/queries/systemStatus";
 import { getDashboardSummary } from "../../lib/queries/dashboard";
 import { type FeatureKey } from "../../lib/features";
-import { requireAuth, requireFeature, parseDateParam } from "../middleware";
+import { requireAuth, requireFeature, parseDateParam, sendError } from "../middleware";
 
 export const dashboardRouter = Router();
 
@@ -15,8 +15,8 @@ dashboardRouter.get("/api/status", requireAuth, async (req, res) => {
   try {
     const status = await getSystemStatus();
     return res.json(status);
-  } catch (err: any) {
-    return res.status(500).json({ error: err.message });
+  } catch (err: unknown) {
+    return sendError(res, 500, err, "Gagal memuat status sistem.");
   }
 });
 
@@ -27,11 +27,12 @@ dashboardRouter.get("/api/dashboard", requireFeature(dashboardFeature), async (r
   try {
     const from = parseDateParam(req.query.from);
     const to = parseDateParam(req.query.to);
-    const outletId = req.query.outletId ? Number(req.query.outletId) : undefined;
+    const rawOutletId = req.query.outletId ? Number(req.query.outletId) : undefined;
+    const outletId = rawOutletId && Number.isInteger(rawOutletId) && rawOutletId > 0 ? rawOutletId : undefined;
     const branch = req.query.branch === "CIMAHI" ? "CIMAHI" : "BANDUNG";
     const summary = await getDashboardSummary({ from, to, outletId, branch });
     return res.json(summary);
-  } catch (err: any) {
-    return res.status(500).json({ error: err.message });
+  } catch (err: unknown) {
+    return sendError(res, 500, err, "Gagal memuat ringkasan dashboard.");
   }
 });

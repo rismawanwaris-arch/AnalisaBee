@@ -85,7 +85,7 @@ publicPointsRouter.get("/api/public/points/dashboard", publicPointsLimiter, asyn
 
 publicPointsRouter.get("/api/public/points/employee/:id", publicPointsLimiter, async (req, res) => {
   const employeeId = Number(req.params.id);
-  if (!Number.isInteger(employeeId)) return res.status(400).json({ error: "ID tidak valid." });
+  if (!Number.isInteger(employeeId) || employeeId <= 0) return res.status(400).json({ error: "ID tidak valid." });
   try {
     const { from, to } = await resolvePublicPointsPeriod(req);
     const branch = parsePublicBranch(req);

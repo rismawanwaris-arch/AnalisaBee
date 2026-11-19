@@ -6,8 +6,8 @@
 import { Router } from "express";
 import { prisma } from "../../lib/prisma";
 import { previewMasterItemImport, importMasterItems, generateMasterItemTemplateBuffer } from "../../lib/queries/items";
-import { requireMaster, logActivity } from "../middleware";
-import { upload } from "../uploads";
+import { requireMaster, logActivity, sendError } from "../middleware";
+import { upload, validateExcelUpload } from "../uploads";
 
 export const masterItemsRouter = Router();
 
@@ -30,8 +30,8 @@ masterItemsRouter.get("/api/settings/master-items/template", requireMaster, asyn
     );
     res.setHeader("Content-Disposition", `attachment; filename="${filename}"`);
     return res.send(buffer);
-  } catch (err: any) {
-    return res.status(500).json({ error: err.message || "Gagal membuat template Master Item." });
+  } catch (err: unknown) {
+    return sendError(res, 500, err, "Gagal membuat template Master Item.");
   }
 });
 
@@ -55,8 +55,8 @@ masterItemsRouter.get("/api/settings/master-items/summary", requireMaster, async
       BANDUNG: { total: bandung._count._all, unofficial: bandungUnofficial },
       CIMAHI: { total: cimahi._count._all, unofficial: cimahiUnofficial },
     });
-  } catch (err: any) {
-    return res.status(500).json({ error: err.message });
+  } catch (err: unknown) {
+    return sendError(res, 500, err, "Gagal memuat ringkasan Master Item.");
   }
 });
 
@@ -64,6 +64,7 @@ masterItemsRouter.post(
   "/api/settings/master-items/preview",
   requireMaster,
   upload.single("file"),
+  validateExcelUpload,
   async (req, res) => {
     if (!req.file) return res.status(400).json({ error: "File wajib diupload." });
     const branch = parseBranchBody(req.body.branch);
@@ -81,6 +82,7 @@ masterItemsRouter.post(
   "/api/settings/master-items/import",
   requireMaster,
   upload.single("file"),
+  validateExcelUpload,
   async (req, res) => {
     if (!req.file) return res.status(400).json({ error: "File wajib diupload." });
     const branch = parseBranchBody(req.body.branch);

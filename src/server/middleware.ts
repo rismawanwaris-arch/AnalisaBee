@@ -58,6 +58,82 @@ export const loginLimiter = rateLimit({
   message: { error: "Terlalu banyak percobaan login. Coba lagi dalam 15 menit." },
 });
 
+// Rate limiter for own password change — max 15 attempts per 15 minutes per IP
+export const passwordChangeLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  max: 15,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { error: "Terlalu banyak percobaan ubah kata sandi. Coba lagi dalam 15 menit." },
+});
+
+export interface MutationOriginCheckInput {
+  method: string;
+  path: string;
+  origin?: string;
+  host?: string;
+  secFetchSite?: string;
+  nodeEnv?: string;
+  allowedOriginsEnv?: string;
+}
+
+export function isAllowedMutationOrigin(input: MutationOriginCheckInput): boolean {
+  const method = input.method.toUpperCase();
+  if (method === "GET" || method === "HEAD" || method === "OPTIONS") return true;
+  if (!input.path.startsWith("/api")) return true;
+
+  if (input.secFetchSite && input.secFetchSite.toLowerCase() === "cross-site") {
+    return false;
+  }
+
+  if (input.origin) {
+    let originUrl: URL;
+    try {
+      originUrl = new URL(input.origin);
+    } catch {
+      return false;
+    }
+    if (input.host && originUrl.host === input.host) {
+      return true;
+    }
+    if (input.nodeEnv !== "production") {
+      if (input.allowedOriginsEnv) {
+        const allowed = input.allowedOriginsEnv.split(",").map((s) => s.trim()).filter(Boolean);
+        if (allowed.includes(input.origin)) return true;
+      } else if (/^https?:\/\/localhost(:\d+)?$/.test(input.origin)) {
+        return true;
+      }
+    }
+    return false;
+  }
+
+  return true;
+}
+
+export function requireSameOrigin(req: express.Request, res: express.Response, next: express.NextFunction) {
+  const forwardedHost = TRUST_PROXY ? req.headers["x-forwarded-host"] : undefined;
+  const hostHeader = typeof forwardedHost === "string" && forwardedHost.trim()
+    ? forwardedHost.split(",")[0].trim()
+    : req.headers.host;
+  const secFetchSite = typeof req.headers["sec-fetch-site"] === "string" ? req.headers["sec-fetch-site"] : undefined;
+  const origin = typeof req.headers.origin === "string" ? req.headers.origin : undefined;
+
+  const allowed = isAllowedMutationOrigin({
+    method: req.method,
+    path: req.path,
+    origin,
+    host: hostHeader,
+    secFetchSite,
+    nodeEnv: process.env.NODE_ENV,
+    allowedOriginsEnv: process.env.ALLOWED_ORIGINS,
+  });
+
+  if (!allowed) {
+    return res.status(403).json({ error: "Permintaan lintas origin ditolak." });
+  }
+  next();
+}
+
 // Rate limiter for the public (no-login) points dashboard — generous enough
 // for a tablet auto-refreshing every ~30-60s, tight enough to stop abuse.
 export const publicPointsLimiter = rateLimit({
@@ -110,6 +186,24 @@ export function requireFeature(key: FeatureKey | ((req: express.Request) => Feat
     const perms = await resolveUserPermissions(session);
     const featureKey = typeof key === "function" ? key(req) : key;
     if (!hasFeature(perms, featureKey)) {
+      return res.status(403).json({ error: "Akun Anda tidak memiliki akses ke fitur ini." });
+    }
+    next();
+  };
+}
+
+export function requireAnyFeature(keys: FeatureKey[]) {
+  return async (req: express.Request, res: express.Response, next: express.NextFunction) => {
+    const session = await verifySessionToken(req.cookies[COOKIE_NAME]);
+    if (!session) {
+      res.clearCookie(COOKIE_NAME, { path: "/" });
+      return res.status(401).json({ error: "Belum login." });
+    }
+    req.session = session;
+    req.userRole = session.role;
+
+    const perms = await resolveUserPermissions(session);
+    if (!keys.some((k) => hasFeature(perms, k))) {
       return res.status(403).json({ error: "Akun Anda tidak memiliki akses ke fitur ini." });
     }
     next();

@@ -17,7 +17,7 @@ import {
 import { verifyPasswordHash, fakeVerifyDelay } from "../../lib/password";
 import { changeOwnPassword, UserError } from "../../lib/queries/users";
 import { resolveUserPermissions } from "../../lib/permissions";
-import { loginLimiter, requireAuth, sendError, clientIp, logActivity, SESSION_COOKIE_OPTIONS } from "../middleware";
+import { loginLimiter, passwordChangeLimiter, requireAuth, sendError, clientIp, logActivity, SESSION_COOKIE_OPTIONS } from "../middleware";
 
 export const authRouter = Router();
 
@@ -30,18 +30,16 @@ authRouter.post("/api/auth/login", loginLimiter, async (req, res) => {
   // One message for every failure mode — never reveal whether a username exists.
   const reject = () => res.status(401).json({ error: "Username atau kata sandi salah." });
 
-  if (!password) {
+  if (!password || !rawUsername) {
     await fakeVerifyDelay(password);
     return reject();
   }
 
   try {
-    const account = rawUsername
-      ? await prisma.user.findUnique({
-          where: { username: rawUsername },
-          select: { id: true, username: true, passwordHash: true, role: true, isActive: true },
-        })
-      : null;
+    const account = await prisma.user.findUnique({
+      where: { username: rawUsername },
+      select: { id: true, username: true, passwordHash: true, role: true, isActive: true },
+    });
 
     let resolved: { role: UserRole; username: string; userId: number | null };
 
@@ -54,14 +52,30 @@ authRouter.post("/api/auth/login", loginLimiter, async (req, res) => {
         return reject();
       }
       if (!account.isActive) {
+        prisma.activityLog
+          .create({ data: { role: rawUsername, action: "LOGIN_GAGAL", detail: "Akun nonaktif", ip } })
+          .catch(() => {});
         return res.status(403).json({ error: "Akun dinonaktifkan. Hubungi pemilik akun master." });
       }
       if (account.role !== "master" && account.role !== "admin") return reject();
       resolved = { role: account.role, username: account.username, userId: account.id };
     } else {
-      // Break-glass: the env-var passwords, addressed as username master/admin.
+      // Break-glass env-var passwords: only active when explicitly enabled or
+      // when no active DB account for that role exists yet, and username must
+      // explicitly match the target role.
       const envRole = verifyEnvPassword(password);
-      if (!envRole || (rawUsername !== "" && rawUsername !== envRole)) {
+      let envAllowed = false;
+      if (envRole && rawUsername === envRole) {
+        if (process.env.ALLOW_ENV_BREAKGLASS === "true") {
+          envAllowed = true;
+        } else {
+          const activeRoleCount = await prisma.user.count({
+            where: { role: envRole, isActive: true },
+          });
+          envAllowed = activeRoleCount === 0;
+        }
+      }
+      if (!envRole || !envAllowed) {
         await fakeVerifyDelay(password);
         prisma.activityLog
           .create({ data: { role: rawUsername || "unknown", action: "LOGIN_GAGAL", ip } })
@@ -117,7 +131,7 @@ authRouter.get("/api/auth/me", async (req, res) => {
   });
 });
 
-authRouter.post("/api/auth/change-password", requireAuth, async (req, res) => {
+authRouter.post("/api/auth/change-password", passwordChangeLimiter, requireAuth, async (req, res) => {
   if (req.session!.userId === null) {
     return res.status(400).json({
       error: "Sesi ini memakai kata sandi environment, bukan akun. Ganti lewat file .env.",

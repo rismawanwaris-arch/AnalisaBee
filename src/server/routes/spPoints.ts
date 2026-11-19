@@ -1,8 +1,8 @@
 import { Router } from "express";
 import * as XLSX from "xlsx";
 import { importSpPointsFile, listSpPointBatches, deleteSpPointBatch } from "../../lib/importSpPoints";
-import { requireFeature, logActivity } from "../middleware";
-import { upload } from "../uploads";
+import { requireFeature, logActivity, sendError } from "../middleware";
+import { upload, validateExcelUpload } from "../uploads";
 
 export const spPointsRouter = Router();
 
@@ -33,6 +33,7 @@ spPointsRouter.post(
   "/api/sp-points/import",
   requireFeature("import"),
   upload.single("file"),
+  validateExcelUpload,
   async (req, res) => {
     if (!req.file) return res.status(400).json({ error: "File Excel wajib diunggah." });
     try {
@@ -54,8 +55,8 @@ spPointsRouter.get("/api/sp-points/history", requireFeature("import"), async (_r
   try {
     const batches = await listSpPointBatches();
     return res.json(batches);
-  } catch (err: any) {
-    return res.status(500).json({ error: err.message });
+  } catch (err: unknown) {
+    return sendError(res, 500, err, "Gagal memuat riwayat import Poin SP.");
   }
 });
 
@@ -63,11 +64,11 @@ spPointsRouter.get("/api/sp-points/history", requireFeature("import"), async (_r
 spPointsRouter.delete("/api/sp-points/batch/:id", requireFeature("import"), async (req, res) => {
   try {
     const id = Number(req.params.id);
-    if (Number.isNaN(id)) return res.status(400).json({ error: "ID batch tidak valid." });
+    if (!Number.isInteger(id) || id <= 0) return res.status(400).json({ error: "ID batch tidak valid." });
     await deleteSpPointBatch(id);
     await logActivity(req, "DELETE_SP_POINTS_BATCH", `id=${id}`);
     return res.json({ ok: true });
-  } catch (err: any) {
-    return res.status(500).json({ error: err.message });
+  } catch (err: unknown) {
+    return sendError(res, 500, err, "Gagal menghapus batch Poin SP.");
   }
 });

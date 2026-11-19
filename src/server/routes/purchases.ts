@@ -15,8 +15,8 @@ import {
   type PurchaseFilters,
 } from "../../lib/queries/purchases";
 import { parsePurchaseBuffer, parsePurchaseText } from "../../lib/parsePurchases";
-import { requireFeature, requireMaster, parseDateParam, logActivity } from "../middleware";
-import { upload } from "../uploads";
+import { requireFeature, requireMaster, parseDateParam, logActivity, sendError } from "../middleware";
+import { upload, validateExcelUpload } from "../uploads";
 
 export const purchasesRouter = Router();
 
@@ -36,8 +36,8 @@ purchasesRouter.get("/api/purchases/summary", requireFeature("purchases"), async
     const filters = parsePurchaseFilters(req);
     const summary = await getPurchaseSummary(filters);
     return res.json(summary);
-  } catch (err: any) {
-    return res.status(500).json({ error: err.message || "Gagal memuat ringkasan pembelian." });
+  } catch (err: unknown) {
+    return sendError(res, 500, err, "Gagal memuat ringkasan pembelian.");
   }
 });
 
@@ -47,8 +47,8 @@ purchasesRouter.get("/api/purchases/vendors", requireFeature("purchases"), async
     const filters = parsePurchaseFilters(req);
     const vendors = await getPurchaseByVendors(filters);
     return res.json(vendors);
-  } catch (err: any) {
-    return res.status(500).json({ error: err.message || "Gagal memuat data suplier." });
+  } catch (err: unknown) {
+    return sendError(res, 500, err, "Gagal memuat data suplier.");
   }
 });
 
@@ -56,13 +56,15 @@ purchasesRouter.get("/api/purchases/vendors", requireFeature("purchases"), async
 purchasesRouter.get("/api/purchases/invoices", requireFeature("purchases"), async (req: Request, res: Response) => {
   try {
     const filters = parsePurchaseFilters(req);
-    const page = req.query.page ? Math.max(1, parseInt(String(req.query.page), 10)) : 1;
-    const pageSize = req.query.pageSize ? Math.min(200, Math.max(1, parseInt(String(req.query.pageSize), 10))) : 50;
+    const rawPage = req.query.page !== undefined ? Number(req.query.page) : 1;
+    const rawSize = req.query.pageSize !== undefined ? Number(req.query.pageSize) : 50;
+    const page = Number.isInteger(rawPage) && rawPage > 0 ? rawPage : 1;
+    const pageSize = Number.isInteger(rawSize) && rawSize > 0 ? Math.min(200, rawSize) : 50;
 
     const data = await getPurchaseInvoices(filters, page, pageSize);
     return res.json(data);
-  } catch (err: any) {
-    return res.status(500).json({ error: err.message || "Gagal memuat daftar faktur pembelian." });
+  } catch (err: unknown) {
+    return sendError(res, 500, err, "Gagal memuat daftar faktur pembelian.");
   }
 });
 
@@ -70,11 +72,12 @@ purchasesRouter.get("/api/purchases/invoices", requireFeature("purchases"), asyn
 purchasesRouter.get("/api/purchases/top-items", requireFeature("purchases"), async (req: Request, res: Response) => {
   try {
     const filters = parsePurchaseFilters(req);
-    const limit = req.query.limit ? parseInt(String(req.query.limit), 10) : 20;
+    const rawLimit = req.query.limit !== undefined ? Number(req.query.limit) : 20;
+    const limit = Number.isInteger(rawLimit) && rawLimit > 0 ? Math.min(200, rawLimit) : 20;
     const items = await getTopPurchasedItems(filters, limit);
     return res.json(items);
-  } catch (err: any) {
-    return res.status(500).json({ error: err.message || "Gagal memuat item pembelian." });
+  } catch (err: unknown) {
+    return sendError(res, 500, err, "Gagal memuat item pembelian.");
   }
 });
 
@@ -83,8 +86,8 @@ purchasesRouter.get("/api/purchases/options", requireFeature("purchases"), async
   try {
     const [vendors, outlets] = await Promise.all([listPurchasedVendors(), listPurchasedOutlets()]);
     return res.json({ vendors, outlets });
-  } catch (err: any) {
-    return res.status(500).json({ error: err.message || "Gagal memuat opsi suplier." });
+  } catch (err: unknown) {
+    return sendError(res, 500, err, "Gagal memuat opsi suplier.");
   }
 });
 
@@ -93,13 +96,13 @@ purchasesRouter.get("/api/purchases/invoices/:id", requireFeature("purchases"), 
   try {
     const idParam = String(req.params.id);
     const idNum = Number(idParam);
-    const detail = await getPurchaseInvoiceDetail(isNaN(idNum) ? idParam : idNum);
+    const detail = await getPurchaseInvoiceDetail(Number.isInteger(idNum) && idNum > 0 ? idNum : idParam);
     if (!detail) {
       return res.status(404).json({ error: "Faktur pembelian tidak ditemukan." });
     }
     return res.json(detail);
-  } catch (err: any) {
-    return res.status(500).json({ error: err.message || "Gagal memuat detail nota pembelian." });
+  } catch (err: unknown) {
+    return sendError(res, 500, err, "Gagal memuat detail nota pembelian.");
   }
 });
 
@@ -108,6 +111,7 @@ purchasesRouter.post(
   "/api/purchases/preview",
   requireMaster,
   upload.single("file"),
+  validateExcelUpload,
   async (req: Request, res: Response) => {
     try {
       let parsed;
@@ -136,8 +140,8 @@ purchasesRouter.post(
         filename,
         ...preview,
       });
-    } catch (err: any) {
-      return res.status(500).json({ error: err.message || "Gagal memproses pratinjau import data pembelian." });
+    } catch (err: unknown) {
+      return sendError(res, 500, err, "Gagal memproses pratinjau import data pembelian.");
     }
   }
 );
@@ -147,6 +151,7 @@ purchasesRouter.post(
   "/api/purchases/import",
   requireMaster,
   upload.single("file"),
+  validateExcelUpload,
   async (req: Request, res: Response) => {
     try {
       let parsed;
@@ -185,8 +190,8 @@ purchasesRouter.post(
         errorsCount: parsed.errors.length,
         errors: parsed.errors.slice(0, 10),
       });
-    } catch (err: any) {
-      return res.status(500).json({ error: err.message || "Gagal memproses import data pembelian." });
+    } catch (err: unknown) {
+      return sendError(res, 500, err, "Gagal memproses import data pembelian.");
     }
   }
 );
@@ -195,16 +200,16 @@ purchasesRouter.post(
 purchasesRouter.get("/api/purchases/batches", requireFeature("purchases"), async (_req: Request, res: Response) => {
   try {
     return res.json(await listPurchaseBatches());
-  } catch (err: any) {
-    return res.status(500).json({ error: err.message || "Gagal memuat riwayat import pembelian." });
+  } catch (err: unknown) {
+    return sendError(res, 500, err, "Gagal memuat riwayat import pembelian.");
   }
 });
 
 // Delete a whole upload batch (cascade-deletes its invoices + items)
 purchasesRouter.delete("/api/purchases/batches/:id", requireMaster, async (req: Request, res: Response) => {
   try {
-    const id = parseInt(String(req.params.id), 10);
-    if (isNaN(id)) return res.status(400).json({ error: "ID batch tidak valid." });
+    const id = Number(req.params.id);
+    if (!Number.isInteger(id) || id <= 0) return res.status(400).json({ error: "ID batch tidak valid." });
 
     const deleted = await deletePurchaseBatch(id);
     if (!deleted) return res.status(404).json({ error: "Batch import pembelian tidak ditemukan." });
@@ -215,21 +220,21 @@ purchasesRouter.delete("/api/purchases/batches/:id", requireMaster, async (req: 
       `Hapus batch "${deleted.filename}" (${deleted.invoiceCount} nota)`
     );
     return res.json({ ok: true, ...deleted });
-  } catch (err: any) {
-    return res.status(500).json({ error: err.message || "Gagal menghapus batch import pembelian." });
+  } catch (err: unknown) {
+    return sendError(res, 500, err, "Gagal menghapus batch import pembelian.");
   }
 });
 
 // Delete an invoice
 purchasesRouter.delete("/api/purchases/invoices/:id", requireMaster, async (req: Request, res: Response) => {
   try {
-    const id = parseInt(String(req.params.id), 10);
-    if (isNaN(id)) return res.status(400).json({ error: "ID faktur tidak valid." });
+    const id = Number(req.params.id);
+    if (!Number.isInteger(id) || id <= 0) return res.status(400).json({ error: "ID faktur tidak valid." });
 
     await deletePurchaseInvoice(id);
     await logActivity(req, "PURCHASE_DELETE", `id=${id}`);
     return res.json({ ok: true });
-  } catch (err: any) {
-    return res.status(500).json({ error: err.message || "Gagal menghapus faktur pembelian." });
+  } catch (err: unknown) {
+    return sendError(res, 500, err, "Gagal menghapus faktur pembelian.");
   }
 });

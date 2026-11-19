@@ -13,6 +13,8 @@ import {
   createAttentionPointEntry,
   updateAttentionPointEntry,
   deleteAttentionPointEntry,
+  getAttentionEmployeeBranch,
+  getAttentionEntryBranch,
   listAttentionPointEntries,
   getAttentionLeaderboard,
   getAttentionLeaderboardExport,
@@ -26,6 +28,7 @@ import {
   computeCurrentMonthPeriod,
 } from "../../lib/queries/points";
 import { type FeatureKey } from "../../lib/features";
+import { resolveUserPermissions, hasFeature } from "../../lib/permissions";
 import {
   requireFeature,
   publicPointsLimiter,
@@ -44,14 +47,26 @@ function parseBranchParam(val: unknown): BranchType | undefined {
   return undefined;
 }
 
+async function getAttentionBranchScope(req: Request): Promise<BranchType | undefined> {
+  if (!req.session) return undefined;
+  const perms = await resolveUserPermissions(req.session);
+  const canBandung = hasFeature(perms, "points_atensi");
+  const canCimahi = hasFeature(perms, "points_cimahi_atensi");
+  if (canBandung && !canCimahi) return "BANDUNG";
+  if (!canBandung && canCimahi) return "CIMAHI";
+  return undefined;
+}
+
 async function resolvePeriod(req: Request): Promise<{ from: Date; to: Date }> {
   const fromParam = parseDateParam(req.query.from);
   const toParam = parseDateParam(req.query.to);
   if (fromParam && toParam) return { from: fromParam, to: toParam };
   const setting = await getPointPeriodSetting();
   if (req.query.year || req.query.month) {
-    const year = req.query.year ? Number(req.query.year) : new Date().getFullYear();
-    const month = req.query.month ? Number(req.query.month) : new Date().getMonth() + 1;
+    const rawYear = req.query.year ? Number(req.query.year) : new Date().getFullYear();
+    const rawMonth = req.query.month ? Number(req.query.month) : new Date().getMonth() + 1;
+    const year = Number.isInteger(rawYear) && rawYear >= 2000 && rawYear <= 2100 ? rawYear : new Date().getFullYear();
+    const month = Number.isInteger(rawMonth) && rawMonth >= 1 && rawMonth <= 12 ? rawMonth : new Date().getMonth() + 1;
     return computeMonthPeriod(year, month, setting.periodStartDay);
   }
   return computeCurrentMonthPeriod(setting.periodStartDay);
@@ -100,7 +115,7 @@ attentionPointsRouter.post("/api/points/attention/programs", requireFeature(atte
 
 attentionPointsRouter.put("/api/points/attention/programs/:id", requireFeature(attentionFeature), async (req, res) => {
   const id = Number(req.params.id);
-  if (!Number.isInteger(id)) return res.status(400).json({ error: "ID program tidak valid." });
+  if (!Number.isInteger(id) || id <= 0) return res.status(400).json({ error: "ID program tidak valid." });
   try {
     const { name, points, description, isActive } = req.body ?? {};
     const updated = await updateAttentionProgram(id, {
@@ -122,7 +137,7 @@ attentionPointsRouter.put("/api/points/attention/programs/:id", requireFeature(a
 
 attentionPointsRouter.delete("/api/points/attention/programs/:id", requireFeature(attentionFeature), async (req, res) => {
   const id = Number(req.params.id);
-  if (!Number.isInteger(id)) return res.status(400).json({ error: "ID program tidak valid." });
+  if (!Number.isInteger(id) || id <= 0) return res.status(400).json({ error: "ID program tidak valid." });
   try {
     await deleteAttentionProgram(id);
     await logActivity(req, "DELETE_ATTENTION_PROGRAM", `id=${id}`);
@@ -147,14 +162,20 @@ attentionPointsRouter.get("/api/points/attention/entries", requireFeature(attent
     const employeeId = req.query.employeeId ? Number(req.query.employeeId) : undefined;
     const programId = req.query.programId ? Number(req.query.programId) : undefined;
     const search = typeof req.query.search === "string" ? req.query.search : undefined;
-    const entries = await listAttentionPointEntries({
-      from,
-      to,
-      employeeId: employeeId && Number.isInteger(employeeId) ? employeeId : undefined,
-      programId: programId && Number.isInteger(programId) ? programId : undefined,
-      search,
-    });
-    return res.json({ entries, from: from.toISOString(), to: to.toISOString() });
+    const [entries, branchScope] = await Promise.all([
+      listAttentionPointEntries({
+        from,
+        to,
+        employeeId: employeeId && Number.isInteger(employeeId) ? employeeId : undefined,
+        programId: programId && Number.isInteger(programId) ? programId : undefined,
+        search,
+      }),
+      getAttentionBranchScope(req),
+    ]);
+    const filteredEntries = branchScope
+      ? entries.filter((e) => e.homeBranch === null || e.homeBranch === branchScope)
+      : entries;
+    return res.json({ entries: filteredEntries, from: from.toISOString(), to: to.toISOString() });
   } catch (err) {
     return handleAttentionError(res, err);
   }
@@ -163,11 +184,31 @@ attentionPointsRouter.get("/api/points/attention/entries", requireFeature(attent
 attentionPointsRouter.post("/api/points/attention/entries", requireFeature(attentionFeature), async (req, res) => {
   try {
     const { tanggal, employeeId, programId, qty, note } = req.body ?? {};
+    const parsedEmployeeId = Number(employeeId);
+    const parsedProgramId = Number(programId);
+    const parsedQty = Number(qty);
+    if (
+      !Number.isInteger(parsedEmployeeId) ||
+      parsedEmployeeId <= 0 ||
+      !Number.isInteger(parsedProgramId) ||
+      parsedProgramId <= 0 ||
+      !Number.isInteger(parsedQty) ||
+      parsedQty <= 0
+    ) {
+      return res.status(400).json({ error: "employeeId, programId, dan qty harus berupa bilangan bulat positif." });
+    }
+    const branchScope = await getAttentionBranchScope(req);
+    if (branchScope) {
+      const empBranch = await getAttentionEmployeeBranch(parsedEmployeeId);
+      if (empBranch !== null && empBranch !== branchScope) {
+        return res.status(403).json({ error: "Anda tidak memiliki akses untuk menambah entri pegawai cabang lain." });
+      }
+    }
     const created = await createAttentionPointEntry({
       tanggal: typeof tanggal === "string" ? tanggal : "",
-      employeeId: Number(employeeId),
-      programId: Number(programId),
-      qty: Number(qty),
+      employeeId: parsedEmployeeId,
+      programId: parsedProgramId,
+      qty: parsedQty,
       note: typeof note === "string" ? note : null,
       createdBy: req.session?.username ?? null,
     });
@@ -184,9 +225,36 @@ attentionPointsRouter.post("/api/points/attention/entries", requireFeature(atten
 
 attentionPointsRouter.put("/api/points/attention/entries/:id", requireFeature(attentionFeature), async (req, res) => {
   const id = Number(req.params.id);
-  if (!Number.isInteger(id)) return res.status(400).json({ error: "ID entri tidak valid." });
+  if (!Number.isInteger(id) || id <= 0) return res.status(400).json({ error: "ID entri tidak valid." });
   try {
     const { tanggal, employeeId, programId, qty, note } = req.body ?? {};
+    if (employeeId !== undefined && (!Number.isInteger(Number(employeeId)) || Number(employeeId) <= 0)) {
+      return res.status(400).json({ error: "employeeId tidak valid." });
+    }
+    if (programId !== undefined && (!Number.isInteger(Number(programId)) || Number(programId) <= 0)) {
+      return res.status(400).json({ error: "programId tidak valid." });
+    }
+    if (qty !== undefined && (!Number.isInteger(Number(qty)) || Number(qty) <= 0)) {
+      return res.status(400).json({ error: "qty harus berupa bilangan bulat positif." });
+    }
+
+    const branchScope = await getAttentionBranchScope(req);
+    if (branchScope) {
+      const entryBranch = await getAttentionEntryBranch(id);
+      if (entryBranch === undefined) {
+        return res.status(404).json({ error: "Data poin atensi tidak ditemukan." });
+      }
+      if (entryBranch !== null && entryBranch !== branchScope) {
+        return res.status(403).json({ error: "Anda tidak memiliki akses untuk mengubah entri cabang lain." });
+      }
+      if (employeeId !== undefined) {
+        const targetEmpBranch = await getAttentionEmployeeBranch(Number(employeeId));
+        if (targetEmpBranch !== null && targetEmpBranch !== branchScope) {
+          return res.status(403).json({ error: "Anda tidak memiliki akses untuk memindahkan entri ke pegawai cabang lain." });
+        }
+      }
+    }
+
     const updated = await updateAttentionPointEntry(id, {
       ...(tanggal !== undefined ? { tanggal: String(tanggal) } : {}),
       ...(employeeId !== undefined ? { employeeId: Number(employeeId) } : {}),
@@ -207,8 +275,19 @@ attentionPointsRouter.put("/api/points/attention/entries/:id", requireFeature(at
 
 attentionPointsRouter.delete("/api/points/attention/entries/:id", requireFeature(attentionFeature), async (req, res) => {
   const id = Number(req.params.id);
-  if (!Number.isInteger(id)) return res.status(400).json({ error: "ID entri tidak valid." });
+  if (!Number.isInteger(id) || id <= 0) return res.status(400).json({ error: "ID entri tidak valid." });
   try {
+    const branchScope = await getAttentionBranchScope(req);
+    if (branchScope) {
+      const entryBranch = await getAttentionEntryBranch(id);
+      if (entryBranch === undefined) {
+        return res.status(404).json({ error: "Data poin atensi tidak ditemukan." });
+      }
+      if (entryBranch !== null && entryBranch !== branchScope) {
+        return res.status(403).json({ error: "Anda tidak memiliki akses untuk menghapus entri cabang lain." });
+      }
+    }
+
     await deleteAttentionPointEntry(id);
     await logActivity(req, "DELETE_ATTENTION_POINT", `id=${id}`);
     return res.json({ ok: true });
@@ -220,7 +299,8 @@ attentionPointsRouter.delete("/api/points/attention/entries/:id", requireFeature
 attentionPointsRouter.get("/api/points/attention/leaderboard", requireFeature(attentionFeature), async (req, res) => {
   try {
     const { from, to } = await resolvePeriod(req);
-    const branch = parseBranchParam(req.query.branch) ?? "BANDUNG";
+    const branchScope = await getAttentionBranchScope(req);
+    const branch = branchScope ?? parseBranchParam(req.query.branch) ?? "BANDUNG";
     const data = await getAttentionLeaderboard(from, to, branch);
     return res.json(data);
   } catch (err) {
@@ -231,7 +311,8 @@ attentionPointsRouter.get("/api/points/attention/leaderboard", requireFeature(at
 attentionPointsRouter.get("/api/points/attention/leaderboard/export", requireFeature(attentionFeature), async (req, res) => {
   try {
     const { from, to } = await resolvePeriod(req);
-    const branch = parseBranchParam(req.query.branch) ?? "BANDUNG";
+    const branchScope = await getAttentionBranchScope(req);
+    const branch = branchScope ?? parseBranchParam(req.query.branch) ?? "BANDUNG";
     const data = await getAttentionLeaderboardExport(from, to, branch);
     return res.json(data);
   } catch (err) {
@@ -241,7 +322,7 @@ attentionPointsRouter.get("/api/points/attention/leaderboard/export", requireFea
 
 attentionPointsRouter.get("/api/points/attention/employee/:id", requireFeature(attentionFeature), async (req, res) => {
   const employeeId = Number(req.params.id);
-  if (!Number.isInteger(employeeId)) return res.status(400).json({ error: "ID pegawai tidak valid." });
+  if (!Number.isInteger(employeeId) || employeeId <= 0) return res.status(400).json({ error: "ID pegawai tidak valid." });
   try {
     const { from, to } = await resolvePeriod(req);
     const rows = await getAttentionEmployeeBreakdown(employeeId, from, to);
@@ -278,7 +359,7 @@ attentionPointsRouter.get("/api/public/points/attention/dashboard", publicPoints
 
 attentionPointsRouter.get("/api/public/points/attention/employee/:id", publicPointsLimiter, async (req, res) => {
   const employeeId = Number(req.params.id);
-  if (!Number.isInteger(employeeId)) return res.status(400).json({ error: "ID tidak valid." });
+  if (!Number.isInteger(employeeId) || employeeId <= 0) return res.status(400).json({ error: "ID tidak valid." });
   try {
     const setting = await getPointPeriodSetting();
     const fromParam = parseDateParam(req.query.from);

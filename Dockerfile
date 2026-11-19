@@ -51,6 +51,9 @@ COPY scripts/*.ts ./scripts/
 # entrypoint: run migrations then start server
 COPY docker-entrypoint.sh ./
 RUN chmod +x docker-entrypoint.sh
+RUN chown -R node:node /app
+
+USER node
 
 EXPOSE 3001
 

@@ -4,14 +4,16 @@
 // ==========================================
 import { Router } from "express";
 import { prisma } from "../../lib/prisma";
-import { requireFeature, parseDateParam } from "../middleware";
+import { requireFeature, parseDateParam, sendError } from "../middleware";
 
 export const activityLogRouter = Router();
 
 activityLogRouter.get("/api/activity-log", requireFeature("activity_log"), async (req, res) => {
   try {
-    const limit = Math.min(Number(req.query.limit) || 100, 500);
-    const offset = Number(req.query.offset) || 0;
+    const rawLimit = Number(req.query.limit);
+    const limit = Number.isInteger(rawLimit) && rawLimit > 0 ? Math.min(rawLimit, 500) : 100;
+    const rawOffset = Number(req.query.offset);
+    const offset = Number.isInteger(rawOffset) && rawOffset >= 0 ? rawOffset : 0;
     const role = typeof req.query.role === "string" && req.query.role ? req.query.role : undefined;
     const from = parseDateParam(req.query.from);
     const to = parseDateParam(req.query.to);
@@ -36,7 +38,7 @@ activityLogRouter.get("/api/activity-log", requireFeature("activity_log"), async
     ]);
 
     return res.json({ logs, total, limit, offset });
-  } catch (err: any) {
-    return res.status(500).json({ error: err.message });
+  } catch (err: unknown) {
+    return sendError(res, 500, err, "Gagal memuat log aktivitas.");
   }
 });

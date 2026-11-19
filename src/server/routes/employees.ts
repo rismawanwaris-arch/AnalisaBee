@@ -4,17 +4,29 @@
 import { Router } from "express";
 import { prisma } from "../../lib/prisma";
 import { getEmployeeList, getEmployeeDetail, getEmployeeSummary } from "../../lib/queries/employees";
-import { requireAuth, requireFeature, requireMaster, cacheBriefly, parseDateParam, logActivity } from "../middleware";
+import { resolveUserPermissions, hasFeature } from "../../lib/permissions";
+import { requireAuth, requireFeature, requireMaster, cacheBriefly, parseDateParam, logActivity, sendError } from "../middleware";
 
 export const employeesRouter = Router();
 
 employeesRouter.get("/api/employees", requireAuth, cacheBriefly(30), async (req, res) => {
   try {
-    const includeHidden = req.query.includeHidden === "true" || req.query.includeHidden === "1";
-    const list = await getEmployeeList(includeHidden);
-    return res.json(list);
-  } catch (err: any) {
-    return res.status(500).json({ error: err.message });
+    const includeHidden =
+      req.userRole === "master" &&
+      (req.query.includeHidden === "true" || req.query.includeHidden === "1");
+    const perms = await resolveUserPermissions(req.session!);
+    if (hasFeature(perms, "employees")) {
+      const list = await getEmployeeList(includeHidden);
+      return res.json(list);
+    }
+    const basic = await prisma.employee.findMany({
+      where: { isHidden: false },
+      select: { id: true, name: true },
+      orderBy: { name: "asc" },
+    });
+    return res.json(basic);
+  } catch (err) {
+    return sendError(res, 500, err, "Gagal memuat daftar pegawai.");
   }
 });
 
@@ -25,8 +37,8 @@ employeesRouter.get("/api/employees/summary", requireFeature("employees"), async
     let to = parseDateParam(req.query.to);
     if (!from && !to && !isAll) {
       const now = new Date();
-      from = new Date(now.getFullYear(), now.getMonth(), 1);
-      to = new Date(now.getFullYear(), now.getMonth() + 1, 0);
+      from = new Date(Date.UTC(now.getFullYear(), now.getMonth(), 1));
+      to = new Date(Date.UTC(now.getFullYear(), now.getMonth() + 1, 0));
     }
     const itemId = req.query.itemId ? Number(req.query.itemId) : undefined;
     const outletId = req.query.outletId ? Number(req.query.outletId) : undefined;
@@ -39,15 +51,15 @@ employeesRouter.get("/api/employees/summary", requireFeature("employees"), async
       : undefined;
     const rows = await getEmployeeSummary({ from, to, itemId, outletId, subtotalMin, subtotalMax, itemGroup, brand, itemKeyword });
     return res.json(rows);
-  } catch (err: any) {
-    return res.status(500).json({ error: err.message });
+  } catch (err) {
+    return sendError(res, 500, err, "Gagal memuat performa pegawai.");
   }
 });
 
 employeesRouter.put("/api/employees/:id/visibility", requireMaster, async (req, res) => {
   try {
     const id = Number(req.params.id);
-    if (Number.isNaN(id)) return res.status(400).json({ error: "ID tidak valid" });
+    if (!Number.isInteger(id)) return res.status(400).json({ error: "ID tidak valid" });
     const { isHidden } = req.body;
     const updated = await prisma.employee.update({
       where: { id },
@@ -56,22 +68,22 @@ employeesRouter.put("/api/employees/:id/visibility", requireMaster, async (req, 
     });
     await logActivity(req, "EMPLOYEE_VISIBILITY", `${updated.name} → ${isHidden ? "disembunyikan" : "ditampilkan"}`);
     return res.json(updated);
-  } catch (err: any) {
-    return res.status(500).json({ error: err.message });
+  } catch (err) {
+    return sendError(res, 500, err, "Gagal memperbarui visibilitas pegawai.");
   }
 });
 
 employeesRouter.get("/api/employees/:id", requireFeature("employees"), async (req, res) => {
   try {
     const id = Number(req.params.id);
-    if (Number.isNaN(id)) return res.status(400).json({ error: "ID tidak valid" });
+    if (!Number.isInteger(id)) return res.status(400).json({ error: "ID tidak valid" });
     const isAll = req.query.all === "1" || req.query.all === "true";
     let from = parseDateParam(req.query.from);
     let to = parseDateParam(req.query.to);
     if (!from && !to && !isAll) {
       const now = new Date();
-      from = new Date(now.getFullYear(), now.getMonth(), 1);
-      to = new Date(now.getFullYear(), now.getMonth() + 1, 0);
+      from = new Date(Date.UTC(now.getFullYear(), now.getMonth(), 1));
+      to = new Date(Date.UTC(now.getFullYear(), now.getMonth() + 1, 0));
     }
     const itemId = req.query.itemId ? Number(req.query.itemId) : undefined;
     const outletId = req.query.outletId ? Number(req.query.outletId) : undefined;
@@ -83,7 +95,7 @@ employeesRouter.get("/api/employees/:id", requireFeature("employees"), async (re
     const detail = await getEmployeeDetail(id, { from, to, itemId, outletId, itemGroup, brand, itemKeyword });
     if (!detail) return res.status(404).json({ error: "Pegawai tidak ditemukan" });
     return res.json(detail);
-  } catch (err: any) {
-    return res.status(500).json({ error: err.message });
+  } catch (err) {
+    return sendError(res, 500, err, "Gagal memuat detail pegawai.");
   }
 });

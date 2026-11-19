@@ -31,8 +31,8 @@ import {
 } from "../../lib/queries/points";
 import { type FeatureKey } from "../../lib/features";
 import type { ReportCategory } from "@/generated/prisma/client";
-import { requireFeature, requireMaster, cacheBriefly, parseDateParam, logActivity } from "../middleware";
-import { upload } from "../uploads";
+import { requireFeature, requireMaster, cacheBriefly, parseDateParam, logActivity, sendError } from "../middleware";
+import { upload, validateExcelUpload } from "../uploads";
 import * as XLSX from "xlsx";
 import { parseExcelPointRows } from "../../lib/parsePointExcel";
 
@@ -45,8 +45,10 @@ async function resolvePointPeriod(req: Request): Promise<{ from: Date; to: Date 
   const fromParam = parseDateParam(req.query.from);
   const toParam = parseDateParam(req.query.to);
   if (fromParam && toParam) return { from: fromParam, to: toParam };
-  const year = req.query.year ? Number(req.query.year) : new Date().getFullYear();
-  const month = req.query.month ? Number(req.query.month) : new Date().getMonth() + 1;
+  const rawYear = req.query.year ? Number(req.query.year) : new Date().getFullYear();
+  const rawMonth = req.query.month ? Number(req.query.month) : new Date().getMonth() + 1;
+  const year = Number.isInteger(rawYear) && rawYear >= 2000 && rawYear <= 2100 ? rawYear : new Date().getFullYear();
+  const month = Number.isInteger(rawMonth) && rawMonth >= 1 && rawMonth <= 12 ? rawMonth : new Date().getMonth() + 1;
   const { periodStartDay } = await getPointPeriodSetting();
   return computeMonthPeriod(year, month, periodStartDay);
 }
@@ -95,8 +97,8 @@ pointsRouter.get("/api/points/leaderboard", requireFeature(pointsFeature), async
     const { from, to } = await resolvePointPeriod(req);
     const data = await getLeaderboard(from, to, parsePointsBranch(req), parsePointsCategory(req));
     return res.json(data);
-  } catch (err: any) {
-    return res.status(500).json({ error: err.message });
+  } catch (err: unknown) {
+    return sendError(res, 500, err, "Gagal memuat papan poin.");
   }
 });
 
@@ -107,8 +109,8 @@ pointsRouter.get("/api/points/leaderboard/export", requireFeature(pointsFeature)
     const { from, to } = await resolvePointPeriod(req);
     const data = await getLeaderboardExport(from, to, parsePointsBranch(req), parsePointsCategory(req));
     return res.json(data);
-  } catch (err: any) {
-    return res.status(500).json({ error: err.message });
+  } catch (err: unknown) {
+    return sendError(res, 500, err, "Gagal mengekspor papan poin.");
   }
 });
 
@@ -118,8 +120,8 @@ pointsRouter.get("/api/points/settings", requireFeature(pointsFeature), cacheBri
   try {
     const data = await getPointPeriodSetting();
     return res.json(data);
-  } catch (err: any) {
-    return res.status(500).json({ error: err.message });
+  } catch (err: unknown) {
+    return sendError(res, 500, err, "Gagal memuat pengaturan poin.");
   }
 });
 
@@ -179,8 +181,8 @@ async function handlePointsSettingsWrite(req: Request, res: Response) {
       .join(", ");
     await logActivity(req, "PERIOD_UPDATE", `Tanggal mulai siklus → ${day}${targetLog ? `, target poin (${targetLog})` : ""}`);
     return res.json({ ok: true });
-  } catch (err: any) {
-    return res.status(500).json({ error: err.message });
+  } catch (err: unknown) {
+    return sendError(res, 500, err, "Gagal memperbarui pengaturan poin.");
   }
 }
 
@@ -190,7 +192,7 @@ pointsRouter.post("/api/points/settings", requireMaster, handlePointsSettingsWri
 pointsRouter.get("/api/points/employee/:id", requireFeature(pointsFeature), async (req, res) => {
   try {
     const id = Number(req.params.id);
-    if (Number.isNaN(id)) return res.status(400).json({ error: "ID tidak valid" });
+    if (!Number.isInteger(id) || id <= 0) return res.status(400).json({ error: "ID tidak valid" });
 
     const { from, to } = await resolvePointPeriod(req);
     const breakdown = await getEmployeePointBreakdown(
@@ -202,8 +204,8 @@ pointsRouter.get("/api/points/employee/:id", requireFeature(pointsFeature), asyn
       parsePointsCategory(req)
     );
     return res.json(breakdown);
-  } catch (err: any) {
-    return res.status(500).json({ error: err.message });
+  } catch (err: unknown) {
+    return sendError(res, 500, err, "Gagal memuat rincian poin pegawai.");
   }
 });
 
@@ -213,8 +215,8 @@ pointsRouter.get("/api/points/items", requireMaster, async (req, res) => {
   try {
     const rules = await listItemPointRules();
     return res.json(rules);
-  } catch (err: any) {
-    return res.status(500).json({ error: err.message });
+  } catch (err: unknown) {
+    return sendError(res, 500, err, "Gagal memuat aturan poin item.");
   }
 });
 
@@ -230,8 +232,8 @@ pointsRouter.post("/api/points/items", requireMaster, async (req, res) => {
     const rule = await upsertItemPointRule(p, pts, startDate);
     await logActivity(req, "ITEM_RULE_ADD", `"${p}" = ${pts} poin${startDate ? ` (mulai ${startDate})` : ""}`);
     return res.json(rule);
-  } catch (err: any) {
-    return res.status(500).json({ error: err.message });
+  } catch (err: unknown) {
+    return sendError(res, 500, err, "Gagal menyimpan aturan poin item.");
   }
 });
 
@@ -258,8 +260,8 @@ pointsRouter.post("/api/points/items/bulk", requireMaster, async (req, res) => {
       `${saved.length} aturan poin diperbarui${startDate ? ` (mulai ${startDate})` : ""}`
     );
     return res.json({ ok: true, count: saved.length });
-  } catch (err: any) {
-    return res.status(500).json({ error: err.message });
+  } catch (err: unknown) {
+    return sendError(res, 500, err, "Gagal menyimpan aturan poin massal.");
   }
 });
 
@@ -267,6 +269,7 @@ pointsRouter.post(
   "/api/points/items/upload",
   requireMaster,
   upload.single("file"),
+  validateExcelUpload,
   async (req, res) => {
     try {
       if (!req.file) return res.status(400).json({ error: "File Excel wajib diunggah." });
@@ -298,8 +301,8 @@ pointsRouter.post(
         errorsCount: errors.length,
         errors,
       });
-    } catch (err: any) {
-      return res.status(500).json({ error: err.message || "Gagal memproses file Excel." });
+    } catch (err: unknown) {
+      return sendError(res, 500, err, "Gagal memproses file Excel.");
     }
   }
 );
@@ -315,19 +318,21 @@ pointsRouter.post("/api/points/items/deduplicate", requireMaster, async (req, re
       );
     }
     return res.json({ ok: true, ...result });
-  } catch (err: any) {
-    return res.status(500).json({ error: err.message });
+  } catch (err: unknown) {
+    return sendError(res, 500, err, "Gagal membersihkan aturan poin duplikat.");
   }
 });
 
 pointsRouter.delete("/api/points/items/:id", requireMaster, async (req, res) => {
+  const id = Number(req.params.id);
+  if (!Number.isInteger(id) || id <= 0) return res.status(400).json({ error: "ID tidak valid." });
   try {
     const allForPattern = req.query.allForPattern === "true";
-    await deleteItemPointRule(Number(req.params.id), allForPattern);
-    await logActivity(req, "ITEM_RULE_DELETE", `id=${req.params.id}${allForPattern ? " (semua riwayat)" : ""}`);
+    await deleteItemPointRule(id, allForPattern);
+    await logActivity(req, "ITEM_RULE_DELETE", `id=${id}${allForPattern ? " (semua riwayat)" : ""}`);
     return res.json({ ok: true });
-  } catch (err: any) {
-    return res.status(500).json({ error: err.message });
+  } catch (err: unknown) {
+    return sendError(res, 500, err, "Gagal menghapus aturan poin item.");
   }
 });
 
@@ -335,8 +340,8 @@ pointsRouter.get("/api/points/item-exclusions", requireMaster, async (req, res) 
   try {
     const list = await listItemPointExclusions();
     return res.json(list);
-  } catch (err: any) {
-    return res.status(500).json({ error: err.message });
+  } catch (err: unknown) {
+    return sendError(res, 500, err, "Gagal memuat daftar pengecualian item.");
   }
 });
 
@@ -348,18 +353,20 @@ pointsRouter.post("/api/points/item-exclusions", requireMaster, async (req, res)
     const excl = await addItemPointExclusion(p);
     await logActivity(req, "ITEM_EXCLUSION_ADD", `"${p}"`);
     return res.json(excl);
-  } catch (err: any) {
-    return res.status(500).json({ error: err.message });
+  } catch (err: unknown) {
+    return sendError(res, 500, err, "Gagal menambahkan pengecualian item.");
   }
 });
 
 pointsRouter.delete("/api/points/item-exclusions/:id", requireMaster, async (req, res) => {
+  const id = Number(req.params.id);
+  if (!Number.isInteger(id) || id <= 0) return res.status(400).json({ error: "ID tidak valid." });
   try {
-    await removeItemPointExclusion(Number(req.params.id));
-    await logActivity(req, "ITEM_EXCLUSION_DELETE", `id=${req.params.id}`);
+    await removeItemPointExclusion(id);
+    await logActivity(req, "ITEM_EXCLUSION_DELETE", `id=${id}`);
     return res.json({ ok: true });
-  } catch (err: any) {
-    return res.status(500).json({ error: err.message });
+  } catch (err: unknown) {
+    return sendError(res, 500, err, "Gagal menghapus pengecualian item.");
   }
 });
 
@@ -367,8 +374,8 @@ pointsRouter.get("/api/points/group-defaults", requireMaster, async (req, res) =
   try {
     const list = await listGroupPointDefaults();
     return res.json(list);
-  } catch (err: any) {
-    return res.status(500).json({ error: err.message });
+  } catch (err: unknown) {
+    return sendError(res, 500, err, "Gagal memuat poin default grup.");
   }
 });
 
@@ -384,18 +391,20 @@ pointsRouter.post("/api/points/group-defaults", requireMaster, async (req, res) 
     const row = await upsertGroupPointDefault(g, pts);
     await logActivity(req, "GROUP_DEFAULT_ADD", `"${g}" = ${pts} poin`);
     return res.json(row);
-  } catch (err: any) {
-    return res.status(500).json({ error: err.message });
+  } catch (err: unknown) {
+    return sendError(res, 500, err, "Gagal menyimpan poin default grup.");
   }
 });
 
 pointsRouter.delete("/api/points/group-defaults/:id", requireMaster, async (req, res) => {
+  const id = Number(req.params.id);
+  if (!Number.isInteger(id) || id <= 0) return res.status(400).json({ error: "ID tidak valid." });
   try {
-    await deleteGroupPointDefault(Number(req.params.id));
-    await logActivity(req, "GROUP_DEFAULT_DELETE", `id=${req.params.id}`);
+    await deleteGroupPointDefault(id);
+    await logActivity(req, "GROUP_DEFAULT_DELETE", `id=${id}`);
     return res.json({ ok: true });
-  } catch (err: any) {
-    return res.status(500).json({ error: err.message });
+  } catch (err: unknown) {
+    return sendError(res, 500, err, "Gagal menghapus poin default grup.");
   }
 });
 
@@ -410,8 +419,8 @@ pointsRouter.get("/api/points/excluded-employees", requireMaster, async (req, re
         reason: x.reason,
       }))
     );
-  } catch (err: any) {
-    return res.status(500).json({ error: err.message });
+  } catch (err: unknown) {
+    return sendError(res, 500, err, "Gagal memuat daftar pegawai dikecualikan.");
   }
 });
 
@@ -419,22 +428,24 @@ pointsRouter.post("/api/points/excluded-employees", requireMaster, async (req, r
   try {
     const { employeeId, reason } = req.body;
     const empId = Number(employeeId);
-    if (Number.isNaN(empId)) return res.status(400).json({ error: "Pilih pegawai." });
+    if (!Number.isInteger(empId) || empId <= 0) return res.status(400).json({ error: "Pilih pegawai." });
     const row = await excludeEmployee(empId, reason ? String(reason).trim() : undefined);
     const emp = await prisma.employee.findUnique({ where: { id: empId }, select: { name: true } });
     await logActivity(req, "EMPLOYEE_EXCLUSION_ADD", `${emp?.name ?? empId}${reason ? ` (${reason})` : ""}`);
     return res.json(row);
-  } catch (err: any) {
-    return res.status(500).json({ error: err.message });
+  } catch (err: unknown) {
+    return sendError(res, 500, err, "Gagal mengecualikan pegawai.");
   }
 });
 
 pointsRouter.delete("/api/points/excluded-employees/:id", requireMaster, async (req, res) => {
+  const id = Number(req.params.id);
+  if (!Number.isInteger(id) || id <= 0) return res.status(400).json({ error: "ID tidak valid." });
   try {
-    await includeEmployee(Number(req.params.id));
-    await logActivity(req, "EMPLOYEE_EXCLUSION_DELETE", `id=${req.params.id}`);
+    await includeEmployee(id);
+    await logActivity(req, "EMPLOYEE_EXCLUSION_DELETE", `id=${id}`);
     return res.json({ ok: true });
-  } catch (err: any) {
-    return res.status(500).json({ error: err.message });
+  } catch (err: unknown) {
+    return sendError(res, 500, err, "Gagal mengembalikan pegawai ke papan poin.");
   }
 });

@@ -24,6 +24,7 @@ import { ensureDefaults } from "../lib/ensureDefaults";
 import { purgeExpiredSessions } from "../lib/session";
 import { ensureAuthBootstrap } from "../lib/queries/users";
 
+import { requireSameOrigin } from "./middleware";
 import { authRouter } from "./routes/auth";
 import { accountsRouter } from "./routes/accounts";
 import { rolesRouter } from "./routes/roles";
@@ -107,6 +108,7 @@ if (process.env.NODE_ENV !== "production") {
 app.use(cookieParser());
 app.use(express.json({ limit: "10mb" }));
 app.use(express.urlencoded({ extended: true, limit: "10mb" }));
+app.use(requireSameOrigin);
 
 // Initialize defaults on server startup
 ensureDefaults().catch((err) => console.error("ensureDefaults error:", err));

@@ -7,9 +7,17 @@ import { getTargetReport, getTargetAmounts, setTargetAmount, type TargetAmounts 
 import { getHourlyAnalytics, type Granularity } from "../../lib/queries/hourly";
 import { type FeatureKey } from "../../lib/features";
 import type { BusinessLine } from "@/generated/prisma/client";
-import { requireFeature, requireMaster, logActivity } from "../middleware";
+import { requireFeature, requireMaster, logActivity, sendError } from "../middleware";
 
 export const targetRouter = Router();
+
+const VALID_CATEGORIES: BusinessLine[] = [
+  "SERVER",
+  "TARTUN",
+  "PETSHOP",
+  "AKSESORIS",
+  "SP_VOUCHER",
+];
 
 const targetReportFeature = (req: Request): FeatureKey =>
   req.query.branch === "CIMAHI" ? "target_cimahi" : "target_bandung";
@@ -57,8 +65,8 @@ targetRouter.get("/api/target/report", requireFeature(targetReportFeature), asyn
       targets: { perkonter: scale(dailyTargets.perkonter), all: scale(dailyTargets.all) },
       dailyTargets,
     });
-  } catch (err: any) {
-    return res.status(500).json({ error: err.message });
+  } catch (err: unknown) {
+    return sendError(res, 500, err, "Gagal memuat laporan target.");
   }
 });
 
@@ -69,8 +77,8 @@ targetRouter.get("/api/target", requireMaster, async (req, res) => {
     const branch = (req.query.branch === "CIMAHI" ? "CIMAHI" : "BANDUNG") as "BANDUNG" | "CIMAHI";
     const targets = await getTargetAmounts(branch);
     return res.json(targets);
-  } catch (err: any) {
-    return res.status(500).json({ error: err.message });
+  } catch (err: unknown) {
+    return sendError(res, 500, err, "Gagal memuat pengaturan target.");
   }
 });
 
@@ -78,44 +86,58 @@ targetRouter.put("/api/target", requireMaster, async (req, res) => {
   try {
     const branch = (req.query.branch === "CIMAHI" ? "CIMAHI" : "BANDUNG") as "BANDUNG" | "CIMAHI";
     const body = req.body;
-    if (Array.isArray(body)) {
-      await Promise.all(
-        body.map((e: any) => setTargetAmount(e.scope, e.category, Number(e.amount) || 0, branch))
-      );
+    if (!Array.isArray(body) || body.length > 50) {
+      return res.status(400).json({ error: "Payload target harus berupa array maksimal 50 entri." });
     }
+    const parsedEntries: Array<{ scope: "PERKONTER" | "ALL"; category: BusinessLine; amount: number }> = [];
+    for (const e of body) {
+      if (!e || typeof e !== "object") {
+        return res.status(400).json({ error: "Format entri target tidak valid." });
+      }
+      if (e.scope !== "PERKONTER" && e.scope !== "ALL") {
+        return res.status(400).json({ error: "scope harus PERKONTER atau ALL" });
+      }
+      if (!VALID_CATEGORIES.includes(e.category)) {
+        return res.status(400).json({ error: "category tidak valid" });
+      }
+      const numAmount = Number(e.amount);
+      if (!Number.isFinite(numAmount) || numAmount < 0) {
+        return res.status(400).json({ error: "amount harus angka >= 0" });
+      }
+      parsedEntries.push({ scope: e.scope, category: e.category, amount: numAmount });
+    }
+    await Promise.all(
+      parsedEntries.map((e) => setTargetAmount(e.scope, e.category, e.amount, branch))
+    );
     const targets = await getTargetAmounts(branch);
-    await logActivity(req, "TARGET_UPDATE", `[${branch}] ${Array.isArray(body) ? body.length : 1} entri diperbarui`);
+    await logActivity(req, "TARGET_UPDATE", `[${branch}] ${parsedEntries.length} entri diperbarui`);
     return res.json(targets);
-  } catch (err: any) {
-    return res.status(500).json({ error: err.message });
+  } catch (err: unknown) {
+    return sendError(res, 500, err, "Gagal memperbarui target.");
   }
 });
 
 targetRouter.post("/api/target", requireMaster, async (req, res) => {
   try {
-    const { scope, category, amount } = req.body;
+    const { scope, category, amount } = req.body ?? {};
     if (scope !== "PERKONTER" && scope !== "ALL") {
       return res.status(400).json({ error: "scope harus PERKONTER atau ALL" });
     }
-    const validCategories: BusinessLine[] = [
-      "SERVER",
-      "TARTUN",
-      "PETSHOP",
-      "AKSESORIS",
-      "SP_VOUCHER",
-    ];
-    if (!validCategories.includes(category)) {
+    if (!VALID_CATEGORIES.includes(category)) {
       return res.status(400).json({ error: "category tidak valid" });
     }
     const numAmount = Number(amount);
     if (!Number.isFinite(numAmount) || numAmount < 0) {
       return res.status(400).json({ error: "amount harus angka positif" });
     }
-    await setTargetAmount(scope, category, numAmount);
-    await logActivity(req, "TARGET_UPDATE", `${scope} ${category} = ${numAmount}`);
+    const branch = (req.body?.branch === "CIMAHI" || req.query.branch === "CIMAHI"
+      ? "CIMAHI"
+      : "BANDUNG") as "BANDUNG" | "CIMAHI";
+    await setTargetAmount(scope, category, numAmount, branch);
+    await logActivity(req, "TARGET_UPDATE", `[${branch}] ${scope} ${category} = ${numAmount}`);
     return res.json({ ok: true });
-  } catch (err: any) {
-    return res.status(500).json({ error: err.message });
+  } catch (err: unknown) {
+    return sendError(res, 500, err, "Gagal menyimpan target.");
   }
 });
 
@@ -132,11 +154,12 @@ targetRouter.get("/api/hourly", requireFeature(targetReportFeature), async (req,
     const granularity: Granularity = VALID_GRANULARITIES.includes(req.query.granularity as Granularity)
       ? (req.query.granularity as Granularity)
       : "EXACT";
-    const outletId = req.query.outletId ? Number(req.query.outletId) : undefined;
+    const rawOutletId = req.query.outletId ? Number(req.query.outletId) : undefined;
+    const outletId = rawOutletId && Number.isInteger(rawOutletId) && rawOutletId > 0 ? rawOutletId : undefined;
     const branch = req.query.branch === "CIMAHI" ? "CIMAHI" : "BANDUNG";
     const report = await getHourlyAnalytics(date, outletId, granularity, branch);
     return res.json(report);
-  } catch (err: any) {
-    return res.status(500).json({ error: err.message });
+  } catch (err: unknown) {
+    return sendError(res, 500, err, "Gagal memuat analitik jam operasional.");
   }
 });

@@ -11,12 +11,12 @@ import { previewSalesReturnFile, importSalesReturnFile } from "../../lib/importS
 import { invalidateDefaults } from "../../lib/ensureDefaults";
 import { parseTartunBuffer, parseServerBuffer, parseServerText } from "../../lib/parseTartunServer";
 import { importDailyMetric } from "../../lib/importTartunServer";
-import { requireFeature, logActivity } from "../middleware";
-import { upload } from "../uploads";
+import { requireFeature, logActivity, sendError } from "../middleware";
+import { upload, validateExcelUpload } from "../uploads";
 
 export const importsRouter = Router();
 
-importsRouter.post("/api/import/preview", requireFeature("import"), upload.single("file"), async (req, res) => {
+importsRouter.post("/api/import/preview", requireFeature("import"), upload.single("file"), validateExcelUpload, async (req, res) => {
   if (!req.file) return res.status(400).json({ error: "File wajib diupload." });
   try {
     const preview = await previewSalesFile(req.file.buffer);
@@ -26,7 +26,7 @@ importsRouter.post("/api/import/preview", requireFeature("import"), upload.singl
   }
 });
 
-importsRouter.post("/api/import", requireFeature("import"), upload.single("file"), async (req, res) => {
+importsRouter.post("/api/import", requireFeature("import"), upload.single("file"), validateExcelUpload, async (req, res) => {
   if (!req.file) return res.status(400).json({ error: "File wajib diupload." });
   try {
     let forceImportHashes: string[] = [];
@@ -47,7 +47,7 @@ importsRouter.post("/api/import", requireFeature("import"), upload.single("file"
   }
 });
 
-importsRouter.post("/api/import/retur/preview", requireFeature("import"), upload.single("file"), async (req, res) => {
+importsRouter.post("/api/import/retur/preview", requireFeature("import"), upload.single("file"), validateExcelUpload, async (req, res) => {
   if (!req.file) return res.status(400).json({ error: "File wajib diupload." });
   try {
     const branch = (req.body.branch === "CIMAHI" ? "CIMAHI" : "BANDUNG") as "BANDUNG" | "CIMAHI";
@@ -58,7 +58,7 @@ importsRouter.post("/api/import/retur/preview", requireFeature("import"), upload
   }
 });
 
-importsRouter.post("/api/import/retur", requireFeature("import"), upload.single("file"), async (req, res) => {
+importsRouter.post("/api/import/retur", requireFeature("import"), upload.single("file"), validateExcelUpload, async (req, res) => {
   if (!req.file) return res.status(400).json({ error: "File wajib diupload." });
   try {
     let forceImportHashes: string[] = [];
@@ -92,35 +92,47 @@ importsRouter.get("/api/imports", requireFeature("import"), async (req, res) => 
         periodEnd: b.periodEnd ? b.periodEnd.toISOString() : null,
       }))
     );
-  } catch (err: any) {
-    return res.status(500).json({ error: err.message });
+  } catch (err: unknown) {
+    return sendError(res, 500, err, "Gagal memuat riwayat import.");
   }
 });
 
 importsRouter.get("/api/imports/:id", requireFeature("import"), async (req, res) => {
+  const id = Number(req.params.id);
+  if (!Number.isInteger(id) || id <= 0) {
+    return res.status(400).json({ error: "ID batch tidak valid." });
+  }
   try {
     const batch = await prisma.importBatch.findUnique({
-      where: { id: Number(req.params.id) },
+      where: { id },
     });
     if (!batch) return res.status(404).json({ error: "Batch tidak ditemukan." });
     return res.json(batch);
-  } catch (err: any) {
-    return res.status(500).json({ error: err.message });
+  } catch (err: unknown) {
+    return sendError(res, 500, err, "Gagal memuat detail batch import.");
   }
 });
 
 importsRouter.delete("/api/imports/:id", requireFeature("import"), async (req, res) => {
+  const id = Number(req.params.id);
+  if (!Number.isInteger(id) || id <= 0) {
+    return res.status(400).json({ error: "ID batch tidak valid." });
+  }
   try {
-    await prisma.importBatch.delete({
-      where: { id: Number(req.params.id) },
+    const existing = await prisma.importBatch.findUnique({
+      where: { id },
+      select: { id: true, filename: true },
     });
+    if (!existing) return res.status(404).json({ error: "Batch tidak ditemukan." });
+    await prisma.importBatch.delete({ where: { id } });
+    await logActivity(req, "DELETE_IMPORT_BATCH", `id=${id} ${existing.filename}`);
     return res.json({ ok: true });
-  } catch (err: any) {
-    return res.status(500).json({ error: err.message });
+  } catch (err: unknown) {
+    return sendError(res, 500, err, "Gagal menghapus batch import.");
   }
 });
 
-importsRouter.post("/api/import/tartun", requireFeature("import"), upload.single("file"), async (req, res) => {
+importsRouter.post("/api/import/tartun", requireFeature("import"), upload.single("file"), validateExcelUpload, async (req, res) => {
   if (!req.file) return res.status(400).json({ error: "File wajib diupload." });
   const dateStr = req.body.date;
   if (!dateStr) return res.status(400).json({ error: "Tanggal wajib diisi." });
@@ -132,6 +144,7 @@ importsRouter.post("/api/import/tartun", requireFeature("import"), upload.single
   try {
     const { rows, errors } = parseTartunBuffer(req.file.buffer);
     const summary = await importDailyMetric("TARTUN", date, rows);
+    await logActivity(req, "IMPORT_TARTUN", `${req.file.originalname} (${date.toISOString().slice(0, 10)}) — ${rows.length} baris`);
     return res.json({
       filename: req.file.originalname,
       parsedRows: rows.length,
@@ -143,7 +156,7 @@ importsRouter.post("/api/import/tartun", requireFeature("import"), upload.single
   }
 });
 
-importsRouter.post("/api/import/server", requireFeature("import"), upload.single("file"), async (req, res) => {
+importsRouter.post("/api/import/server", requireFeature("import"), upload.single("file"), validateExcelUpload, async (req, res) => {
   const dateStr = req.body.date;
   if (!dateStr) return res.status(400).json({ error: "Tanggal wajib diisi." });
   const date = new Date(dateStr);
@@ -170,6 +183,7 @@ importsRouter.post("/api/import/server", requireFeature("import"), upload.single
     }
 
     const summary = await importDailyMetric("SERVER", date, rows);
+    await logActivity(req, "IMPORT_SERVER", `${filename} (${date.toISOString().slice(0, 10)}) — ${rows.length} baris`);
     return res.json({
       filename,
       parsedRows: rows.length,
@@ -202,8 +216,8 @@ importsRouter.get("/api/daily-imports/tartun", requireFeature("import"), async (
         updatedAt: r._max.updatedAt?.toISOString() ?? null,
       }))
     );
-  } catch (err: any) {
-    return res.status(500).json({ error: err.message });
+  } catch (err: unknown) {
+    return sendError(res, 500, err, "Gagal memuat riwayat import Tarik Tunai.");
   }
 });
 
@@ -211,12 +225,22 @@ importsRouter.delete("/api/daily-imports/tartun/:date", requireFeature("import")
   try {
     const date = new Date(String(req.params.date));
     if (Number.isNaN(date.getTime())) return res.status(400).json({ error: "Tanggal tidak valid." });
-    const { count } = await prisma.tartunDaily.deleteMany({
-      where: { tanggal: { gte: date, lt: new Date(date.getTime() + 86400000) } },
+    const nextDate = new Date(date.getTime() + 86400000);
+    const { count } = await prisma.$transaction(async (tx) => {
+      const deleted = await tx.tartunDaily.deleteMany({
+        where: { tanggal: { gte: date, lt: nextDate } },
+      });
+      await tx.$executeRawUnsafe(
+        `DELETE FROM "unmatched_daily_metrics" WHERE "kind" = 'TARTUN' AND "tanggal" >= $1 AND "tanggal" < $2`,
+        date,
+        nextDate
+      );
+      return deleted;
     });
+    await logActivity(req, "DELETE_DAILY_TARTUN", `${date.toISOString().slice(0, 10)} (${count} baris)`);
     return res.json({ ok: true, deletedCount: count });
-  } catch (err: any) {
-    return res.status(500).json({ error: err.message });
+  } catch (err: unknown) {
+    return sendError(res, 500, err, "Gagal menghapus data Tarik Tunai harian.");
   }
 });
 
@@ -238,8 +262,8 @@ importsRouter.get("/api/daily-imports/server", requireFeature("import"), async (
         updatedAt: r._max.updatedAt?.toISOString() ?? null,
       }))
     );
-  } catch (err: any) {
-    return res.status(500).json({ error: err.message });
+  } catch (err: unknown) {
+    return sendError(res, 500, err, "Gagal memuat riwayat import Server.");
   }
 });
 
@@ -247,11 +271,21 @@ importsRouter.delete("/api/daily-imports/server/:date", requireFeature("import")
   try {
     const date = new Date(String(req.params.date));
     if (Number.isNaN(date.getTime())) return res.status(400).json({ error: "Tanggal tidak valid." });
-    const { count } = await prisma.serverDaily.deleteMany({
-      where: { tanggal: { gte: date, lt: new Date(date.getTime() + 86400000) } },
+    const nextDate = new Date(date.getTime() + 86400000);
+    const { count } = await prisma.$transaction(async (tx) => {
+      const deleted = await tx.serverDaily.deleteMany({
+        where: { tanggal: { gte: date, lt: nextDate } },
+      });
+      await tx.$executeRawUnsafe(
+        `DELETE FROM "unmatched_daily_metrics" WHERE "kind" = 'SERVER' AND "tanggal" >= $1 AND "tanggal" < $2`,
+        date,
+        nextDate
+      );
+      return deleted;
     });
+    await logActivity(req, "DELETE_DAILY_SERVER", `${date.toISOString().slice(0, 10)} (${count} baris)`);
     return res.json({ ok: true, deletedCount: count });
-  } catch (err: any) {
-    return res.status(500).json({ error: err.message });
+  } catch (err: unknown) {
+    return sendError(res, 500, err, "Gagal menghapus data Server harian.");
   }
 });

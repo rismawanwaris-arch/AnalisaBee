@@ -861,10 +861,19 @@ export function SettingsPage() {
         setBackupError(data.error || "Gagal memulihkan backup.");
         return;
       }
+      const notes: string[] = [];
       if (data.skippedAliases || data.skippedPointsExclusions) {
-        setRestoreNotice(
-          `Restore berhasil. ${data.skippedAliases ?? 0} alias outlet dan ${data.skippedPointsExclusions ?? 0} pengecualian poin dilewati karena outlet/pegawai rujukannya tidak ada di backup ini.`,
+        notes.push(
+          `${data.skippedAliases ?? 0} alias outlet dan ${data.skippedPointsExclusions ?? 0} pengecualian poin dilewati karena outlet/pegawai rujukannya tidak ada di backup ini.`,
         );
+      }
+      if (data.deactivatedUsers) {
+        notes.push(
+          `${data.deactivatedUsers} akun admin dengan peran kustom yang tidak ada di backup telah dinonaktifkan otomatis untuk keamanan.`,
+        );
+      }
+      if (notes.length > 0) {
+        setRestoreNotice(`Restore berhasil. ${notes.join(" ")}`);
       }
       setRestoreTarget(null);
       if (dataFileInputRef.current) dataFileInputRef.current.value = "";
@@ -1880,7 +1889,7 @@ export function SettingsPage() {
                 ))}
               </div>
               <p className="text-[11px] text-muted leading-relaxed">
-                Menghapus peran tidak menghapus akun anggotanya — mereka otomatis kembali ke akses penuh (seperti admin tanpa peran).
+                Peran yang masih dipakai oleh akun aktif tidak bisa dihapus — pindahkan atau nonaktifkan akun anggotanya terlebih dahulu untuk mencegah perubahan hak akses secara tidak sengaja.
               </p>
             </div>
           </div>

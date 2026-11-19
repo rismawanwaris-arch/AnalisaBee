@@ -57,9 +57,13 @@ backupRouter.post("/api/backup/settings/restore", requireMaster, uploadBackup.si
   if (!req.file) return res.status(400).json({ error: "File backup wajib diunggah." });
   try {
     const payload = JSON.parse(req.file.buffer.toString("utf-8"));
-    await restoreSettingsBackup(payload);
-    await logActivity(req, "BACKUP_SETTINGS_RESTORE", req.file.originalname);
-    return res.json({ ok: true });
+    const result = await restoreSettingsBackup(payload);
+    await logActivity(
+      req,
+      "BACKUP_SETTINGS_RESTORE",
+      `${req.file.originalname}${result.deactivatedUsers ? ` (${result.deactivatedUsers} akun dinonaktifkan karena perannya tidak ada di backup)` : ""}`,
+    );
+    return res.json({ ok: true, ...result });
   } catch (err) {
     if (err instanceof BackupError) return res.status(err.status).json({ error: err.message });
     if (err instanceof SyntaxError) return res.status(400).json({ error: "File bukan JSON yang valid." });

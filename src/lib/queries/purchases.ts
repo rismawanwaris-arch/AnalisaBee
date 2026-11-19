@@ -754,6 +754,25 @@ export async function importPurchases(
   }
 }
 
+export interface PurchaseBatchHistoryItem {
+  id: number;
+  filename: string;
+  uploadedAt: string;
+  status: "PROCESSING" | "DONE" | "FAILED";
+  errorMessage: string | null;
+  rowCount: number;
+  insertedCount: number;
+  duplicateCount: number;
+  errorRowCount: number;
+  filePeriodStart: string | null;
+  filePeriodEnd: string | null;
+  periodStart: string | null;
+  periodEnd: string | null;
+  invoiceCount: number;
+  itemCount: number;
+  totalSpend: number;
+}
+
 export async function listPurchaseBatches(): Promise<PurchaseBatchHistoryItem[]> {
   await ensureDefaults();
   const [batches, invoiceAgg, itemAgg] = await Promise.all([

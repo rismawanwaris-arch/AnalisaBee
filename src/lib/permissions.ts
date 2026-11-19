@@ -1,6 +1,6 @@
 import { prisma } from "./prisma";
 import type { SessionContext } from "./session";
-import { type FeatureKey } from "./features";
+import { isFeatureKey, type FeatureKey } from "./features";
 
 export type PermissionSet = "all" | Set<FeatureKey>;
 
@@ -16,12 +16,17 @@ export async function resolveUserPermissions(session: SessionContext): Promise<P
     select: { roleId: true, customRole: { select: { permissions: true } } },
   });
   if (!user?.roleId || !user.customRole) return "all";
-  return new Set(user.customRole.permissions.filter((p): p is FeatureKey => true) as FeatureKey[]);
+  return new Set(user.customRole.permissions.filter(isFeatureKey));
 }
 
 export function hasFeature(perms: PermissionSet, key: FeatureKey): boolean {
   if (perms === "all") return true;
   if (perms.has(key)) return true;
-  if ((key === "points_cimahi_petshop" || key === "points_cimahi_sp") && perms.has("points_cimahi")) return true;
+  if (
+    (key === "points_cimahi_tg" || key === "points_cimahi_petshop" || key === "points_cimahi_sp") &&
+    perms.has("points_cimahi")
+  ) {
+    return true;
+  }
   return false;
 }

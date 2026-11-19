@@ -4,21 +4,33 @@
 import { Router } from "express";
 import { prisma } from "../../lib/prisma";
 import { getOutletList, getOutletDetail, getOutletSummary } from "../../lib/queries/outlets";
-import { requireAuth, requireFeature, requireMaster, cacheBriefly, parseDateParam, logActivity } from "../middleware";
+import { resolveUserPermissions, hasFeature } from "../../lib/permissions";
+import { requireAuth, requireFeature, requireMaster, cacheBriefly, parseDateParam, logActivity, sendError } from "../middleware";
 
 export const outletsRouter = Router();
 
-// Not feature-gated: this is a shared outlet-name reference used as a filter
-// dropdown by several pages (Dashboard, Transactions, Jam Operasional,
-// Settings), not exclusive to the Performa Outlet page.
+// Not feature-gated: shared outlet-name reference used as a filter dropdown
+// by several pages. Users without "outlets" permission only receive id/name/branch
+// (no revenue/profit sums) and cannot view hidden outlets.
 outletsRouter.get("/api/outlets", requireAuth, cacheBriefly(30), async (req, res) => {
   try {
-    const includeHidden = req.query.includeHidden === "true" || req.query.includeHidden === "1";
+    const includeHidden =
+      req.userRole === "master" &&
+      (req.query.includeHidden === "true" || req.query.includeHidden === "1");
     const branch = req.query.branch === "CIMAHI" || req.query.branch === "BANDUNG" ? req.query.branch : undefined;
-    const list = await getOutletList(includeHidden, branch);
-    return res.json(list);
-  } catch (err: any) {
-    return res.status(500).json({ error: err.message });
+    const perms = await resolveUserPermissions(req.session!);
+    if (hasFeature(perms, "outlets")) {
+      const list = await getOutletList(includeHidden, branch);
+      return res.json(list);
+    }
+    const basic = await prisma.outlet.findMany({
+      where: { isHidden: false, ...(branch ? { branch } : {}) },
+      select: { id: true, name: true, branch: true },
+      orderBy: { name: "asc" },
+    });
+    return res.json(basic);
+  } catch (err) {
+    return sendError(res, 500, err, "Gagal memuat daftar outlet.");
   }
 });
 
@@ -29,8 +41,8 @@ outletsRouter.get("/api/outlets/summary", requireFeature("outlets"), async (req,
     let to = parseDateParam(req.query.to);
     if (!from && !to && !isAll) {
       const now = new Date();
-      from = new Date(now.getFullYear(), now.getMonth(), 1);
-      to = new Date(now.getFullYear(), now.getMonth() + 1, 0);
+      from = new Date(Date.UTC(now.getFullYear(), now.getMonth(), 1));
+      to = new Date(Date.UTC(now.getFullYear(), now.getMonth() + 1, 0));
     }
     const itemId = req.query.itemId ? Number(req.query.itemId) : undefined;
     const employeeId = req.query.employeeId ? Number(req.query.employeeId) : undefined;
@@ -43,15 +55,15 @@ outletsRouter.get("/api/outlets/summary", requireFeature("outlets"), async (req,
       : undefined;
     const rows = await getOutletSummary({ from, to, itemId, employeeId, subtotalMin, subtotalMax, itemGroup, brand, itemKeyword });
     return res.json(rows);
-  } catch (err: any) {
-    return res.status(500).json({ error: err.message });
+  } catch (err) {
+    return sendError(res, 500, err, "Gagal memuat performa outlet.");
   }
 });
 
 outletsRouter.put("/api/outlets/:id/branch", requireMaster, async (req, res) => {
   try {
     const id = Number(req.params.id);
-    if (Number.isNaN(id)) return res.status(400).json({ error: "ID tidak valid" });
+    if (!Number.isInteger(id)) return res.status(400).json({ error: "ID tidak valid" });
     const { branch } = req.body;
     if (branch !== "BANDUNG" && branch !== "CIMAHI") {
       return res.status(400).json({ error: "branch harus BANDUNG atau CIMAHI" });
@@ -62,15 +74,15 @@ outletsRouter.put("/api/outlets/:id/branch", requireMaster, async (req, res) => 
       select: { id: true, name: true, branch: true },
     });
     return res.json(updated);
-  } catch (err: any) {
-    return res.status(500).json({ error: err.message });
+  } catch (err) {
+    return sendError(res, 500, err, "Gagal memperbarui cabang outlet.");
   }
 });
 
 outletsRouter.put("/api/outlets/:id/visibility", requireMaster, async (req, res) => {
   try {
     const id = Number(req.params.id);
-    if (Number.isNaN(id)) return res.status(400).json({ error: "ID tidak valid" });
+    if (!Number.isInteger(id)) return res.status(400).json({ error: "ID tidak valid" });
     const { isHidden } = req.body;
     const updated = await prisma.outlet.update({
       where: { id },
@@ -79,15 +91,15 @@ outletsRouter.put("/api/outlets/:id/visibility", requireMaster, async (req, res)
     });
     await logActivity(req, "OUTLET_VISIBILITY", `${updated.name} → ${isHidden ? "disembunyikan" : "ditampilkan"}`);
     return res.json(updated);
-  } catch (err: any) {
-    return res.status(500).json({ error: err.message });
+  } catch (err) {
+    return sendError(res, 500, err, "Gagal memperbarui visibilitas outlet.");
   }
 });
 
 outletsRouter.get("/api/outlets/:id", requireFeature("outlets"), async (req, res) => {
   try {
     const id = Number(req.params.id);
-    if (Number.isNaN(id)) return res.status(400).json({ error: "ID tidak valid" });
+    if (!Number.isInteger(id)) return res.status(400).json({ error: "ID tidak valid" });
     const q = req.query;
     const str = (v: unknown) => (typeof v === "string" && v.trim() ? v.trim() : undefined);
     const isAll = q.all === "1" || q.all === "true";
@@ -95,8 +107,8 @@ outletsRouter.get("/api/outlets/:id", requireFeature("outlets"), async (req, res
     let to = parseDateParam(q.to);
     if (!from && !to && !isAll) {
       const now = new Date();
-      from = new Date(now.getFullYear(), now.getMonth(), 1);
-      to = new Date(now.getFullYear(), now.getMonth() + 1, 0);
+      from = new Date(Date.UTC(now.getFullYear(), now.getMonth(), 1));
+      to = new Date(Date.UTC(now.getFullYear(), now.getMonth() + 1, 0));
     }
     const detail = await getOutletDetail(id, {
       from,
@@ -109,7 +121,7 @@ outletsRouter.get("/api/outlets/:id", requireFeature("outlets"), async (req, res
     });
     if (!detail) return res.status(404).json({ error: "Outlet tidak ditemukan" });
     return res.json(detail);
-  } catch (err: any) {
-    return res.status(500).json({ error: err.message });
+  } catch (err) {
+    return sendError(res, 500, err, "Gagal memuat detail outlet.");
   }
 });
