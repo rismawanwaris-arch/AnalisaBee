@@ -8,6 +8,13 @@ import { ThemeProvider } from "./context/ThemeContext";
 import { AppLayout } from "./components/AppLayout";
 import { LoginPage } from "./pages/LoginPage";
 
+const ForgotPasswordPage = lazy(() =>
+  import("./pages/ForgotPasswordPage").then((m) => ({ default: m.ForgotPasswordPage }))
+);
+const AccountPage = lazy(() =>
+  import("./pages/AccountPage").then((m) => ({ default: m.AccountPage }))
+);
+
 const DashboardPage = lazy(() => import("./pages/DashboardPage").then((m) => ({ default: m.DashboardPage })));
 const TargetLayout = lazy(() => import("./pages/target/TargetLayout").then((m) => ({ default: m.TargetLayout })));
 const TargetReportPage = lazy(() => import("./pages/target/TargetReportPage").then((m) => ({ default: m.TargetReportPage })));
@@ -66,8 +73,10 @@ export function App() {
             <BrowserRouter>
           <Suspense fallback={<PageLoader />}>
             <Routes>
-              {/* Public Login Route */}
+              {/* Public Login & Account Recovery Routes */}
               <Route path="/login" element={<LoginPage />} />
+              <Route path="/lupa-password" element={<ForgotPasswordPage key="request" initialMode="request" />} />
+              <Route path="/reset-password" element={<ForgotPasswordPage key="redeem" initialMode="redeem" />} />
 
               {/* Public, no-login employee points wallboard — see AGENTS.md-adjacent
                   discussion: Employee and User are unrelated models, so this page
@@ -144,6 +153,9 @@ export function App() {
 
                 {/* Activity Log */}
                 <Route path="/log" element={<ActivityLogPage />} />
+
+                {/* Self-service Account & Password Settings (any logged-in user) */}
+                <Route path="/akun" element={<AccountPage />} />
 
                 {/* Centralized Settings (master only — guard in AppLayout) */}
                 <Route path="/settings" element={<SettingsPage />} />

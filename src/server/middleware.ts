@@ -67,6 +67,24 @@ export const passwordChangeLimiter = rateLimit({
   message: { error: "Terlalu banyak percobaan ubah kata sandi. Coba lagi dalam 15 menit." },
 });
 
+// Rate limiter for forgot-password request submission — max 5 per 15 minutes per IP
+export const forgotPasswordLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  max: 5,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { error: "Terlalu banyak permintaan reset kata sandi. Coba lagi dalam 15 menit." },
+});
+
+// Rate limiter for redeeming reset/recovery codes — max 10 per 15 minutes per IP
+export const resetPasswordLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  max: 10,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { error: "Terlalu banyak percobaan kode reset. Coba lagi dalam 15 menit." },
+});
+
 export interface MutationOriginCheckInput {
   method: string;
   path: string;

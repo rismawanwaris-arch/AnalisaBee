@@ -1,5 +1,5 @@
 import React, { useState } from "react";
-import { useNavigate, useSearchParams, Navigate } from "react-router-dom";
+import { Link, useNavigate, useSearchParams, Navigate } from "react-router-dom";
 import { useAuth } from "../context/AuthContext";
 import { ThemeToggle } from "../components/ThemeToggle";
 
@@ -94,7 +94,6 @@ export function LoginPage() {
                 value={username}
                 onChange={(e) => setUsername(e.target.value)}
                 placeholder="master"
-                autoFocus
                 required
                 autoComplete="username"
                 autoCapitalize="none"
@@ -104,9 +103,17 @@ export function LoginPage() {
             </div>
 
             <div>
-              <label htmlFor="password" className="block text-xs font-semibold text-foreground mb-1.5">
-                Kata Sandi
-              </label>
+              <div className="flex items-center justify-between mb-1.5">
+                <label htmlFor="password" className="block text-xs font-semibold text-foreground">
+                  Kata Sandi
+                </label>
+                <Link
+                  to="/lupa-password"
+                  className="text-[11px] font-medium text-accent hover:underline"
+                >
+                  Lupa kata sandi?
+                </Link>
+              </div>
               <input
                 id="password"
                 name="password"

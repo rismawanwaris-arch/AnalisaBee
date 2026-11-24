@@ -16,8 +16,26 @@ import {
 } from "../../lib/session";
 import { verifyPasswordHash, fakeVerifyDelay } from "../../lib/password";
 import { changeOwnPassword, UserError } from "../../lib/queries/users";
+import {
+  submitPasswordResetRequest,
+  redeemPasswordReset,
+  getMasterRecoveryCodeStatus,
+  regenerateMasterRecoveryCodes,
+  PasswordResetError,
+} from "../../lib/queries/passwordReset";
 import { resolveUserPermissions } from "../../lib/permissions";
-import { loginLimiter, passwordChangeLimiter, requireAuth, sendError, clientIp, logActivity, SESSION_COOKIE_OPTIONS } from "../middleware";
+import {
+  loginLimiter,
+  passwordChangeLimiter,
+  forgotPasswordLimiter,
+  resetPasswordLimiter,
+  requireAuth,
+  requireMaster,
+  sendError,
+  clientIp,
+  logActivity,
+  SESSION_COOKIE_OPTIONS,
+} from "../middleware";
 
 export const authRouter = Router();
 
@@ -149,5 +167,106 @@ authRouter.post("/api/auth/change-password", passwordChangeLimiter, requireAuth,
   } catch (err) {
     if (err instanceof UserError) return res.status(err.status).json({ error: err.message });
     return sendError(res, 500, err, "Gagal mengganti kata sandi.");
+  }
+});
+
+authRouter.post("/api/auth/forgot-password", forgotPasswordLimiter, async (req, res) => {
+  const ip = clientIp(req);
+  const rawUsername = String(req.body?.username ?? "").trim().toLowerCase();
+  try {
+    const result = await submitPasswordResetRequest({
+      username: rawUsername,
+      note: req.body?.note,
+      ip,
+    });
+    if (!result.recorded) {
+      await fakeVerifyDelay(rawUsername || "forgot");
+    } else {
+      prisma.activityLog
+        .create({
+          data: {
+            role: result.username ?? rawUsername,
+            action: "MINTA_RESET_PASSWORD",
+            ip,
+          },
+        })
+        .catch(() => {});
+    }
+    return res.json({
+      ok: true,
+      message:
+        "Permintaan telah dicatat. Jika username terdaftar dan aktif, hubungi pemilik akun master untuk mendapatkan kode reset.",
+    });
+  } catch (err) {
+    return sendError(res, 500, err, "Gagal memproses permintaan reset kata sandi.");
+  }
+});
+
+authRouter.post("/api/auth/reset-password", resetPasswordLimiter, async (req, res) => {
+  const ip = clientIp(req);
+  const rawUsername = String(req.body?.username ?? "").trim().toLowerCase();
+  try {
+    const result = await redeemPasswordReset({
+      username: rawUsername,
+      code: req.body?.code,
+      newPassword: req.body?.newPassword,
+    });
+    res.clearCookie(COOKIE_NAME, { path: "/" });
+    prisma.activityLog
+      .create({
+        data: {
+          role: `${result.role}:${result.username}`,
+          action:
+            result.method === "recovery_code"
+              ? "RESET_PASSWORD_RECOVERY_MASTER"
+              : "RESET_PASSWORD_DENGAN_KODE",
+          ip,
+        },
+      })
+      .catch(() => {});
+    return res.json({ ok: true });
+  } catch (err) {
+    if (err instanceof PasswordResetError) {
+      if (rawUsername) {
+        prisma.activityLog
+          .create({ data: { role: rawUsername, action: "RESET_PASSWORD_GAGAL", ip } })
+          .catch(() => {});
+      }
+      return res.status(err.status).json({ error: err.message });
+    }
+    return sendError(res, 500, err, "Gagal mereset kata sandi.");
+  }
+});
+
+authRouter.get("/api/auth/recovery-codes/status", requireMaster, async (req, res) => {
+  if (req.session!.userId === null) {
+    return res.json({ supported: false, total: 0, remaining: 0, lastGeneratedAt: null });
+  }
+  try {
+    const status = await getMasterRecoveryCodeStatus(req.session!.userId);
+    return res.json({ supported: true, ...status });
+  } catch (err) {
+    return sendError(res, 500, err, "Gagal memuat status kode pemulihan.");
+  }
+});
+
+authRouter.post("/api/auth/recovery-codes/regenerate", passwordChangeLimiter, requireMaster, async (req, res) => {
+  if (req.session!.userId === null) {
+    return res.status(400).json({
+      error: "Sesi ini memakai kata sandi environment, bukan akun database.",
+    });
+  }
+  try {
+    const result = await regenerateMasterRecoveryCodes(
+      req.session!.userId,
+      req.body?.currentPassword,
+    );
+    await logActivity(req, "BUAT_KODE_PEMULIHAN_MASTER");
+    return res.json({ ok: true, ...result });
+  } catch (err) {
+    if (err instanceof PasswordResetError) {
+      return res.status(err.status).json({ error: err.message });
+    }
+    return sendError(res, 500, err, "Gagal membuat kode pemulihan master.");
   }
 });

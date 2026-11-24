@@ -23,6 +23,7 @@ import path from "node:path";
 import { ensureDefaults } from "../lib/ensureDefaults";
 import { purgeExpiredSessions } from "../lib/session";
 import { ensureAuthBootstrap } from "../lib/queries/users";
+import { purgeExpiredPasswordResetRequests } from "../lib/queries/passwordReset";
 
 import { requireSameOrigin } from "./middleware";
 import { authRouter } from "./routes/auth";
@@ -114,10 +115,12 @@ app.use(requireSameOrigin);
 ensureDefaults().catch((err) => console.error("ensureDefaults error:", err));
 ensureAuthBootstrap().catch((err) => console.error("ensureAuthBootstrap error:", err));
 
-// Keep the sessions table from growing without bound.
+// Keep the sessions & password reset tables from growing without bound.
 purgeExpiredSessions().catch(() => {});
+purgeExpiredPasswordResetRequests().catch(() => {});
 setInterval(() => {
   purgeExpiredSessions().catch(() => {});
+  purgeExpiredPasswordResetRequests().catch(() => {});
 }, 6 * 60 * 60 * 1000).unref();
 
 // ==========================================

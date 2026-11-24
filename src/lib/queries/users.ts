@@ -208,7 +208,11 @@ export async function changeOwnPassword(
   if (!user) throw new UserError("Akun tidak ditemukan.", 404);
 
   const ok = await verifyPasswordHash(String(currentPassword ?? ""), user.passwordHash);
-  if (!ok) throw new UserError("Kata sandi saat ini salah.", 401);
+  if (!ok) throw new UserError("Kata sandi saat ini salah.", 400);
+
+  if (String(newPassword ?? "") === String(currentPassword ?? "")) {
+    throw new UserError("Kata sandi baru harus berbeda dari kata sandi saat ini.", 400);
+  }
 
   const value = assertPassword(newPassword);
   await prisma.user.update({

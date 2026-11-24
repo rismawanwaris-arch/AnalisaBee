@@ -13,6 +13,13 @@ import {
   listActiveSessions,
   UserError,
 } from "../../lib/queries/users";
+import {
+  listPasswordResetRequests,
+  approvePasswordResetRequest,
+  rejectPasswordResetRequest,
+  issueDirectResetCodeForUser,
+  PasswordResetError,
+} from "../../lib/queries/passwordReset";
 import { revokeSessionById } from "../../lib/session";
 import { requireMaster, sendError, logActivity } from "../middleware";
 
@@ -135,5 +142,52 @@ accountsRouter.delete("/api/sessions/:id", requireMaster, async (req, res) => {
     return res.json({ ok: true });
   } catch (err) {
     return sendError(res, 500, err, "Gagal mengakhiri sesi.");
+  }
+});
+
+accountsRouter.get("/api/users/password-reset-requests", requireMaster, async (_req, res) => {
+  try {
+    return res.json(await listPasswordResetRequests());
+  } catch (err) {
+    return sendError(res, 500, err, "Gagal memuat permintaan reset kata sandi.");
+  }
+});
+
+accountsRouter.post("/api/users/password-reset-requests/:id/approve", requireMaster, async (req, res) => {
+  const id = Number(req.params.id);
+  if (!Number.isInteger(id) || id <= 0) return res.status(400).json({ error: "ID tidak valid." });
+  try {
+    const issued = await approvePasswordResetRequest(id, req.session!.username);
+    await logActivity(req, "SETUJUI_RESET_PASSWORD", `${issued.username} (req=${issued.requestId})`);
+    return res.json({ ok: true, ...issued });
+  } catch (err) {
+    if (err instanceof PasswordResetError) return res.status(err.status).json({ error: err.message });
+    return sendError(res, 500, err, "Gagal menerbitkan kode reset.");
+  }
+});
+
+accountsRouter.post("/api/users/password-reset-requests/:id/reject", requireMaster, async (req, res) => {
+  const id = Number(req.params.id);
+  if (!Number.isInteger(id) || id <= 0) return res.status(400).json({ error: "ID tidak valid." });
+  try {
+    const rejected = await rejectPasswordResetRequest(id, req.session!.username);
+    await logActivity(req, "TOLAK_RESET_PASSWORD", `${rejected.username} (req=${rejected.id})`);
+    return res.json({ ok: true });
+  } catch (err) {
+    if (err instanceof PasswordResetError) return res.status(err.status).json({ error: err.message });
+    return sendError(res, 500, err, "Gagal menolak permintaan reset.");
+  }
+});
+
+accountsRouter.post("/api/users/:id/reset-code", requireMaster, async (req, res) => {
+  const id = Number(req.params.id);
+  if (!Number.isInteger(id) || id <= 0) return res.status(400).json({ error: "ID tidak valid." });
+  try {
+    const issued = await issueDirectResetCodeForUser(id, req.session!.username);
+    await logActivity(req, "BUAT_KODE_RESET", `${issued.username} (req=${issued.requestId})`);
+    return res.json({ ok: true, ...issued });
+  } catch (err) {
+    if (err instanceof PasswordResetError) return res.status(err.status).json({ error: err.message });
+    return sendError(res, 500, err, "Gagal membuat kode reset.");
   }
 });

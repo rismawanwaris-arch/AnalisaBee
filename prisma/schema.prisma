@@ -40,6 +40,14 @@ enum ReportCategory {
   SP_VOUCHER
 }
 
+enum PasswordResetStatus {
+  PENDING
+  APPROVED
+  REJECTED
+  USED
+  EXPIRED
+}
+
 // One row per file uploaded through /import. Keeps history + lets us
 // trace every sale back to the file it came from.
 model ImportBatch {
@@ -380,18 +388,20 @@ model ActivityLog {
 // narrows them to that role's checked feature list — this keeps every admin
 // account created before custom roles existed working exactly as before.
 model User {
-  id           Int         @id @default(autoincrement())
-  username     String      @unique
-  displayName  String?
-  passwordHash String
-  role         String      @default("admin")
-  roleId       Int?
-  customRole   CustomRole? @relation(fields: [roleId], references: [id], onDelete: SetNull)
-  isActive     Boolean     @default(true)
-  createdAt    DateTime    @default(now())
-  updatedAt    DateTime    @updatedAt
-  lastLoginAt  DateTime?
-  sessions     Session[]
+  id                    Int                    @id @default(autoincrement())
+  username              String                 @unique
+  displayName           String?
+  passwordHash          String
+  role                  String                 @default("admin")
+  roleId                Int?
+  customRole            CustomRole?            @relation(fields: [roleId], references: [id], onDelete: SetNull)
+  isActive              Boolean                @default(true)
+  createdAt             DateTime               @default(now())
+  updatedAt             DateTime               @updatedAt
+  lastLoginAt           DateTime?
+  sessions              Session[]
+  passwordResetRequests PasswordResetRequest[]
+  recoveryCodes         MasterRecoveryCode[]
 
   @@map("users")
 }
@@ -571,4 +581,40 @@ model AttentionPointEntry {
   @@index([employeeId, tanggal])
   @@index([programId])
   @@map("attention_point_entries")
+}
+
+// One-time password reset request opened from /lupa-password (or directly
+// issued by master from Settings). Codes are only ever stored as HMAC hashes.
+model PasswordResetRequest {
+  id             Int                 @id @default(autoincrement())
+  userId         Int
+  user           User                @relation(fields: [userId], references: [id], onDelete: Cascade)
+  note           String?
+  requestIp      String?
+  status         PasswordResetStatus @default(PENDING)
+  tokenHash      String?             @unique
+  expiresAt      DateTime?
+  failedAttempts Int                 @default(0)
+  approvedBy     String?
+  approvedAt     DateTime?
+  usedAt         DateTime?
+  createdAt      DateTime            @default(now())
+  updatedAt      DateTime            @updatedAt
+
+  @@index([userId, status])
+  @@index([status, createdAt])
+  @@map("password_reset_requests")
+}
+
+// Emergency one-time recovery codes for master accounts, hashed with HMAC.
+model MasterRecoveryCode {
+  id        Int       @id @default(autoincrement())
+  userId    Int
+  user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  codeHash  String    @unique
+  usedAt    DateTime?
+  createdAt DateTime  @default(now())
+
+  @@index([userId, usedAt])
+  @@map("master_recovery_codes")
 }

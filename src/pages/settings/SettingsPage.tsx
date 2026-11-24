@@ -133,6 +133,42 @@ interface SessionRow {
   isCurrent: boolean;
 }
 
+interface PasswordResetRequestRow {
+  id: number;
+  userId: number;
+  note: string | null;
+  requestIp: string | null;
+  status: "PENDING" | "APPROVED" | "REJECTED" | "USED" | "EXPIRED";
+  expiresAt: string | null;
+  failedAttempts: number;
+  approvedBy: string | null;
+  approvedAt: string | null;
+  usedAt: string | null;
+  createdAt: string;
+  updatedAt: string;
+  user: {
+    id: number;
+    username: string;
+    displayName: string | null;
+    role: string;
+    isActive: boolean;
+  };
+}
+
+interface IssuedResetCodeState {
+  requestId: number;
+  username: string;
+  code: string;
+  expiresAt: string;
+}
+
+interface RecoveryCodeStatus {
+  supported: boolean;
+  total: number;
+  remaining: number;
+  lastGeneratedAt: string | null;
+}
+
 export function SettingsPage() {
   const [openSections, setOpenSections] = useState<Set<string>>(new Set());
 
@@ -491,6 +527,16 @@ export function SettingsPage() {
   const [userBusy, setUserBusy] = useState(false);
   const [resetForId, setResetForId] = useState<number | null>(null);
   const [resetPassword, setResetPassword] = useState("");
+  const [resetRequests, setResetRequests] = useState<PasswordResetRequestRow[]>([]);
+  const [resetReqBusyId, setResetReqBusyId] = useState<number | null>(null);
+  const [issuedResetCode, setIssuedResetCode] = useState<IssuedResetCodeState | null>(null);
+  const [copiedResetField, setCopiedResetField] = useState<"code" | "link" | null>(null);
+  const [recoveryStatus, setRecoveryStatus] = useState<RecoveryCodeStatus | null>(null);
+  const [recoveryCurrentPw, setRecoveryCurrentPw] = useState("");
+  const [recoveryBusy, setRecoveryBusy] = useState(false);
+  const [recoveryError, setRecoveryError] = useState<string | null>(null);
+  const [generatedRecoveryCodes, setGeneratedRecoveryCodes] = useState<string[] | null>(null);
+  const [copiedAllRecovery, setCopiedAllRecovery] = useState(false);
 
   // Custom roles (Manajemen Peran)
   const [roles, setRoles] = useState<CustomRoleRow[]>([]);
@@ -529,6 +575,24 @@ export function SettingsPage() {
     }
   }, []);
 
+  const loadResetRequests = useCallback(async () => {
+    try {
+      const res = await fetch("/api/users/password-reset-requests");
+      if (res.ok) setResetRequests(await res.json());
+    } catch {
+      // ignore
+    }
+  }, []);
+
+  const loadRecoveryStatus = useCallback(async () => {
+    try {
+      const res = await fetch("/api/auth/recovery-codes/status");
+      if (res.ok) setRecoveryStatus(await res.json());
+    } catch {
+      // ignore
+    }
+  }, []);
+
   const loadRoles = useCallback(async () => {
     try {
       const res = await fetch("/api/roles");
@@ -554,6 +618,8 @@ export function SettingsPage() {
     loadAllItemsVis();
     loadUsers();
     loadSessions();
+    loadResetRequests();
+    loadRecoveryStatus();
     loadRoles();
   }, [
     loadTargets,
@@ -571,6 +637,8 @@ export function SettingsPage() {
     loadAllItemsVis,
     loadUsers,
     loadSessions,
+    loadResetRequests,
+    loadRecoveryStatus,
     loadRoles,
   ]);
 
@@ -721,6 +789,150 @@ export function SettingsPage() {
       await loadSessions();
     }
   }
+
+  async function approveResetRequest(reqRow: PasswordResetRequestRow) {
+    setUserError(null);
+    setResetReqBusyId(reqRow.id);
+    try {
+      const res = await fetch(`/api/users/password-reset-requests/${reqRow.id}/approve`, {
+        method: "POST",
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        setUserError(data.error || "Gagal membuat kode reset.");
+        return;
+      }
+      setIssuedResetCode({
+        requestId: data.requestId,
+        username: data.username,
+        code: data.code,
+        expiresAt: data.expiresAt,
+      });
+      await loadResetRequests();
+    } catch {
+      setUserError("Terjadi kesalahan jaringan.");
+    } finally {
+      setResetReqBusyId(null);
+    }
+  }
+
+  async function rejectResetRequest(reqRow: PasswordResetRequestRow) {
+    setUserError(null);
+    setResetReqBusyId(reqRow.id);
+    try {
+      const res = await fetch(`/api/users/password-reset-requests/${reqRow.id}/reject`, {
+        method: "POST",
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        setUserError(data.error || "Gagal menolak permintaan reset.");
+        return;
+      }
+      if (issuedResetCode?.requestId === reqRow.id) {
+        setIssuedResetCode(null);
+      }
+      await loadResetRequests();
+    } catch {
+      setUserError("Terjadi kesalahan jaringan.");
+    } finally {
+      setResetReqBusyId(null);
+    }
+  }
+
+  async function issueDirectResetCode(user: AccountRow) {
+    setUserError(null);
+    setResetReqBusyId(-user.id);
+    try {
+      const res = await fetch(`/api/users/${user.id}/reset-code`, {
+        method: "POST",
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        setUserError(data.error || "Gagal menerbitkan kode reset.");
+        return;
+      }
+      setIssuedResetCode({
+        requestId: data.requestId,
+        username: data.username,
+        code: data.code,
+        expiresAt: data.expiresAt,
+      });
+      await loadResetRequests();
+    } catch {
+      setUserError("Terjadi kesalahan jaringan.");
+    } finally {
+      setResetReqBusyId(null);
+    }
+  }
+
+  async function handleRegenerateRecoveryCodes(e: React.FormEvent) {
+    e.preventDefault();
+    setRecoveryError(null);
+    setRecoveryBusy(true);
+    try {
+      const res = await fetch("/api/auth/recovery-codes/regenerate", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ currentPassword: recoveryCurrentPw }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        setRecoveryError(data.error || "Gagal membuat kode pemulihan.");
+        return;
+      }
+      setRecoveryCurrentPw("");
+      setGeneratedRecoveryCodes(data.codes ?? []);
+      setCopiedAllRecovery(false);
+      await loadRecoveryStatus();
+    } catch {
+      setRecoveryError("Terjadi kesalahan jaringan.");
+    } finally {
+      setRecoveryBusy(false);
+    }
+  }
+
+  async function copyResetText(text: string, field: "code" | "link") {
+    try {
+      await navigator.clipboard.writeText(text);
+      setCopiedResetField(field);
+      setTimeout(() => setCopiedResetField((prev) => (prev === field ? null : prev)), 2000);
+    } catch {
+      // clipboard unsupported in non-HTTPS contexts; user can still highlight manually
+    }
+  }
+
+  async function copyAllRecoveryCodes(codes: string[]) {
+    try {
+      await navigator.clipboard.writeText(codes.join("\n"));
+      setCopiedAllRecovery(true);
+      setTimeout(() => setCopiedAllRecovery(false), 2000);
+    } catch {
+      // ignore
+    }
+  }
+
+  function downloadRecoveryCodesTxt(codes: string[]) {
+    const content = [
+      "AnalisaBEe - Kode Pemulihan Darurat Akun Master",
+      `Dibuat: ${new Date().toLocaleString("id-ID")}`,
+      "Setiap kode hanya dapat digunakan SATU KALI di halaman /reset-password.",
+      "Simpan file ini di tempat yang aman.",
+      "",
+      ...codes.map((c, idx) => `${idx + 1}. ${c}`),
+      "",
+    ].join("\n");
+    const blob = new Blob([content], { type: "text/plain;charset=utf-8" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `analisabee-recovery-codes-${new Date().toISOString().slice(0, 10)}.txt`;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+  }
+
+  const pendingResetCount = resetRequests.filter((r) => r.status === "PENDING").length;
 
   // Custom Role Handlers
   function toggleNewRolePerm(key: FeatureKey) {
@@ -1439,6 +1651,11 @@ export function SettingsPage() {
             {sessions.length > 0 && (
               <span className="text-[11px] font-mono text-emerald-600 dark:text-emerald-400 bg-emerald-500/10 border border-emerald-500/20 rounded px-2 py-0.5">{sessions.length} sesi</span>
             )}
+            {pendingResetCount > 0 && (
+              <span className="text-[11px] font-mono text-amber-600 dark:text-amber-400 bg-amber-500/10 border border-amber-500/25 rounded px-2 py-0.5">
+                {pendingResetCount} permintaan reset
+              </span>
+            )}
           </div>
           <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"
             className={`shrink-0 text-muted transition-transform duration-200 ${openSections.has("akun-sesi") ? "rotate-180" : ""}`}>
@@ -1612,6 +1829,15 @@ export function SettingsPage() {
                             </button>
                             <button
                               type="button"
+                              onClick={() => issueDirectResetCode(u)}
+                              disabled={!u.isActive || resetReqBusyId === -u.id}
+                              title="Buat kode reset sekali pakai agar pengguna mengatur kata sandinya sendiri"
+                              className="rounded-md border border-amber-500/30 bg-amber-500/10 px-2 py-1 text-[11px] font-semibold text-amber-700 dark:text-amber-300 hover:bg-amber-500/20 transition-colors disabled:opacity-40"
+                            >
+                              {resetReqBusyId === -u.id ? "Membuat..." : "Kode Reset"}
+                            </button>
+                            <button
+                              type="button"
                               onClick={() => toggleUserActive(u)}
                               className="rounded-md border border-border/70 bg-surface px-2 py-1 text-[11px] font-semibold text-muted hover:text-foreground hover:bg-surface-hover transition-colors"
                             >
@@ -1728,6 +1954,277 @@ export function SettingsPage() {
                   </tbody>
                 </table>
               </div>
+            </div>
+
+            {/* Permintaan Reset Kata Sandi & Kode Sekali Pakai */}
+            <div className="space-y-3 pt-2 border-t border-border/50">
+              <div className="flex items-center justify-between gap-3 flex-wrap">
+                <div className="flex items-center gap-2">
+                  <h3 className="text-xs font-bold text-foreground uppercase tracking-wider">Permintaan Reset Kata Sandi</h3>
+                  {pendingResetCount > 0 && (
+                    <span className="text-[10px] font-bold px-2 py-0.5 rounded-full border text-amber-600 dark:text-amber-400 bg-amber-500/10 border-amber-500/30">
+                      {pendingResetCount} menunggu
+                    </span>
+                  )}
+                </div>
+                <button
+                  type="button"
+                  onClick={loadResetRequests}
+                  className="rounded-md border border-border/70 bg-surface px-2 py-1 text-[11px] font-semibold text-muted hover:text-foreground hover:bg-surface-hover transition-colors"
+                >
+                  Muat Ulang
+                </button>
+              </div>
+
+              {issuedResetCode && (
+                <div className="rounded-xl border border-emerald-500/30 bg-emerald-500/10 p-4 space-y-2.5">
+                  <div className="flex items-start justify-between gap-3">
+                    <div>
+                      <div className="text-xs font-bold text-emerald-700 dark:text-emerald-300">
+                        Kode Reset Sekali Pakai untuk @{issuedResetCode.username}
+                      </div>
+                      <p className="text-[11px] text-muted mt-0.5">
+                        Berlaku hingga {new Date(issuedResetCode.expiresAt).toLocaleString("id-ID")} (30 menit). Kode ini hanya ditampilkan sekali — kirimkan ke pemilik akun.
+                      </p>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => setIssuedResetCode(null)}
+                      className="text-[11px] font-semibold text-muted hover:text-foreground"
+                    >
+                      Tutup
+                    </button>
+                  </div>
+                  <div className="flex items-center gap-2 flex-wrap">
+                    <code className="rounded-lg border border-emerald-500/30 bg-surface px-3 py-1.5 font-mono text-sm font-bold tracking-widest text-foreground select-all">
+                      {issuedResetCode.code}
+                    </code>
+                    <button
+                      type="button"
+                      onClick={() => copyResetText(issuedResetCode.code, "code")}
+                      className="rounded-lg border border-border/70 bg-surface px-2.5 py-1.5 text-[11px] font-semibold text-foreground hover:bg-surface-hover transition-colors"
+                    >
+                      {copiedResetField === "code" ? "Kode Disalin ✓" : "Salin Kode"}
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() =>
+                        copyResetText(
+                          `${window.location.origin}/reset-password?u=${encodeURIComponent(issuedResetCode.username)}&code=${encodeURIComponent(issuedResetCode.code)}`,
+                          "link",
+                        )
+                      }
+                      className="rounded-lg border border-border/70 bg-surface px-2.5 py-1.5 text-[11px] font-semibold text-foreground hover:bg-surface-hover transition-colors"
+                    >
+                      {copiedResetField === "link" ? "Link Disalin ✓" : "Salin Link Reset"}
+                    </button>
+                  </div>
+                </div>
+              )}
+
+              <div className="overflow-x-auto rounded-lg border border-border/60">
+                <table className="w-full text-xs">
+                  <thead>
+                    <tr className="border-b border-border/60 bg-surface-subtle/60">
+                      <th className="px-4 py-2.5 font-semibold text-[11px] uppercase text-left text-muted">Akun</th>
+                      <th className="px-4 py-2.5 font-semibold text-[11px] uppercase text-left text-muted">Catatan / Waktu</th>
+                      <th className="px-4 py-2.5 font-semibold text-[11px] uppercase text-center text-muted">Status</th>
+                      <th className="px-4 py-2.5 font-semibold text-[11px] uppercase text-center text-muted w-48">Aksi</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-border/40">
+                    {resetRequests.length === 0 && (
+                      <tr>
+                        <td colSpan={4} className="px-4 py-5 text-center text-muted">
+                          Belum ada permintaan reset kata sandi.
+                        </td>
+                      </tr>
+                    )}
+                    {resetRequests.map((reqRow) => (
+                      <tr key={reqRow.id} className="hover:bg-surface-hover/30 transition-colors">
+                        <td className="px-4 py-2.5">
+                          <div className="font-semibold text-foreground">{reqRow.user.username}</div>
+                          {reqRow.user.displayName && (
+                            <div className="text-[11px] text-muted">{reqRow.user.displayName}</div>
+                          )}
+                        </td>
+                        <td className="px-4 py-2.5">
+                          <div className="text-foreground">{reqRow.note || "—"}</div>
+                          <div className="text-[10px] text-faint mt-0.5">
+                            Diajukan: {new Date(reqRow.createdAt).toLocaleString("id-ID")}
+                            {reqRow.requestIp ? ` · ${reqRow.requestIp}` : ""}
+                            {reqRow.status === "APPROVED" && reqRow.expiresAt
+                              ? ` · Berlaku s/d ${new Date(reqRow.expiresAt).toLocaleTimeString("id-ID")}`
+                              : ""}
+                          </div>
+                        </td>
+                        <td className="px-4 py-2 text-center">
+                          <span className={`text-[10px] font-bold tracking-wider px-2 py-0.5 rounded-full border ${
+                            reqRow.status === "PENDING"
+                              ? "text-amber-600 dark:text-amber-400 bg-amber-500/10 border-amber-500/30"
+                              : reqRow.status === "APPROVED"
+                                ? "text-sky-600 dark:text-sky-400 bg-sky-500/10 border-sky-500/30"
+                                : reqRow.status === "USED"
+                                  ? "text-emerald-600 dark:text-emerald-400 bg-emerald-500/10 border-emerald-500/30"
+                                  : "text-muted bg-surface-subtle border-border/60"
+                          }`}>
+                            {reqRow.status === "PENDING"
+                              ? "MENUNGGU"
+                              : reqRow.status === "APPROVED"
+                                ? "KODE AKTIF"
+                                : reqRow.status === "USED"
+                                  ? "TERPAKAI"
+                                  : reqRow.status === "REJECTED"
+                                    ? "DITOLAK"
+                                    : "KEDALUWARSA"}
+                          </span>
+                        </td>
+                        <td className="px-4 py-2 text-center">
+                          {reqRow.status === "PENDING" ? (
+                            <div className="flex items-center justify-center gap-1.5 flex-wrap">
+                              <button
+                                type="button"
+                                onClick={() => approveResetRequest(reqRow)}
+                                disabled={resetReqBusyId === reqRow.id}
+                                className="rounded-md bg-accent text-accent-foreground px-2.5 py-1 text-[11px] font-semibold hover:bg-accent-hover transition-colors disabled:opacity-50"
+                              >
+                                {resetReqBusyId === reqRow.id ? "..." : "Buat Kode Reset"}
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => rejectResetRequest(reqRow)}
+                                disabled={resetReqBusyId === reqRow.id}
+                                className="rounded-md border border-rose-500/30 bg-rose-500/10 px-2.5 py-1 text-[11px] font-semibold text-rose-600 dark:text-rose-400 hover:bg-rose-500/20 transition-colors disabled:opacity-50"
+                              >
+                                Tolak
+                              </button>
+                            </div>
+                          ) : reqRow.status === "APPROVED" ? (
+                            <button
+                              type="button"
+                              onClick={() => rejectResetRequest(reqRow)}
+                              disabled={resetReqBusyId === reqRow.id}
+                              className="rounded-md border border-rose-500/30 bg-rose-500/10 px-2.5 py-1 text-[11px] font-semibold text-rose-600 dark:text-rose-400 hover:bg-rose-500/20 transition-colors disabled:opacity-50"
+                            >
+                              Batalkan Kode
+                            </button>
+                          ) : (
+                            <span className="text-[11px] text-faint">—</span>
+                          )}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+
+            {/* Kode Pemulihan Darurat Akun Master */}
+            <div className="rounded-xl bg-surface-subtle/60 border border-border/60 p-4 space-y-3">
+              <div className="flex items-center justify-between gap-3 flex-wrap">
+                <div>
+                  <h3 className="text-xs font-bold text-foreground uppercase tracking-wider">Kode Pemulihan Darurat (Akun Master)</h3>
+                  <p className="text-[11px] text-muted mt-0.5 leading-relaxed">
+                    Simpan kode pemulihan sekali pakai ini di tempat aman sebagai cadangan jika suatu saat Anda lupa kata sandi akun master.
+                  </p>
+                </div>
+                {recoveryStatus?.supported && (
+                  <span className={`text-[11px] font-mono px-2.5 py-1 rounded-md border ${
+                    recoveryStatus.remaining > 2
+                      ? "text-emerald-600 dark:text-emerald-400 bg-emerald-500/10 border-emerald-500/25"
+                      : "text-amber-600 dark:text-amber-400 bg-amber-500/10 border-amber-500/25"
+                  }`}>
+                    {recoveryStatus.total > 0
+                      ? `${recoveryStatus.remaining} dari ${recoveryStatus.total} kode tersisa`
+                      : "Belum dibuat"}
+                  </span>
+                )}
+              </div>
+
+              {recoveryStatus && !recoveryStatus.supported ? (
+                <p className="text-[11px] text-muted">
+                  Sesi saat ini memakai kata sandi <code className="font-mono">.env</code>. Kode pemulihan hanya tersedia saat login dengan akun master database.
+                </p>
+              ) : (
+                <>
+                  {recoveryError && (
+                    <div className="rounded-lg border border-rose-500/20 bg-rose-500/10 p-2.5 text-xs font-medium text-rose-600 dark:text-rose-400">
+                      {recoveryError}
+                    </div>
+                  )}
+
+                  <form onSubmit={handleRegenerateRecoveryCodes} className="flex items-end gap-2.5 flex-wrap">
+                    <div className="flex-1 min-w-52 max-w-xs">
+                      <label htmlFor="recovery-current-pw" className="block text-[11px] font-semibold text-muted mb-1">
+                        Konfirmasi Kata Sandi Master Saat Ini
+                      </label>
+                      <input
+                        id="recovery-current-pw"
+                        type="password"
+                        value={recoveryCurrentPw}
+                        onChange={(e) => setRecoveryCurrentPw(e.target.value)}
+                        placeholder="Masukkan password master saat ini"
+                        required
+                        autoComplete="current-password"
+                        className="w-full rounded-lg border border-border/80 bg-surface px-3 py-1.5 text-xs text-foreground focus:outline-none focus:ring-2 focus:ring-accent/25"
+                      />
+                    </div>
+                    <button
+                      type="submit"
+                      disabled={recoveryBusy || !recoveryCurrentPw}
+                      className="rounded-lg bg-accent text-accent-foreground px-3.5 py-1.5 text-xs font-semibold hover:bg-accent-hover transition-colors disabled:opacity-50"
+                    >
+                      {recoveryBusy
+                        ? "Membuat Kode..."
+                        : recoveryStatus?.total
+                          ? "Perbarui 8 Kode Pemulihan Baru"
+                          : "Buat 8 Kode Pemulihan"}
+                    </button>
+                  </form>
+
+                  {generatedRecoveryCodes && generatedRecoveryCodes.length > 0 && (
+                    <div className="rounded-xl border border-amber-500/30 bg-amber-500/10 p-4 space-y-3">
+                      <div className="flex items-start justify-between gap-3 flex-wrap">
+                        <div>
+                          <div className="text-xs font-bold text-amber-700 dark:text-amber-300">
+                            Simpan Kode Pemulihan Ini Sekarang
+                          </div>
+                          <p className="text-[11px] text-muted mt-0.5">
+                            Daftar kode hanya ditampilkan sekali ini. Membuat kode baru otomatis menggantikan semua kode lama.
+                          </p>
+                        </div>
+                        <div className="flex items-center gap-2">
+                          <button
+                            type="button"
+                            onClick={() => copyAllRecoveryCodes(generatedRecoveryCodes)}
+                            className="rounded-lg border border-border/70 bg-surface px-2.5 py-1 text-[11px] font-semibold text-foreground hover:bg-surface-hover transition-colors"
+                          >
+                            {copiedAllRecovery ? "Disalin ✓" : "Salin Semua"}
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => downloadRecoveryCodesTxt(generatedRecoveryCodes)}
+                            className="rounded-lg border border-border/70 bg-surface px-2.5 py-1 text-[11px] font-semibold text-foreground hover:bg-surface-hover transition-colors"
+                          >
+                            Unduh (.txt)
+                          </button>
+                        </div>
+                      </div>
+                      <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-2">
+                        {generatedRecoveryCodes.map((c, idx) => (
+                          <div
+                            key={c}
+                            className="rounded-lg border border-border/70 bg-surface px-2.5 py-1.5 font-mono text-xs text-foreground text-center select-all"
+                          >
+                            <span className="text-faint mr-1">{idx + 1}.</span>
+                            {c}
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+                </>
+              )}
             </div>
           </div>
         )}

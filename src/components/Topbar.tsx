@@ -13,6 +13,7 @@ const TITLES: { prefix: string; label: string; section?: string }[] = [
   { prefix: "/employees", label: "Performa Pegawai", section: "Staff" },
   { prefix: "/transactions", label: "Data Penjualan", section: "Audit" },
   { prefix: "/import", label: "Data Management & Ingestion", section: "Sistem" },
+  { prefix: "/akun", label: "Pengaturan Akun", section: "Akun" },
 ];
 
 const MOBILE_LINKS = [
@@ -30,7 +31,7 @@ export function Topbar() {
   const location = useLocation();
   const pathname = location.pathname;
   const navigate = useNavigate();
-  const { logout } = useAuth();
+  const { username, logout } = useAuth();
   const { isHidden } = useMenuVisibility();
 
   const current = TITLES.find((t) => pathname.startsWith(t.prefix)) ?? {
@@ -65,6 +66,32 @@ export function Topbar() {
         {/* Right: Actions */}
         <div className="flex items-center gap-2.5 shrink-0">
           <ThemeToggle />
+          <Link
+            to="/akun"
+            className={`inline-flex items-center gap-1.5 text-xs font-medium border rounded-lg px-2.5 py-1.5 transition-all shadow-xs ${
+              pathname.startsWith("/akun")
+                ? "bg-accent/10 text-accent border-accent/30 font-semibold"
+                : "text-muted hover:text-foreground bg-surface-subtle/80 hover:bg-surface-hover border-border/80 hover:border-border"
+            }`}
+            title="Pengaturan Akun & Ubah Kata Sandi"
+          >
+            <svg
+              width="14"
+              height="14"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="2"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+              className={pathname.startsWith("/akun") ? "text-accent" : "text-muted"}
+            >
+              <circle cx="7.5" cy="15.5" r="4.5" />
+              <path d="m21 2-9.6 9.6" />
+              <path d="m15.5 7.5 3 3L22 7l-3-3" />
+            </svg>
+            <span className="truncate max-w-28">{username ?? "Akun"}</span>
+          </Link>
           <button
             type="button"
             onClick={handleLogout}

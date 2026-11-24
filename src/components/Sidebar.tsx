@@ -22,7 +22,7 @@ interface NavItem {
 export function Sidebar({ status }: { status: SystemStatus | null }) {
   const location = useLocation();
   const pathname = location.pathname;
-  const { role, canAccess } = useAuth();
+  const { role, username, canAccess } = useAuth();
   const { isHidden } = useMenuVisibility();
 
   function renderNavGroup(label: string, items: NavItem[]) {
@@ -191,17 +191,46 @@ export function Sidebar({ status }: { status: SystemStatus | null }) {
       </nav>
 
       {/* Footer / System Meta */}
-      <div className="px-4 py-3 border-t border-border/70 text-[11px] text-muted flex items-center justify-between gap-2">
-        <span className="font-medium text-foreground/80 truncate">AnalisaBEe Dashboard</span>
-        {role && (
-          <span className={`shrink-0 text-[9px] font-bold tracking-wider px-2 py-0.5 rounded-full border ${
-            role === "master"
-              ? "text-amber-600 dark:text-amber-400 bg-amber-500/10 border-amber-500/30"
-              : "text-sky-600 dark:text-sky-400 bg-sky-500/10 border-sky-500/30"
-          }`}>
-            {role.toUpperCase()}
+      <div className="px-3 py-2.5 border-t border-border/70 text-[11px] text-muted space-y-1.5">
+        <div className="px-1 flex items-center justify-between gap-2">
+          <span className="font-medium text-foreground/80 truncate">
+            {username ? `@${username}` : "AnalisaBEe Dashboard"}
           </span>
-        )}
+          {role && (
+            <span className={`shrink-0 text-[9px] font-bold tracking-wider px-2 py-0.5 rounded-full border ${
+              role === "master"
+                ? "text-amber-600 dark:text-amber-400 bg-amber-500/10 border-amber-500/30"
+                : "text-sky-600 dark:text-sky-400 bg-sky-500/10 border-sky-500/30"
+            }`}>
+              {role.toUpperCase()}
+            </span>
+          )}
+        </div>
+        <Link
+          to="/akun"
+          className={`flex items-center gap-2 rounded-lg px-2 py-1.5 text-[11px] font-medium transition-colors ${
+            pathname?.startsWith("/akun")
+              ? "bg-accent/10 text-accent font-semibold"
+              : "text-muted hover:bg-surface-hover hover:text-foreground"
+          }`}
+        >
+          <svg
+            width="13"
+            height="13"
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            strokeWidth="2"
+            strokeLinecap="round"
+            strokeLinejoin="round"
+            className={pathname?.startsWith("/akun") ? "text-accent" : "text-muted"}
+          >
+            <circle cx="7.5" cy="15.5" r="4.5" />
+            <path d="m21 2-9.6 9.6" />
+            <path d="m15.5 7.5 3 3L22 7l-3-3" />
+          </svg>
+          <span>Ubah Kata Sandi</span>
+        </Link>
       </div>
     </aside>
   );
